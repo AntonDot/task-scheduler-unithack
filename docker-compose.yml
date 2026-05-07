@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-taskscheduler}
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  core-api:
+    build: ./services/core-api
+    ports:
+      - "8000:8000"
+    env_file: .env
+    environment:
+      CORE_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-taskscheduler}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 15s
+
+  ml-worker:
+    build: ./services/ml-worker
+    ports:
+      - "8001:8001"
+    env_file: .env
+    environment:
+      ML_CORE_API_URL: http://core-api:8000
+    depends_on:
+      core-api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8001/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
+
+  mock-review-board:
+    build: ./services/mock-review-board
+    ports:
+      - "8002:8002"
+
+  review-scraper:
+    build:
+      context: ./jobs/review-scraper
+    env_file: .env
+    environment:
+      SCRAPER_REVIEW_BOARD_URL: http://mock-review-board:8002
+      SCRAPER_ML_WORKER_URL: http://ml-worker:8001
+      SCRAPER_STATE_FILE: /app/state/processed_ids.json
+    command: ["python", "scraper.py", "--interval", "60"]
+    volumes:
+      - scraper_state:/app/state
+    depends_on:
+      mock-review-board:
+        condition: service_started
+      ml-worker:
+        condition: service_healthy
+    restart: unless-stopped
+
+  web:
+    build: ./apps/web
+    ports:
+      - "3000:80"
+    depends_on:
+      - core-api
+
+volumes:
+  pgdata:
+  scraper_state:

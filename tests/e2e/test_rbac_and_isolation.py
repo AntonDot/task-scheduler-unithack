@@ -1,6 +1,7 @@
 import os
-import pytest
+
 import httpx
+import pytest
 
 CORE_API_URL = os.getenv("E2E_CORE_API_URL", "http://localhost:8000")
 

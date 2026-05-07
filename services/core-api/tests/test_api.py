@@ -1,7 +1,9 @@
 from unittest.mock import AsyncMock, patch
+
 import pytest
-from httpx import AsyncClient
+
 from app.config import settings
+
 
 @pytest.mark.asyncio
 class TestHealth:

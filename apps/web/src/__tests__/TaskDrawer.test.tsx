@@ -1,0 +1,83 @@
+import { render, screen, fireEvent } from "@testing-library/react";
+import { describe, it, expect, vi } from "vitest";
+import { TaskDrawer } from "@/components/kanban/TaskDrawer";
+import { TaskStatus } from "@/types/domain";
+import type { Task } from "@/types/domain";
+
+const BASE_TASK: Task = {
+  id: 10, project_id: 1, creator_id: 1, assignee_id: 2,
+  title: "Test task", description: "Some description",
+  status: TaskStatus.AI_DRAFT, urgency: "HIGH",
+  deadline: "2025-06-01T00:00:00", created_at: "2025-05-01T00:00:00", updated_at: "2025-05-01T00:00:00",
+  assignee: { id: 2, full_name: "Test User", email: "test@test.com", is_active: true },
+};
+
+function renderDrawer(overrides: { task?: Partial<Task>; role?: string } = {}) {
+  const task = { ...BASE_TASK, ...overrides.task } as Task;
+  const props = {
+    task,
+    role: (overrides.role ?? "OWNER") as "OWNER" | "ASSIGNEE",
+    onClose: vi.fn(),
+    onApprove: vi.fn(),
+    onDiscard: vi.fn(),
+    onStatusChange: vi.fn(),
+  };
+  const result = render(<TaskDrawer {...props} />);
+  return { ...result, ...props };
+}
+
+describe("TaskDrawer", () => {
+  it("shows task title and description", () => {
+    renderDrawer();
+    expect(screen.getByText("Test task")).toBeInTheDocument();
+    expect(screen.getByText("Some description")).toBeInTheDocument();
+  });
+
+  it("shows approve button for owner on AI_DRAFT", () => {
+    renderDrawer({ role: "OWNER", task: { status: TaskStatus.AI_DRAFT } });
+    expect(screen.getByTestId("approve-btn")).toBeInTheDocument();
+  });
+
+  it("hides approve button for assignee", () => {
+    renderDrawer({ role: "ASSIGNEE", task: { status: TaskStatus.AI_DRAFT } });
+    expect(screen.queryByTestId("approve-btn")).not.toBeInTheDocument();
+  });
+
+  it("hides approve button when status is not AI_DRAFT", () => {
+    renderDrawer({ role: "OWNER", task: { status: TaskStatus.TODO } });
+    expect(screen.queryByTestId("approve-btn")).not.toBeInTheDocument();
+  });
+
+  it("calls onApprove when approve button clicked", () => {
+    const { onApprove } = renderDrawer({ role: "OWNER", task: { status: TaskStatus.AI_DRAFT } });
+    fireEvent.click(screen.getByTestId("approve-btn"));
+    expect(onApprove).toHaveBeenCalledWith(10);
+  });
+
+  it("calls onDiscard when discard button clicked", () => {
+    const { onDiscard } = renderDrawer({ role: "OWNER", task: { status: TaskStatus.AI_DRAFT } });
+    fireEvent.click(screen.getByTestId("discard-btn"));
+    expect(onDiscard).toHaveBeenCalledWith(10);
+  });
+
+  it("shows Complete button for owner in REVIEW status", () => {
+    renderDrawer({ role: "OWNER", task: { status: TaskStatus.REVIEW } });
+    expect(screen.getByText("Complete")).toBeInTheDocument();
+  });
+
+  it("hides Complete button for assignee in REVIEW status", () => {
+    renderDrawer({ role: "ASSIGNEE", task: { status: TaskStatus.REVIEW } });
+    expect(screen.queryByText("Complete")).not.toBeInTheDocument();
+  });
+
+  it("shows Start Work button in TODO status", () => {
+    renderDrawer({ task: { status: TaskStatus.TODO } });
+    expect(screen.getByText("Start Work")).toBeInTheDocument();
+  });
+
+  it("shows assignee name and avatar", () => {
+    renderDrawer();
+    expect(screen.getByText("Test User")).toBeInTheDocument();
+    expect(screen.getByTitle("Test User")).toBeInTheDocument();
+  });
+});

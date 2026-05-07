@@ -6,12 +6,14 @@ import pytest
 CORE_API_URL = os.getenv("E2E_CORE_API_URL", "http://localhost:8000")
 DEMO_EMAIL = os.getenv("E2E_EMAIL", "d.morozov@victorygroup.ru")
 
+
 def _health_ok(client: httpx.Client, base_url: str) -> bool:
     try:
         resp = client.get(f"{base_url}/health", timeout=2)
         return resp.status_code == 200
     except httpx.HTTPError:
         return False
+
 
 @pytest.mark.e2e
 def test_full_user_flow_manual_task_lifecycle():
@@ -36,37 +38,32 @@ def test_full_user_flow_manual_task_lifecycle():
         new_task_resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{project_id}/tasks",
             json={"title": "Manual Test Task", "description": "Created during E2E flow", "urgency": "MEDIUM"},
-            headers=headers
+            headers=headers,
         )
         assert new_task_resp.status_code == 201
         task_id = new_task_resp.json()["id"]
 
         # 4. Move to IN_PROGRESS
         move_resp = client.patch(
-            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status",
-            json={"status": "IN_PROGRESS"},
-            headers=headers
+            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status", json={"status": "IN_PROGRESS"}, headers=headers
         )
         assert move_resp.status_code == 200
         assert move_resp.json()["status"] == "IN_PROGRESS"
 
         # 5. Move to REVIEW
         move_resp = client.patch(
-            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status",
-            json={"status": "REVIEW"},
-            headers=headers
+            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status", json={"status": "REVIEW"}, headers=headers
         )
         assert move_resp.status_code == 200
         assert move_resp.json()["status"] == "REVIEW"
 
         # 6. Move to DONE (Owner can do this)
         move_resp = client.patch(
-            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status",
-            json={"status": "DONE"},
-            headers=headers
+            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status", json={"status": "DONE"}, headers=headers
         )
         assert move_resp.status_code == 200
         assert move_resp.json()["status"] == "DONE"
+
 
 @pytest.mark.e2e
 def test_owner_approves_ai_draft():
@@ -85,7 +82,7 @@ def test_owner_approves_ai_draft():
         draft_resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{project_id}/tasks",
             json={"title": "Draft Task", "status": "AI_DRAFT", "urgency": "LOW"},
-            headers=headers
+            headers=headers,
         )
         task_id = draft_resp.json()["id"]
 

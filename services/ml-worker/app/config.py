@@ -9,11 +9,7 @@ class Settings(BaseSettings):
     use_mock_llm: bool = True
     webhook_api_key: str = "dev-webhook-key"
 
-    model_config = {
-        "env_prefix": "ML_",
-        "env_file": ".env",
-        "extra": "ignore"
-    }
+    model_config = {"env_prefix": "ML_", "env_file": ".env", "extra": "ignore"}
 
 
 settings = Settings()

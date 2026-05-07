@@ -11,12 +11,14 @@ def parse_reviews(html: str) -> list[dict]:
         text = text_el.get_text(strip=True) if text_el else ""
         business_el = div.select_one(".business")
         business = business_el.get_text(strip=True) if business_el else ""
-        reviews.append({
-            "id": review_id,
-            "rating": rating,
-            "text": text,
-            "business": business,
-        })
+        reviews.append(
+            {
+                "id": review_id,
+                "rating": rating,
+                "text": text,
+                "business": business,
+            }
+        )
     return reviews
 
 

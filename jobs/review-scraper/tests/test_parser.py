@@ -85,6 +85,8 @@ class TestFilterNegative:
         assert len(negative) == 3
 
     def test_no_negative_reviews(self):
-        html = '<div class="review" data-review-id="r1" data-rating="5"><p>Good</p><span class="business">X</span></div>'  # noqa: E501
+        html = (
+            '<div class="review" data-review-id="r1" data-rating="5"><p>Good</p><span class="business">X</span></div>'  # noqa: E501
+        )
         reviews = parse_reviews(html)
         assert filter_negative(reviews) == []

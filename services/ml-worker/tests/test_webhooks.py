@@ -66,8 +66,11 @@ class TestIncidentWebhook:
             resp = await client.post(
                 "/webhook/incident",
                 json={
-                    "event_id": "e1", "source": "yandex", "text": "Bad review",
-                    "project_slug": "test", "external_rating": 1,
+                    "event_id": "e1",
+                    "source": "yandex",
+                    "text": "Bad review",
+                    "project_slug": "test",
+                    "external_rating": 1,
                 },
                 headers=_headers(),
             )
@@ -84,8 +87,11 @@ class TestIncidentWebhook:
             resp = await client.post(
                 "/webhook/incident",
                 json={
-                    "event_id": "e2", "source": "analytics", "text": "Minor issue reported",
-                    "project_slug": "test", "urgency": "LOW",
+                    "event_id": "e2",
+                    "source": "analytics",
+                    "text": "Minor issue reported",
+                    "project_slug": "test",
+                    "urgency": "LOW",
                 },
                 headers=_headers(),
             )
@@ -159,6 +165,7 @@ class TestMockLLM:
     async def test_mock_llm_returns_valid_parsed_task(self):
         settings.use_mock_llm = True
         from app.clients.llm_client import parse_task
+
         result = await parse_task("We need to update the landing page for client Bereg")
         assert result.title
         assert result.description

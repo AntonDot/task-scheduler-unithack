@@ -1,6 +1,7 @@
 import pytest
 from httpx import AsyncClient
 
+
 @pytest.mark.asyncio
 class TestRBACAndTransitions:
     async def test_assignee_cannot_move_to_done(self, client: AsyncClient, seed_data, get_token):
@@ -48,7 +49,7 @@ class TestRBACAndTransitions:
             json={"status": "DONE"},
             headers={"Authorization": f"Bearer {get_token(seed_data['manager'].id)}"},
         )
-        
+
         # Now reopen
         resp = await client.patch(
             f"/api/v1/tasks/{tid}/status",

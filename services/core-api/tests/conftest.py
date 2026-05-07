@@ -12,6 +12,7 @@ from app.models import Base, Project, Task, User, UserProject
 TEST_SECRET = "test-secret"  # noqa: S105
 TEST_SERVICE_TOKEN = "test-service-token"  # noqa: S105
 
+
 @pytest.fixture(autouse=True)
 def _set_test_settings():
     original_jwt = settings.jwt_secret
@@ -21,6 +22,7 @@ def _set_test_settings():
     yield
     settings.jwt_secret = original_jwt
     settings.service_token = original_service
+
 
 @pytest.fixture
 async def db_session():
@@ -36,6 +38,7 @@ async def db_session():
         await conn.run_sync(Base.metadata.drop_all)
     await engine.dispose()
 
+
 @pytest.fixture
 async def engine():
     eng = create_async_engine("sqlite+aiosqlite:///:memory:")
@@ -46,9 +49,11 @@ async def engine():
         await conn.run_sync(Base.metadata.drop_all)
     await eng.dispose()
 
+
 @pytest.fixture
 async def session_factory(engine):
     return async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+
 
 @pytest.fixture
 async def client(session_factory):
@@ -61,6 +66,7 @@ async def client(session_factory):
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
     app.dependency_overrides.clear()
+
 
 @pytest.fixture
 async def seed_data(session_factory):
@@ -120,8 +126,10 @@ async def seed_data(session_factory):
             "review_task": review_task,
         }
 
+
 @pytest.fixture
 def get_token():
     def _token(user_id: int) -> str:
         return jwt.encode({"sub": str(user_id)}, TEST_SECRET, algorithm="HS256")
+
     return _token

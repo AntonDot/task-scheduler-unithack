@@ -1,13 +1,15 @@
 import os
-import pytest
+
 import httpx
+import pytest
 
 CORE_API_URL = os.getenv("E2E_CORE_API_URL", "http://localhost:8000")
 
 # Emails from seed data
 USER_A = "d.morozov@victorygroup.ru"  # Owner of onegin-park and zhk-bereg
 USER_B = "a.kozlova@victorygroup.ru"  # Assignee of onegin-park
-USER_C = "i.petrov@victorygroup.ru"   # Assignee of zhk-bereg
+USER_C = "i.petrov@victorygroup.ru"  # Assignee of zhk-bereg
+
 
 def _health_ok(client: httpx.Client, base_url: str) -> bool:
     try:
@@ -16,10 +18,12 @@ def _health_ok(client: httpx.Client, base_url: str) -> bool:
     except httpx.HTTPError:
         return False
 
+
 def _get_token(client, email):
     resp = client.post(f"{CORE_API_URL}/api/v1/auth/token", json={"email": email})
     resp.raise_for_status()
     return resp.json()["access_token"]
+
 
 @pytest.mark.e2e
 def test_project_isolation_and_rbac():
@@ -59,7 +63,7 @@ def test_project_isolation_and_rbac():
         resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{bereg_project['id']}/tasks",
             json={"title": "Hacker task", "urgency": "URGENT"},
-            headers=headers_b
+            headers=headers_b,
         )
         assert resp.status_code == 403
 
@@ -69,7 +73,7 @@ def test_project_isolation_and_rbac():
         draft_resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{onegin_project['id']}/tasks",
             json={"title": "Draft for B to try", "status": "AI_DRAFT", "urgency": "LOW"},
-            headers=headers_a
+            headers=headers_a,
         )
         draft_id = draft_resp.json()["id"]
 

@@ -1,7 +1,9 @@
 from unittest.mock import AsyncMock, patch
+
 import pytest
-from httpx import AsyncClient
+
 from app.config import settings
+
 
 @pytest.mark.asyncio
 class TestHealth:
@@ -9,6 +11,7 @@ class TestHealth:
         resp = await client.get("/health")
         assert resp.status_code == 200
         assert resp.json()["service"] == "core-api"
+
 
 @pytest.mark.asyncio
 class TestProjects:
@@ -49,6 +52,7 @@ class TestProjects:
         )
         assert resp.status_code == 401
 
+
 @pytest.mark.asyncio
 class TestTasksCRUD:
     async def test_list_tasks(self, client, seed_data, get_token):
@@ -79,6 +83,7 @@ class TestTasksCRUD:
         assert resp.status_code == 201
         assert resp.json()["title"] == "New task"
 
+
 @pytest.mark.asyncio
 class TestStatusTransitions:
     async def test_valid_transition(self, client, seed_data, get_token):
@@ -91,6 +96,7 @@ class TestStatusTransitions:
         assert resp.status_code == 200
         assert resp.json()["status"] == "IN_PROGRESS"
 
+
 @pytest.mark.asyncio
 class TestApprove:
     async def test_approve_by_owner(self, client, seed_data, get_token):
@@ -101,6 +107,7 @@ class TestApprove:
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == "TODO"
+
 
 @pytest.mark.asyncio
 class TestDiscard:

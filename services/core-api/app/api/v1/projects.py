@@ -4,10 +4,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
-from app.dependencies import get_current_user, verify_service_token
+from app.dependencies import get_current_user, require_project_access, verify_service_token
 from app.domain import ProjectRole
 from app.models import Project, User, UserProject
-from app.schemas import ProjectWithRole, TaskCreate, TaskRead, UserRead
+from app.schemas import ProjectMemberRead, ProjectWithRole, TaskCreate, TaskRead, UserRead
 from app.services import task_service
 from app.websocket_manager import ws_manager
 
@@ -41,6 +41,23 @@ async def list_projects(
 @router.get("/me", response_model=UserRead)
 async def get_me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.get("/projects/{project_id}/members", response_model=list[ProjectMemberRead])
+async def list_project_members(
+    project_id: int,
+    _access: UserProject = Depends(require_project_access),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        select(User, UserProject.role)
+        .join(UserProject, UserProject.user_id == User.id)
+        .where(UserProject.project_id == project_id)
+    )
+    return [
+        ProjectMemberRead(id=user.id, full_name=user.full_name, email=user.email, role=role)
+        for user, role in result.all()
+    ]
 
 
 @router.post(

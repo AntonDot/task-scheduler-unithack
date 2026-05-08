@@ -20,17 +20,18 @@ async def handle_incident(payload: IncidentPayload) -> dict:
     if is_duplicate(payload.event_id):
         return {"status": "duplicate", "message": f"Event {payload.event_id} already processed"}
 
-    is_critical = (payload.external_rating is not None and payload.external_rating <= 2) or payload.urgency == "URGENT"
+    is_critical = payload.external_rating is not None and payload.external_rating <= 2
+
+    parsed = await llm_client.parse_task(payload.text)
 
     if is_critical:
         task_data = {
-            "title": payload.text[:200],
-            "description": f"[Auto] Source: {payload.source}\n\n{payload.text}",
+            "title": parsed.title,
+            "description": parsed.description,
             "status": "TODO",
             "urgency": "URGENT",
         }
     else:
-        parsed = await llm_client.parse_task(payload.text)
         task_data = {
             "title": parsed.title,
             "description": parsed.description,

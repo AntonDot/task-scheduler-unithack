@@ -40,14 +40,21 @@ const MOCK_TASKS: Task[] = [
   },
 ];
 
+const MOCK_MEMBERS = [
+  { id: 1, full_name: "Дмитрий Морозов", email: "d.morozov@victory.ru", role: "OWNER" },
+  { id: 2, full_name: "Анна Козлова", email: "kozlova@victory.ru", role: "ASSIGNEE" },
+];
+
 function renderBoard(overrides: Partial<Parameters<typeof KanbanBoard>[0]> = {}) {
   const defaultProps = {
     tasks: MOCK_TASKS,
     role: "OWNER" as const,
     currentUserId: 1,
+    members: MOCK_MEMBERS,
     onStatusChange: vi.fn(),
     onApprove: vi.fn(),
     onDiscard: vi.fn(),
+    onAssigneeChange: vi.fn(),
     showOnlyMine: false,
   };
   return render(<KanbanBoard {...defaultProps} {...overrides} />);

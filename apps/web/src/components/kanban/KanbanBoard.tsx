@@ -12,14 +12,17 @@ import type { Task, TaskStatus, ProjectRole } from "@/types/domain";
 import { KANBAN_COLUMNS } from "@/types/domain";
 import { KanbanColumn } from "./KanbanColumn";
 import { TaskDrawer } from "./TaskDrawer";
+import type { ProjectMember } from "@/api/members";
 
 interface KanbanBoardProps {
   tasks: Task[];
   role: ProjectRole | undefined;
   currentUserId: number | null;
+  members: ProjectMember[];
   onStatusChange: (taskId: number, newStatus: TaskStatus) => void;
   onApprove: (taskId: number) => void;
   onDiscard: (taskId: number) => void;
+  onAssigneeChange: (taskId: number, assigneeId: number | null) => void;
   showOnlyMine: boolean;
 }
 
@@ -37,9 +40,11 @@ export function KanbanBoard({
   tasks,
   role,
   currentUserId,
+  members,
   onStatusChange,
   onApprove,
   onDiscard,
+  onAssigneeChange,
   showOnlyMine,
 }: KanbanBoardProps) {
   const [activeTask, setActiveTask] = useState<Task | null>(null);
@@ -121,6 +126,7 @@ export function KanbanBoard({
         <TaskDrawer
           task={selectedTask}
           role={role}
+          members={members}
           onClose={() => setSelectedTask(null)}
           onApprove={(id) => {
             onApprove(id);
@@ -133,6 +139,9 @@ export function KanbanBoard({
           onStatusChange={(id, status) => {
             onStatusChange(id, status as TaskStatus);
             setSelectedTask(null);
+          }}
+          onAssigneeChange={(id, assigneeId) => {
+            onAssigneeChange(id, assigneeId);
           }}
         />
       )}

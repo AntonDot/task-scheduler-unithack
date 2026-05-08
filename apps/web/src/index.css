@@ -358,6 +358,14 @@ body {
 
 .btn--ghost:hover { color: var(--text-primary); }
 
+.btn--danger {
+  background: rgba(255, 71, 87, 0.15);
+  color: var(--urgent);
+  border: 1px solid rgba(255, 71, 87, 0.3);
+}
+
+.btn--danger:hover { background: rgba(255, 71, 87, 0.25); }
+
 /* Login Page */
 .login-page {
   min-height: 100vh;

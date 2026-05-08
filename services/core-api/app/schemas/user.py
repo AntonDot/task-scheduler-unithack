@@ -16,3 +16,12 @@ class UserRead(BaseModel):
 class UserCreate(BaseModel):
     full_name: str
     email: EmailStr
+
+
+class ProjectMemberRead(BaseModel):
+    id: int
+    full_name: str
+    email: str
+    role: str
+
+    model_config = {"from_attributes": True}

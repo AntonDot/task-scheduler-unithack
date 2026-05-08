@@ -1,17 +1,29 @@
 import type { Task, ProjectRole } from "@/types/domain";
 import { TaskStatus } from "@/types/domain";
 import { Avatar } from "./Avatar";
+import type { ProjectMember } from "@/api/members";
 
 interface TaskDrawerProps {
   task: Task;
   role: ProjectRole | undefined;
+  members: ProjectMember[];
   onClose: () => void;
   onApprove: (taskId: number) => void;
   onDiscard: (taskId: number) => void;
   onStatusChange: (taskId: number, status: string) => void;
+  onAssigneeChange: (taskId: number, assigneeId: number | null) => void;
 }
 
-export function TaskDrawer({ task, role, onClose, onApprove, onDiscard, onStatusChange }: TaskDrawerProps) {
+export function TaskDrawer({
+  task,
+  role,
+  members,
+  onClose,
+  onApprove,
+  onDiscard,
+  onStatusChange,
+  onAssigneeChange,
+}: TaskDrawerProps) {
   const isOwner = role === "OWNER";
   const canApprove = isOwner && task.status === TaskStatus.AI_DRAFT;
 
@@ -30,12 +42,36 @@ export function TaskDrawer({ task, role, onClose, onApprove, onDiscard, onStatus
             {task.urgency}
           </span>
         </div>
-        {task.assignee && (
-          <div className="drawer__assignee">
-            <Avatar name={task.assignee.full_name} size={32} />
-            <span>{task.assignee.full_name}</span>
-          </div>
-        )}
+        <div className="drawer__assignee">
+          {isOwner ? (
+            <>
+              <h4>Assignee</h4>
+              <select
+                className="drawer__assignee-select"
+                value={task.assignee_id ?? ""}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  onAssigneeChange(task.id, val ? Number(val) : null);
+                }}
+                data-testid="assignee-select"
+              >
+                <option value="">Not assigned</option>
+                {members.map((m) => (
+                  <option key={m.id} value={m.id}>
+                    {m.full_name} ({m.role})
+                  </option>
+                ))}
+              </select>
+            </>
+          ) : task.assignee ? (
+            <>
+              <Avatar name={task.assignee.full_name} size={32} />
+              <span>{task.assignee.full_name}</span>
+            </>
+          ) : (
+            <span className="text-muted">Not assigned</span>
+          )}
+        </div>
         {task.description && (
           <div className="drawer__description">
             <h4>Description</h4>

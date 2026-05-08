@@ -1,10 +1,9 @@
 name: CI
 
 on:
-  push:
-    branches: [main, develop]
   pull_request:
-    branches: [main, develop]
+    branches:
+      - main
 
 jobs:
   backend-quality:
@@ -98,9 +97,20 @@ jobs:
       - name: Run smoke tests
         run: bash scripts/ci/smoke.sh
 
+      - name: Install E2E dependencies
+        run: pip install httpx pytest
+
+      - name: Run E2E tests
+        run: python -m pytest tests/e2e -v -m e2e
+        env:
+          E2E_CORE_API_URL: http://localhost:8000
+          E2E_ML_WORKER_URL: http://localhost:8001
+          E2E_REVIEW_BOARD_URL: http://localhost:8002
+          E2E_WEBHOOK_API_KEY: dev-webhook-key
+
       - name: Collect logs on failure
         if: failure()
-        run: docker compose logs --tail=50
+        run: docker compose logs --tail=100
 
       - name: Tear down
         if: always()

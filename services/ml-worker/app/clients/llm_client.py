@@ -17,8 +17,12 @@ async def parse_task(text: str) -> ParsedTask:
     if settings.use_mock_llm:
         logger.info("Using mock LLM — returning stub ParsedTask")
         words = text.split()
-        title = " ".join(words[:10]) if len(words) > 3 else "Новая задача из входящего текста"
-        return ParsedTask(title=title, description=text, urgency="MEDIUM")
+        title = " ".join(words[:8]) if len(words) > 3 else "Новая задача из входящего текста"
+        if len(title) > 100:
+            title = title[:97] + "..."
+        description = f"Задача создана на основе входящего обращения.\n\n{text}\n\nТребуется обработка и ответ."
+        urgency = "HIGH" if any(w in text.lower() for w in ["срочно", "кошмар", "ужас", "не работает"]) else "MEDIUM"
+        return ParsedTask(title=title, description=description, urgency=urgency)
 
     import anthropic
 

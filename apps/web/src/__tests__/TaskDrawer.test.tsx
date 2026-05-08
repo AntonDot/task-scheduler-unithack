@@ -12,15 +12,22 @@ const BASE_TASK: Task = {
   assignee: { id: 2, full_name: "Test User", email: "test@test.com", is_active: true },
 };
 
+const MOCK_MEMBERS = [
+  { id: 1, full_name: "Дмитрий Морозов", email: "d.morozov@victory.ru", role: "OWNER" },
+  { id: 2, full_name: "Test User", email: "test@test.com", role: "ASSIGNEE" },
+];
+
 function renderDrawer(overrides: { task?: Partial<Task>; role?: string } = {}) {
   const task = { ...BASE_TASK, ...overrides.task } as Task;
   const props = {
     task,
     role: (overrides.role ?? "OWNER") as "OWNER" | "ASSIGNEE",
+    members: MOCK_MEMBERS,
     onClose: vi.fn(),
     onApprove: vi.fn(),
     onDiscard: vi.fn(),
     onStatusChange: vi.fn(),
+    onAssigneeChange: vi.fn(),
   };
   const result = render(<TaskDrawer {...props} />);
   return { ...result, ...props };
@@ -75,9 +82,23 @@ describe("TaskDrawer", () => {
     expect(screen.getByText("Start Work")).toBeInTheDocument();
   });
 
-  it("shows assignee name and avatar", () => {
-    renderDrawer();
+  it("shows assignee select for owner", () => {
+    renderDrawer({ role: "OWNER" });
+    const select = screen.getByTestId("assignee-select");
+    expect(select).toBeInTheDocument();
+    expect(select).toHaveValue("2");
+  });
+
+  it("shows assignee name and avatar for assignee role", () => {
+    renderDrawer({ role: "ASSIGNEE" });
     expect(screen.getByText("Test User")).toBeInTheDocument();
     expect(screen.getByTitle("Test User")).toBeInTheDocument();
+  });
+
+  it("calls onAssigneeChange when assignee is changed", () => {
+    const { onAssigneeChange } = renderDrawer({ role: "OWNER" });
+    const select = screen.getByTestId("assignee-select");
+    fireEvent.change(select, { target: { value: "1" } });
+    expect(onAssigneeChange).toHaveBeenCalledWith(10, 1);
   });
 });

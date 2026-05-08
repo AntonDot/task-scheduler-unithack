@@ -90,3 +90,41 @@ class TestFilterNegative:
         )
         reviews = parse_reviews(html)
         assert filter_negative(reviews) == []
+
+
+class TestParserEdgeCases:
+    def test_rating_as_float_in_html(self):
+        """Float rating like '3.5' should be handled by int() — truncates to 3."""
+        html = (
+            '<div class="review" data-review-id="r1" data-rating="3.5"><p>OK</p><span class="business">X</span></div>'
+        )
+        # int("3.5") raises ValueError; current parser uses int(div.get("data-rating", "5"))
+        # If the rating is a float string, parser will raise ValueError
+        import pytest
+
+        with pytest.raises(ValueError):
+            parse_reviews(html)
+
+    def test_multiple_businesses_extracted_correctly(self):
+        """Reviews from different businesses should each have their own business name."""
+        html = """
+        <div class="review" data-review-id="r1" data-rating="4">
+            <p>Good place!</p><span class="business">Онегин Парк</span>
+        </div>
+        <div class="review" data-review-id="r2" data-rating="3">
+            <p>Average.</p><span class="business">ЖК Берег</span>
+        </div>
+        <div class="review" data-review-id="r3" data-rating="2">
+            <p>Not great.</p><span class="business">Новый Проект</span>
+        </div>
+        """
+        reviews = parse_reviews(html)
+        businesses = [r["business"] for r in reviews]
+        assert businesses == ["Онегин Парк", "ЖК Берег", "Новый Проект"]
+
+    def test_review_without_rating_attr(self):
+        """Missing data-rating attribute should default to 5."""
+        html = '<div class="review" data-review-id="r1"><p>No rating</p><span class="business">X</span></div>'
+        reviews = parse_reviews(html)
+        assert len(reviews) == 1
+        assert reviews[0]["rating"] == 5

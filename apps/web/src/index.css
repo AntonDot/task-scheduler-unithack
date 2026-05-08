@@ -285,6 +285,23 @@ body {
   font-size: 0.9rem;
 }
 
+.drawer__assignee-select {
+  width: 100%;
+  padding: 0.4rem 0.5rem;
+  margin-top: 0.3rem;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.drawer__assignee-select:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
 .drawer__description,
 .drawer__deadline,
 .drawer__history {

@@ -55,11 +55,12 @@ async def scrape_and_send() -> int:
                 continue
 
             slug = BUSINESS_SLUG_MAP.get(review["business"], "unknown")
+            urgency = "URGENT" if review["rating"] <= 2 else "HIGH"
             payload = {
                 "event_id": f"review-{review['id']}",
                 "source": "mock-review-board",
                 "text": review["text"],
-                "urgency": "URGENT",
+                "urgency": urgency,
                 "project_slug": slug,
                 "external_rating": review["rating"],
             }

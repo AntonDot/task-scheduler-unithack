@@ -1,7 +1,8 @@
 import { useState, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { fetchProjects } from "@/api/projects";
-import { fetchTasks, changeStatus, approveDraft, discardDraft } from "@/api/tasks";
+import { fetchTasks, changeStatus, approveDraft, discardDraft, updateTask } from "@/api/tasks";
+import { fetchProjectMembers } from "@/api/members";
 import { useAuthStore } from "@/store/authStore";
 import { useTasksRealtime } from "@/hooks/useTasksRealtime";
 import { useIsMobile } from "@/hooks/useIsMobile";
@@ -27,11 +28,38 @@ export function KanbanPage() {
 
   const { data: tasks = [] } = useQuery({
     queryKey: tasksQueryKey,
-    queryFn: () => fetchTasks(activeProjectId!, showOnlyMine ? user?.id ?? undefined : undefined),
+    queryFn: () => fetchTasks(activeProjectId!, showOnlyMine ? user?.id : undefined),
+    enabled: !!activeProjectId,
+  });
+
+  const { data: members = [] } = useQuery({
+    queryKey: ["members", activeProjectId],
+    queryFn: () => fetchProjectMembers(activeProjectId!),
     enabled: !!activeProjectId,
   });
 
   useTasksRealtime(activeProjectId);
+
+  const assigneeMutation = useMutation({
+    mutationFn: ({ taskId, assigneeId }: { taskId: number; assigneeId: number | null }) =>
+      updateTask(taskId, { assignee_id: assigneeId }),
+    onMutate: async ({ taskId, assigneeId }) => {
+      await queryClient.cancelQueries({ queryKey: tasksQueryKey });
+      const previous = queryClient.getQueryData<Task[]>(tasksQueryKey);
+      queryClient.setQueryData<Task[]>(tasksQueryKey, (old = []) =>
+        old.map((task) =>
+          task.id === taskId ? { ...task, assignee_id: assigneeId, updated_at: new Date().toISOString() } : task,
+        ),
+      );
+      return { previous };
+    },
+    onError: (_error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(tasksQueryKey, context.previous);
+      }
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks", activeProjectId] }),
+  });
 
   const statusMutation = useMutation({
     mutationFn: ({ taskId, status }: { taskId: number; status: TaskStatus }) =>
@@ -115,6 +143,13 @@ export function KanbanPage() {
     [discardMutation],
   );
 
+  const handleAssigneeChange = useCallback(
+    (taskId: number, assigneeId: number | null) => {
+      assigneeMutation.mutate({ taskId, assigneeId });
+    },
+    [assigneeMutation],
+  );
+
   if (!user) return null;
 
   const role = activeProjectId ? projectRoles[activeProjectId] : undefined;
@@ -144,9 +179,11 @@ export function KanbanPage() {
             tasks={tasks}
             role={role}
             currentUserId={user.id}
+            members={members}
             onStatusChange={handleStatusChange}
             onApprove={handleApprove}
             onDiscard={handleDiscard}
+            onAssigneeChange={handleAssigneeChange}
             showOnlyMine={showOnlyMine}
           />
         )

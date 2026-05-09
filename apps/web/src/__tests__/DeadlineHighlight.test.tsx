@@ -92,7 +92,7 @@ describe("Deadline highlights — TaskCard", () => {
     vi.setSystemTime(new Date("2025-06-15T12:00:00Z"));
     const task = makeTask({ deadline: "2025-06-14T12:00:00Z" });
     renderTaskCard(task);
-    expect(screen.getByText(/overdue/i)).toBeInTheDocument();
+    expect(screen.getByText(/проср/i)).toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -103,7 +103,7 @@ describe("Deadline highlights — TaskCard", () => {
     const deadline = new Date(now.getTime() + 6 * 60 * 60 * 1000).toISOString();
     const task = makeTask({ deadline });
     renderTaskCard(task);
-    expect(screen.getByText(/left/i)).toBeInTheDocument();
+    expect(screen.getByText(/ост/i)).toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -157,6 +157,7 @@ describe("Deadline highlights — MobileTaskCard", () => {
     vi.setSystemTime(new Date("2025-06-15T12:00:00Z"));
     const task = makeTask({ id: 10, deadline: "2025-06-14T12:00:00Z" });
     renderMobileCard(task);
-    expect(screen.getByText(/overdue/i)).toBeInTheDocument();
+    expect(screen.getByText(/проср/i)).toBeInTheDocument();
   });
 });
+;

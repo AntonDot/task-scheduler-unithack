@@ -66,7 +66,7 @@ describe("DashboardPage", () => {
     await waitFor(() => {
       expect(screen.getByText("TODO")).toBeInTheDocument();
       // Check that "Status Breakdown" section exists and contains the bars
-      expect(screen.getByText("Status Breakdown")).toBeInTheDocument();
+      expect(screen.getByText("Разбивка по статусу")).toBeInTheDocument();
     });
   });
 
@@ -81,7 +81,7 @@ describe("DashboardPage", () => {
   it("shows overdue count", async () => {
     renderDashboard();
     await waitFor(() => {
-      expect(screen.getByText(/overdue/i)).toBeInTheDocument();
+      expect(screen.getByText(/просрочено/i)).toBeInTheDocument();
       // The overdue stat has a specific class
       const overdueCard = document.querySelector(".dashboard__card--overdue");
       expect(overdueCard).not.toBeNull();
@@ -100,6 +100,6 @@ describe("DashboardPage", () => {
     await waitFor(() => {
       expect(screen.getByText("25")).toBeInTheDocument();
     });
-    expect(screen.getByRole("button", { name: /export csv/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /экспорт csv/i })).toBeInTheDocument();
   });
 });

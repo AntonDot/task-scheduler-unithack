@@ -18,7 +18,7 @@ describe("LoginPage — dev mode", () => {
   it("renders the subtitle", async () => {
     render(<LoginPage onLogin={vi.fn()} />);
     await waitFor(() => {
-      expect(screen.getByText("Task Scheduler")).toBeInTheDocument();
+      expect(screen.getByText("Планировщик задач")).toBeInTheDocument();
     });
   });
 

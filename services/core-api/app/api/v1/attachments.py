@@ -37,9 +37,7 @@ def _is_allowed_content_type(content_type: str) -> bool:
         return True
     if content_type in ALLOWED_TYPES_EXACT:
         return True
-    if any(content_type.startswith(prefix) for prefix in ALLOWED_TYPE_PREFIXES_EXTENDED):
-        return True
-    return False
+    return bool(any(content_type.startswith(prefix) for prefix in ALLOWED_TYPE_PREFIXES_EXTENDED))
 
 
 async def _get_task_access(
@@ -203,7 +201,10 @@ async def delete_attachment(
 
     # Only OWNER role can delete
     if link.role != "OWNER":
-        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Only project owners can delete attachments")
+        raise HTTPException(
+            status_code=http_status.HTTP_403_FORBIDDEN,
+            detail="Only project owners can delete attachments",
+        )
 
     # Remove file from disk
     if os.path.exists(attachment.stored_path):

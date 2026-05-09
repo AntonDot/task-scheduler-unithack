@@ -64,9 +64,7 @@ class TestTaskLifecycleExtended:
         assert resp.status_code == 200
         assert resp.json()["assignee_id"] == assignee["id"]
 
-    def test_full_lifecycle_with_comments(
-        self, client, owner_headers, assignee_onegin_headers, onegin_project
-    ):
+    def test_full_lifecycle_with_comments(self, client, owner_headers, assignee_onegin_headers, onegin_project):
         pid = onegin_project["id"]
         marker = f"Full lifecycle {uuid.uuid4().hex[:8]}"
 

@@ -63,9 +63,7 @@ class TestComments:
         )
         assert resp.status_code == 404
 
-    def test_comment_visible_to_project_member(
-        self, client, owner_headers, assignee_onegin_headers, onegin_project
-    ):
+    def test_comment_visible_to_project_member(self, client, owner_headers, assignee_onegin_headers, onegin_project):
         pid = onegin_project["id"]
         resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{pid}/tasks",
@@ -93,9 +91,7 @@ class TestComments:
         comments = resp.json()
         assert any(c["text"] == "Owner comment" for c in comments)
 
-    def test_comment_not_visible_to_outsider(
-        self, client, owner_headers, assignee_bereg_headers, onegin_project
-    ):
+    def test_comment_not_visible_to_outsider(self, client, owner_headers, assignee_bereg_headers, onegin_project):
         pid = onegin_project["id"]
         resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{pid}/tasks",
@@ -138,9 +134,7 @@ class TestAuditLog:
         assert "created" in actions
         assert "status_changed" in actions
 
-    def test_audit_log_requires_project_access(
-        self, client, owner_headers, assignee_bereg_headers, onegin_project
-    ):
+    def test_audit_log_requires_project_access(self, client, owner_headers, assignee_bereg_headers, onegin_project):
         pid = onegin_project["id"]
         resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{pid}/tasks",

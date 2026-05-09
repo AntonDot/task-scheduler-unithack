@@ -12,6 +12,7 @@ def upload_dir(tmp_path):
 
 # ── upload ──────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_upload_attachment(client, seed_data, get_token, upload_dir):
     sd = seed_data
@@ -36,6 +37,7 @@ async def test_upload_attachment(client, seed_data, get_token, upload_dir):
 
 
 # ── list ────────────────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_list_attachments(client, seed_data, get_token, upload_dir):
@@ -69,6 +71,7 @@ async def test_list_attachments(client, seed_data, get_token, upload_dir):
 
 # ── download ────────────────────────────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_download_attachment(client, seed_data, get_token, upload_dir):
     sd = seed_data
@@ -92,6 +95,7 @@ async def test_download_attachment(client, seed_data, get_token, upload_dir):
 
 
 # ── delete: owner can delete ────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_delete_attachment_owner(client, seed_data, get_token, upload_dir):
@@ -122,6 +126,7 @@ async def test_delete_attachment_owner(client, seed_data, get_token, upload_dir)
 
 # ── delete: assignee (non-owner) gets 403 ──────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_delete_attachment_assignee_forbidden(client, seed_data, get_token, upload_dir):
     sd = seed_data
@@ -145,6 +150,7 @@ async def test_delete_attachment_assignee_forbidden(client, seed_data, get_token
 
 # ── upload requires project access ──────────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_upload_requires_project_access(client, seed_data, get_token, upload_dir):
     sd = seed_data
@@ -160,6 +166,7 @@ async def test_upload_requires_project_access(client, seed_data, get_token, uplo
 
 
 # ── upload too large ────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_upload_too_large(client, seed_data, get_token, upload_dir):
@@ -179,6 +186,7 @@ async def test_upload_too_large(client, seed_data, get_token, upload_dir):
 
 
 # ── disallowed content type ─────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_upload_disallowed_type(client, seed_data, get_token, upload_dir):

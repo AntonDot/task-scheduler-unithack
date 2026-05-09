@@ -36,7 +36,8 @@ async def parse_task(text: str) -> ParsedTask:
                 "content": (
                     "Parse the following text into a task. "
                     "Return JSON with fields: title (short, under 100 chars), "
-                    "description (full text), urgency (LOW/MEDIUM/HIGH/URGENT). "
+                    "description (full text), urgency (LOW/MEDIUM/HIGH/URGENT), "
+                    "and deadline (ISO-8601 format, or null if missing). "
                     f"Text: {text}"
                 ),
             }

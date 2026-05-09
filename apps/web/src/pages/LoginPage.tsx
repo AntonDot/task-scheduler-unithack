@@ -65,14 +65,14 @@ export function LoginPage({ onLogin }: LoginPageProps) {
       <div className="login-card">
         <div className="login-header">
           <h1>Victory Group</h1>
-          <p className="login-subtitle">Task Scheduler</p>
+          <p className="login-subtitle">Планировщик задач</p>
         </div>
 
         {error && <div className="login-error">{error}</div>}
 
         {devMode ? (
           <>
-            <p className="login-mode-label">Dev Mode — Quick Login</p>
+            <p className="login-mode-label">Dev Mode — Быстрый вход</p>
             <div className="login-users">
               {DEMO_USERS.map((u) => (
                 <button

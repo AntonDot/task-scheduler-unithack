@@ -22,7 +22,7 @@ export function FilterBar({
       <input
         className="filter-bar__search"
         type="text"
-        placeholder="Search tasks..."
+        placeholder="Поиск задач..."
         value={search}
         onChange={(e) => onSearchChange(e.target.value)}
       />
@@ -32,11 +32,11 @@ export function FilterBar({
         value={urgencyFilter}
         onChange={(e) => onUrgencyChange(e.target.value)}
       >
-        <option value="ALL">All urgencies</option>
-        <option value="LOW">LOW</option>
-        <option value="MEDIUM">MEDIUM</option>
-        <option value="HIGH">HIGH</option>
-        <option value="URGENT">URGENT</option>
+        <option value="ALL">Все срочности</option>
+        <option value="LOW">Низкая</option>
+        <option value="MEDIUM">Средняя</option>
+        <option value="HIGH">Высокая</option>
+        <option value="URGENT">Критичная</option>
       </select>
       <select
         className="filter-bar__select"
@@ -44,7 +44,7 @@ export function FilterBar({
         value={statusFilter}
         onChange={(e) => onStatusChange(e.target.value)}
       >
-        <option value="ALL">All statuses</option>
+        <option value="ALL">Все статусы</option>
         {KANBAN_COLUMNS.map((status) => (
           <option key={status} value={status}>
             {COLUMN_LABELS[status]}

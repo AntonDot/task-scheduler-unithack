@@ -21,6 +21,7 @@ class ParsedTask(BaseModel):
     description: str | None = None
     urgency: str = "MEDIUM"
     assignee_email: str | None = None
+    deadline: str | None = None
 
 
 class WebhookResponse(BaseModel):

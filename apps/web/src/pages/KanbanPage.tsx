@@ -159,7 +159,7 @@ export function KanbanPage() {
   });
 
   const createMutation = useMutation({
-    mutationFn: (body: { title: string; description?: string; assignee_id?: number; urgency?: string }) =>
+    mutationFn: (body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string }) =>
       createTask(activeProjectId!, body),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["tasks", activeProjectId] });
@@ -196,7 +196,7 @@ export function KanbanPage() {
   );
 
   const handleCreateTask = useCallback(
-    (body: { title: string; description?: string; assignee_id?: number; urgency?: string }) => {
+    (body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string }) => {
       createMutation.mutate(body);
     },
     [createMutation],
@@ -259,7 +259,7 @@ export function KanbanPage() {
         )
       ) : (
         <div className="empty-state">
-          <p>No projects available.</p>
+          <p>Нет доступных проектов.</p>
         </div>
       )}
       {showCreateModal && activeProjectId && (

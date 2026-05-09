@@ -7,6 +7,7 @@ import type { Comment } from "@/api/comments";
 import { fetchAttachments, uploadAttachment, deleteAttachment, getDownloadUrl } from "@/api/attachments";
 import type { Attachment } from "@/api/attachments";
 import type { ProjectMember } from "@/api/members";
+import { formatRelativeDeadline, getDeadlineStatus } from "@/utils/deadline";
 
 interface TaskDrawerProps {
   task: Task;
@@ -128,11 +129,23 @@ export function TaskDrawer({
           </span>
         </div>
 
+        {task.deadline && (
+          <div className="drawer__deadline">
+            <h4>Дедлайн</h4>
+            <span className={`deadline-badge deadline-${getDeadlineStatus(task.deadline)}`}>
+              {formatRelativeDeadline(task.deadline)}
+            </span>
+            <p style={{ marginTop: "0.5rem", fontSize: "0.9rem", color: "var(--text-secondary)" }}>
+              {new Date(task.deadline).toLocaleDateString("ru-RU")}
+            </p>
+          </div>
+        )}
+
         {/* Assignee */}
         <div className="drawer__assignee">
           {isOwner ? (
             <>
-              <h4>Assignee</h4>
+              <h4>Исполнитель</h4>
               <select
                 className="drawer__assignee-select"
                 value={task.assignee_id ?? ""}
@@ -142,7 +155,7 @@ export function TaskDrawer({
                 }}
                 data-testid="assignee-select"
               >
-                <option value="">Not assigned</option>
+                <option value="">Не назначен</option>
                 {members.map((m) => (
                   <option key={m.id} value={m.id}>
                     {m.full_name} ({m.role})
@@ -156,23 +169,15 @@ export function TaskDrawer({
               <span>{task.assignee.full_name}</span>
             </>
           ) : (
-            <span className="text-muted">Not assigned</span>
+            <span className="text-muted">Не назначен</span>
           )}
         </div>
 
         {/* Description */}
         {task.description && (
           <div className="drawer__description">
-            <h4>Description</h4>
+            <h4>Описание</h4>
             <p>{task.description}</p>
-          </div>
-        )}
-
-        {/* Deadline */}
-        {task.deadline && (
-          <div className="drawer__deadline">
-            <h4>Deadline</h4>
-            <p>{new Date(task.deadline).toLocaleDateString("ru-RU")}</p>
           </div>
         )}
 
@@ -185,14 +190,14 @@ export function TaskDrawer({
                 onClick={() => onApprove(task.id)}
                 data-testid="approve-btn"
               >
-                Approve Draft
+                Одобрить черновик
               </button>
               <button
                 className="btn btn--danger"
                 onClick={() => onDelete(task.id)}
                 data-testid="discard-btn"
               >
-                Discard
+                Удалить
               </button>
             </>
           )}
@@ -201,7 +206,7 @@ export function TaskDrawer({
               className="btn btn--secondary"
               onClick={() => onStatusChange(task.id, TaskStatus.IN_PROGRESS)}
             >
-              Start Work
+              Начать работу
             </button>
           )}
           {task.status === TaskStatus.IN_PROGRESS && (
@@ -209,7 +214,7 @@ export function TaskDrawer({
               className="btn btn--secondary"
               onClick={() => onStatusChange(task.id, TaskStatus.REVIEW)}
             >
-              Send to Review
+              Отправить на ревью
             </button>
           )}
           {task.status === TaskStatus.REVIEW && isOwner && (
@@ -217,7 +222,7 @@ export function TaskDrawer({
               className="btn btn--primary"
               onClick={() => onStatusChange(task.id, TaskStatus.DONE)}
             >
-              Complete
+              Завершить
             </button>
           )}
           {isOwner && task.status !== TaskStatus.AI_DRAFT && (
@@ -228,23 +233,23 @@ export function TaskDrawer({
                   onClick={() => setShowDeleteConfirm(true)}
                   data-testid="delete-btn"
                 >
-                  Delete Task
+                  Удалить задачу
                 </button>
               ) : (
                 <div className="drawer__delete-confirm">
-                  <span>Delete this task?</span>
+                  <span>Удалить эту задачу?</span>
                   <button
                     className="btn btn--danger"
                     onClick={() => onDelete(task.id)}
                     data-testid="delete-confirm-btn"
                   >
-                    Yes, delete
+                    Да, удалить
                   </button>
                   <button
                     className="btn btn--ghost"
                     onClick={() => setShowDeleteConfirm(false)}
                   >
-                    Cancel
+                    Отмена
                   </button>
                 </div>
               )}
@@ -254,11 +259,11 @@ export function TaskDrawer({
 
         {/* Attachments */}
         <div className="drawer__attachments">
-          <h4>Attachments</h4>
+          <h4>Вложения</h4>
           {attachmentsLoading ? (
-            <p className="text-muted">Loading...</p>
+            <p className="text-muted">Загрузка...</p>
           ) : attachments.length === 0 ? (
-            <p className="text-muted">No attachments</p>
+            <p className="text-muted">Нет вложений</p>
           ) : (
             <div className="drawer__attachments-list" data-testid="attachments-list">
               {attachments.map((att) => (
@@ -296,18 +301,18 @@ export function TaskDrawer({
               className="drawer__attachment-input"
               data-testid="attachment-file-input"
             />
-            {uploadingFile && <span className="text-muted">Uploading...</span>}
+            {uploadingFile && <span className="text-muted">Загрузка...</span>}
             {uploadError && <span className="drawer__attachment-error">{uploadError}</span>}
           </div>
         </div>
 
         {/* Comments / Activity Log */}
         <div className="drawer__comments">
-          <h4>Activity</h4>
+          <h4>Активность</h4>
           {commentsLoading ? (
-            <p className="text-muted">Loading...</p>
+            <p className="text-muted">Загрузка...</p>
           ) : comments.length === 0 ? (
-            <p className="text-muted">No activity yet</p>
+            <p className="text-muted">Пока нет активности</p>
           ) : (
             <div className="drawer__comments-list">
               {comments.map((c) => (
@@ -328,7 +333,7 @@ export function TaskDrawer({
           <div className="drawer__comment-form">
             <textarea
               className="drawer__comment-input"
-              placeholder="Add a comment..."
+              placeholder="Добавить комментарий..."
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -342,19 +347,19 @@ export function TaskDrawer({
               disabled={!commentText.trim() || commentLoading}
               data-testid="comment-submit"
             >
-              {commentLoading ? "..." : "Send"}
+              {commentLoading ? "..." : "Отправить"}
             </button>
           </div>
         </div>
 
         {/* History */}
         <div className="drawer__history">
-          <h4>History</h4>
+          <h4>История</h4>
           <p className="text-muted">
-            Created: {new Date(task.created_at).toLocaleString("ru-RU")}
+            Создана: {new Date(task.created_at).toLocaleString("ru-RU")}
           </p>
           <p className="text-muted">
-            Updated: {new Date(task.updated_at).toLocaleString("ru-RU")}
+            Обновлена: {new Date(task.updated_at).toLocaleString("ru-RU")}
           </p>
         </div>
       </div>

@@ -53,7 +53,7 @@ function renderBoard(overrides: Partial<Parameters<typeof KanbanBoard>[0]> = {})
     members: MOCK_MEMBERS,
     onStatusChange: vi.fn(),
     onApprove: vi.fn(),
-    onDiscard: vi.fn(),
+    onDelete: vi.fn(),
     onAssigneeChange: vi.fn(),
     showOnlyMine: false,
   };

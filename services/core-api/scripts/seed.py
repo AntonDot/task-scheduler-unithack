@@ -3,6 +3,7 @@
 import asyncio
 from datetime import UTC, datetime, timedelta
 
+from passlib.context import CryptContext
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
@@ -10,10 +11,24 @@ from app.config import settings
 from app.domain import ProjectRole, TaskStatus, Urgency
 from app.models import Base, Project, Task, User, UserProject
 
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
 USERS = [
-    {"full_name": "Дмитрий Морозов", "email": "d.morozov@victorygroup.ru"},
-    {"full_name": "Анна Козлова", "email": "a.kozlova@victorygroup.ru"},
-    {"full_name": "Игорь Петров", "email": "i.petrov@victorygroup.ru"},
+    {
+        "full_name": "Дмитрий Морозов",
+        "email": "d.morozov@victorygroup.ru",
+        "password_hash": pwd_context.hash("manager123"),  # noqa: S106
+    },
+    {
+        "full_name": "Анна Козлова",
+        "email": "a.kozlova@victorygroup.ru",
+        "password_hash": pwd_context.hash("assignee123"),  # noqa: S106
+    },
+    {
+        "full_name": "Игорь Петров",
+        "email": "i.petrov@victorygroup.ru",
+        "password_hash": pwd_context.hash("assignee123"),  # noqa: S106
+    },
 ]
 
 PROJECTS = [

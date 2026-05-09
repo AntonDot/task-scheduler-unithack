@@ -1,7 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { MobileListView } from "@/components/mobile/MobileListView";
-import { MobileTaskCard } from "@/components/mobile/MobileTaskCard";
 import { TaskStatus } from "@/types/domain";
 import type { Task } from "@/types/domain";
 
@@ -29,15 +28,22 @@ const MOCK_TASKS: Task[] = [
   },
 ];
 
+const MOCK_MEMBERS = [
+  { id: 1, full_name: "Иван", email: "i@v.ru", role: "OWNER" as const },
+  { id: 2, full_name: "Анна", email: "a@v.ru", role: "ASSIGNEE" as const },
+];
+
 describe("MobileListView", () => {
   it("renders mobile list view", () => {
     render(
       <MobileListView
         tasks={MOCK_TASKS}
         role="OWNER"
+        members={MOCK_MEMBERS}
         onApprove={vi.fn()}
-        onDiscard={vi.fn()}
+        onDelete={vi.fn()}
         onStatusChange={vi.fn()}
+        onAssigneeChange={vi.fn()}
       />,
     );
     expect(screen.getByTestId("mobile-list-view")).toBeInTheDocument();
@@ -48,9 +54,11 @@ describe("MobileListView", () => {
       <MobileListView
         tasks={MOCK_TASKS}
         role="OWNER"
+        members={MOCK_MEMBERS}
         onApprove={vi.fn()}
-        onDiscard={vi.fn()}
+        onDelete={vi.fn()}
         onStatusChange={vi.fn()}
+        onAssigneeChange={vi.fn()}
       />,
     );
     expect(screen.getByText("AI Drafts")).toBeInTheDocument();
@@ -63,105 +71,52 @@ describe("MobileListView", () => {
       <MobileListView
         tasks={MOCK_TASKS}
         role="OWNER"
+        members={MOCK_MEMBERS}
         onApprove={vi.fn()}
-        onDiscard={vi.fn()}
+        onDelete={vi.fn()}
         onStatusChange={vi.fn()}
+        onAssigneeChange={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByText("To Do"));
     expect(screen.getByText("Fix landing page")).toBeInTheDocument();
   });
-});
 
-describe("MobileTaskCard", () => {
-  it("shows approve button for owner on AI_DRAFT", () => {
-    const onApprove = vi.fn();
+  it("shows action sheet on long press via context menu", () => {
     render(
-      <MobileTaskCard
-        task={MOCK_TASKS[1]!}
+      <MobileListView
+        tasks={MOCK_TASKS}
         role="OWNER"
-        onApprove={onApprove}
-        onDiscard={vi.fn()}
-        onStatusChange={vi.fn()}
-      />,
-    );
-    const btn = screen.getByTestId("mobile-approve-2");
-    expect(btn).toBeInTheDocument();
-    expect(btn).toHaveTextContent("Взять в работу");
-    fireEvent.click(btn);
-    expect(onApprove).toHaveBeenCalledWith(2);
-  });
-
-  it("hides approve button for assignee on AI_DRAFT", () => {
-    render(
-      <MobileTaskCard
-        task={MOCK_TASKS[1]!}
-        role="ASSIGNEE"
+        members={MOCK_MEMBERS}
         onApprove={vi.fn()}
-        onDiscard={vi.fn()}
+        onDelete={vi.fn()}
         onStatusChange={vi.fn()}
+        onAssigneeChange={vi.fn()}
       />,
     );
-    expect(screen.queryByTestId("mobile-approve-2")).not.toBeInTheDocument();
+    // Switch to TODO tab and trigger context menu on the task card
+    fireEvent.click(screen.getByText("To Do"));
+    const card = screen.getByTestId("mobile-card-1");
+    fireEvent.contextMenu(card);
+    expect(screen.getByTestId("action-sheet")).toBeInTheDocument();
   });
 
-  it("shows start button for TODO tasks", () => {
-    const onChange = vi.fn();
+  it("closes action sheet on cancel", () => {
     render(
-      <MobileTaskCard
-        task={MOCK_TASKS[0]!}
-        role="ASSIGNEE"
-        onApprove={vi.fn()}
-        onDiscard={vi.fn()}
-        onStatusChange={onChange}
-      />,
-    );
-    const btn = screen.getByTestId("mobile-start-1");
-    expect(btn).toHaveTextContent("Начать");
-    fireEvent.click(btn);
-    expect(onChange).toHaveBeenCalledWith(1, "IN_PROGRESS");
-  });
-
-  it("shows urgency badge", () => {
-    render(
-      <MobileTaskCard
-        task={MOCK_TASKS[1]!}
+      <MobileListView
+        tasks={MOCK_TASKS}
         role="OWNER"
+        members={MOCK_MEMBERS}
         onApprove={vi.fn()}
-        onDiscard={vi.fn()}
+        onDelete={vi.fn()}
         onStatusChange={vi.fn()}
+        onAssigneeChange={vi.fn()}
       />,
     );
-    expect(screen.getByText("Срочно")).toBeInTheDocument();
-  });
-
-  it("action buttons have minimum 44px touch target", () => {
-    render(
-      <MobileTaskCard
-        task={MOCK_TASKS[1]!}
-        role="OWNER"
-        onApprove={vi.fn()}
-        onDiscard={vi.fn()}
-        onStatusChange={vi.fn()}
-      />,
-    );
-    const btn = screen.getByTestId("mobile-approve-2");
-    expect(btn.classList.contains("mobile-action-btn")).toBe(true);
-  });
-
-  it("shows and handles discard button for owner on AI_DRAFT", () => {
-    const onDiscard = vi.fn();
-    render(
-      <MobileTaskCard
-        task={MOCK_TASKS[1]!}
-        role="OWNER"
-        onApprove={vi.fn()}
-        onDiscard={onDiscard}
-        onStatusChange={vi.fn()}
-      />,
-    );
-    const btn = screen.getByTestId("mobile-discard-2");
-    fireEvent.click(btn);
-    expect(onDiscard).toHaveBeenCalledWith(2);
+    fireEvent.click(screen.getByText("To Do"));
+    const card = screen.getByTestId("mobile-card-1");
+    fireEvent.contextMenu(card);
+    fireEvent.click(screen.getByTestId("action-sheet-cancel"));
+    expect(screen.queryByTestId("action-sheet")).not.toBeInTheDocument();
   });
 });

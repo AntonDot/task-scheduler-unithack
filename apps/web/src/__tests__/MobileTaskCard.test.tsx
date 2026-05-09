@@ -28,16 +28,18 @@ function renderCard(
   overrides: Partial<{
     role: "OWNER" | "ASSIGNEE" | undefined;
     onApprove: ReturnType<typeof vi.fn>;
-    onDiscard: ReturnType<typeof vi.fn>;
+    onDelete: ReturnType<typeof vi.fn>;
     onStatusChange: ReturnType<typeof vi.fn>;
+    onLongPress: ReturnType<typeof vi.fn>;
   }> = {},
 ) {
   const props = {
     task,
     role: overrides.role ?? ("OWNER" as const),
     onApprove: overrides.onApprove ?? vi.fn(),
-    onDiscard: overrides.onDiscard ?? vi.fn(),
+    onDelete: overrides.onDelete ?? vi.fn(),
     onStatusChange: overrides.onStatusChange ?? vi.fn(),
+    onLongPress: overrides.onLongPress ?? vi.fn(),
   };
   return render(<MobileTaskCard {...props} />);
 }
@@ -106,17 +108,17 @@ describe("MobileTaskCard", () => {
   });
 
   it("shows discard button for owner on AI_DRAFT", () => {
-    const onDiscard = vi.fn();
-    renderCard(makeTask({ status: TaskStatus.AI_DRAFT }), { role: "OWNER", onDiscard });
+    const onDelete = vi.fn();
+    renderCard(makeTask({ status: TaskStatus.AI_DRAFT }), { role: "OWNER", onDelete });
     const btn = screen.getByTestId("mobile-discard-10");
     expect(btn).toHaveTextContent("Отклонить");
   });
 
-  it("calls onDiscard when discard button clicked", () => {
-    const onDiscard = vi.fn();
-    renderCard(makeTask({ status: TaskStatus.AI_DRAFT }), { role: "OWNER", onDiscard });
+  it("calls onDelete when discard button clicked", () => {
+    const onDelete = vi.fn();
+    renderCard(makeTask({ status: TaskStatus.AI_DRAFT }), { role: "OWNER", onDelete });
     fireEvent.click(screen.getByTestId("mobile-discard-10"));
-    expect(onDiscard).toHaveBeenCalledWith(10);
+    expect(onDelete).toHaveBeenCalledWith(10);
   });
 
   it("hides approve and discard buttons for assignee on AI_DRAFT", () => {
@@ -149,5 +151,13 @@ describe("MobileTaskCard", () => {
   it("shows assignee avatar when assignee is present", () => {
     renderCard(makeTask());
     expect(screen.getByTitle("Анна Козлова")).toBeInTheDocument();
+  });
+
+  it("triggers onLongPress via context menu", () => {
+    const onLongPress = vi.fn();
+    renderCard(makeTask(), { onLongPress });
+    const card = screen.getByTestId("mobile-card-10");
+    fireEvent.contextMenu(card);
+    expect(onLongPress).toHaveBeenCalled();
   });
 });

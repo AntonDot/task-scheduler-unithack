@@ -1,13 +1,16 @@
+import { useRef, useCallback } from "react";
 import type { Task, ProjectRole } from "@/types/domain";
 import { TaskStatus } from "@/types/domain";
 import { Avatar } from "../kanban/Avatar";
+import { getDeadlineStatus, formatRelativeDeadline } from "@/utils/deadline";
 
 interface MobileTaskCardProps {
   task: Task;
   role: ProjectRole | undefined;
   onApprove: (taskId: number) => void;
-  onDiscard: (taskId: number) => void;
+  onDelete: (taskId: number) => void;
   onStatusChange: (taskId: number, status: TaskStatus) => void;
+  onLongPress?: () => void;
 }
 
 const URGENCY_LABELS: Record<string, string> = {
@@ -17,22 +20,74 @@ const URGENCY_LABELS: Record<string, string> = {
   LOW: "Низкий",
 };
 
-export function MobileTaskCard({ task, role, onApprove, onDiscard, onStatusChange }: MobileTaskCardProps) {
+const LONG_PRESS_DURATION = 500;
+
+export function MobileTaskCard({
+  task,
+  role,
+  onApprove,
+  onDelete,
+  onStatusChange,
+  onLongPress,
+}: MobileTaskCardProps) {
   const isOwner = role === "OWNER";
   const isDraft = task.status === TaskStatus.AI_DRAFT;
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const longPressTriggered = useRef(false);
+
+  const deadlineStatus = getDeadlineStatus(task.deadline);
+  const relativeDeadline = formatRelativeDeadline(task.deadline);
+
+  const deadlineClass =
+    deadlineStatus === "overdue"
+      ? " mobile-card--overdue"
+      : deadlineStatus === "due-soon"
+        ? " mobile-card--due-soon"
+        : "";
+
+  const handleTouchStart = useCallback(() => {
+    longPressTriggered.current = false;
+    timerRef.current = setTimeout(() => {
+      longPressTriggered.current = true;
+      onLongPress?.();
+    }, LONG_PRESS_DURATION);
+  }, [onLongPress]);
+
+  const handleTouchEnd = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
+
+  const handleTouchMove = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+  }, []);
 
   return (
     <div
-      className={`mobile-card urgency-${task.urgency.toLowerCase()}`}
+      className={`mobile-card urgency-${task.urgency.toLowerCase()}${deadlineClass}`}
       data-testid={`mobile-card-${task.id}`}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+      onTouchMove={handleTouchMove}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        onLongPress?.();
+      }}
     >
       <div className="mobile-card__top">
         <span className={`urgency-badge urgency-${task.urgency.toLowerCase()}`}>
           {URGENCY_LABELS[task.urgency] ?? task.urgency}
         </span>
         {task.deadline && (
-          <span className="mobile-card__deadline">
-            {new Date(task.deadline).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
+          <span
+            className={`mobile-card__deadline${deadlineStatus === "overdue" ? " mobile-card__deadline--overdue" : deadlineStatus === "due-soon" ? " mobile-card__deadline--due-soon" : ""}`}
+          >
+            {relativeDeadline}
           </span>
         )}
       </div>
@@ -57,7 +112,7 @@ export function MobileTaskCard({ task, role, onApprove, onDiscard, onStatusChang
             </button>
             <button
               className="btn btn--danger mobile-action-btn"
-              onClick={() => onDiscard(task.id)}
+              onClick={() => onDelete(task.id)}
               data-testid={`mobile-discard-${task.id}`}
             >
               Отклонить

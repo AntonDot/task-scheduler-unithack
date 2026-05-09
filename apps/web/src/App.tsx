@@ -21,8 +21,8 @@ interface ProjectWithRole {
 function AppInner() {
   const { user, setAuth, setProjectRoles } = useAuthStore();
 
-  const handleLogin = async (email: string) => {
-    const token = await login(email);
+  const handleLogin = async (email: string, password?: string) => {
+    const token = await login(email, password);
     const me = await api.get<User>("/me");
     const projects = await api.get<ProjectWithRole[]>("/projects");
 

@@ -1,6 +1,8 @@
 import type { Project, User } from "@/types/domain";
 import { Avatar } from "../kanban/Avatar";
 
+export type AppView = "kanban" | "dashboard";
+
 interface HeaderProps {
   user: User;
   projects: Project[];
@@ -9,6 +11,9 @@ interface HeaderProps {
   showOnlyMine: boolean;
   onToggleMine: () => void;
   onLogout: () => void;
+  onAddTask?: () => void;
+  currentView?: AppView;
+  onViewChange?: (view: AppView) => void;
 }
 
 export function Header({
@@ -19,6 +24,9 @@ export function Header({
   showOnlyMine,
   onToggleMine,
   onLogout,
+  onAddTask,
+  currentView,
+  onViewChange,
 }: HeaderProps) {
   return (
     <header className="header">
@@ -36,8 +44,29 @@ export function Header({
             </button>
           ))}
         </nav>
+        {onViewChange && (
+          <div className="header__view-toggle">
+            <button
+              className={`header__view-btn ${currentView === "kanban" ? "active" : ""}`}
+              onClick={() => onViewChange("kanban")}
+            >
+              Kanban
+            </button>
+            <button
+              className={`header__view-btn ${currentView === "dashboard" ? "active" : ""}`}
+              onClick={() => onViewChange("dashboard")}
+            >
+              Dashboard
+            </button>
+          </div>
+        )}
       </div>
       <div className="header__right">
+        {onAddTask && (
+          <button className="header__add-btn" onClick={onAddTask}>
+            + New Task
+          </button>
+        )}
         <label className="header__filter">
           <input type="checkbox" checked={showOnlyMine} onChange={onToggleMine} />
           Only my tasks

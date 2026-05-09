@@ -3,7 +3,7 @@ import uuid
 
 import pytest
 
-from tests.e2e.conftest import CORE_API_URL, ML_WORKER_URL, REVIEW_BOARD_URL, WEBHOOK_API_KEY
+from .conftest import CORE_API_URL, ML_WORKER_URL, REVIEW_BOARD_URL, WEBHOOK_API_KEY
 
 
 def _wait_for_task(client, project_id, marker, headers, max_wait=10):

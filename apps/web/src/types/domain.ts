@@ -17,11 +17,11 @@ export const KANBAN_COLUMNS: TaskStatus[] = [
 ];
 
 export const COLUMN_LABELS: Record<TaskStatus, string> = {
-  [TaskStatus.AI_DRAFT]: "AI Drafts",
-  [TaskStatus.TODO]: "To Do",
-  [TaskStatus.IN_PROGRESS]: "In Progress",
-  [TaskStatus.REVIEW]: "Review",
-  [TaskStatus.DONE]: "Done",
+  [TaskStatus.AI_DRAFT]: "AI Черновики",
+  [TaskStatus.TODO]: "К выполнению",
+  [TaskStatus.IN_PROGRESS]: "В работе",
+  [TaskStatus.REVIEW]: "Ревью",
+  [TaskStatus.DONE]: "Готово",
 };
 
 export const ProjectRole = {

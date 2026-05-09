@@ -61,9 +61,9 @@ describe("MobileListView", () => {
         onAssigneeChange={vi.fn()}
       />,
     );
-    expect(screen.getByText("AI Drafts")).toBeInTheDocument();
-    expect(screen.getByText("To Do")).toBeInTheDocument();
-    expect(screen.getByText("In Progress")).toBeInTheDocument();
+    expect(screen.getByText(/AI Черновики/i)).toBeInTheDocument();
+    expect(screen.getByText(/К выполнению/i)).toBeInTheDocument();
+    expect(screen.getByText(/В работе/i)).toBeInTheDocument();
   });
 
   it("switches tabs and shows corresponding tasks", () => {
@@ -78,7 +78,7 @@ describe("MobileListView", () => {
         onAssigneeChange={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByText("To Do"));
+    fireEvent.click(screen.getByRole("button", { name: /К выполнению/i }));
     expect(screen.getByText("Fix landing page")).toBeInTheDocument();
   });
 
@@ -95,7 +95,7 @@ describe("MobileListView", () => {
       />,
     );
     // Switch to TODO tab and trigger context menu on the task card
-    fireEvent.click(screen.getByText("To Do"));
+    fireEvent.click(screen.getByRole("button", { name: /К выполнению/i }));
     const card = screen.getByTestId("mobile-card-1");
     fireEvent.contextMenu(card);
     expect(screen.getByTestId("action-sheet")).toBeInTheDocument();
@@ -113,7 +113,7 @@ describe("MobileListView", () => {
         onAssigneeChange={vi.fn()}
       />,
     );
-    fireEvent.click(screen.getByText("To Do"));
+    fireEvent.click(screen.getByRole("button", { name: /К выполнению/i }));
     const card = screen.getByTestId("mobile-card-1");
     fireEvent.contextMenu(card);
     fireEvent.click(screen.getByTestId("action-sheet-cancel"));

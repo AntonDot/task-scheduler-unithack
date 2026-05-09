@@ -76,17 +76,17 @@ describe("TaskDrawer", () => {
 
   it("shows Complete button for owner in REVIEW status", () => {
     renderDrawer({ role: "OWNER", task: { status: TaskStatus.REVIEW } });
-    expect(screen.getByText("Complete")).toBeInTheDocument();
+    expect(screen.getByText("Завершить")).toBeInTheDocument();
   });
 
   it("hides Complete button for assignee in REVIEW status", () => {
     renderDrawer({ role: "ASSIGNEE", task: { status: TaskStatus.REVIEW } });
-    expect(screen.queryByText("Complete")).not.toBeInTheDocument();
+    expect(screen.queryByText("Завершить")).not.toBeInTheDocument();
   });
 
   it("shows Start Work button in TODO status", () => {
     renderDrawer({ task: { status: TaskStatus.TODO } });
-    expect(screen.getByText("Start Work")).toBeInTheDocument();
+    expect(screen.getByText("Начать работу")).toBeInTheDocument();
   });
 
   it("shows delete button for owner on non-AI_DRAFT tasks", () => {
@@ -97,7 +97,7 @@ describe("TaskDrawer", () => {
   it("shows delete confirmation on delete button click", () => {
     renderDrawer({ role: "OWNER", task: { status: TaskStatus.TODO } });
     fireEvent.click(screen.getByTestId("delete-btn"));
-    expect(screen.getByText("Delete this task?")).toBeInTheDocument();
+    expect(screen.getByText("Удалить эту задачу?")).toBeInTheDocument();
     expect(screen.getByTestId("delete-confirm-btn")).toBeInTheDocument();
   });
 
@@ -140,12 +140,12 @@ describe("TaskDrawer", () => {
 
   it("shows activity section header", () => {
     renderDrawer();
-    expect(screen.getByText("Activity")).toBeInTheDocument();
+    expect(screen.getByText("Активность")).toBeInTheDocument();
   });
 
   it("shows attachments section", () => {
     renderDrawer();
-    expect(screen.getByText("Attachments")).toBeInTheDocument();
+    expect(screen.getByText("Вложения")).toBeInTheDocument();
   });
 
   it("shows file upload input", () => {
@@ -155,6 +155,6 @@ describe("TaskDrawer", () => {
 
   it("shows history section with dates", () => {
     renderDrawer();
-    expect(screen.getByText("History")).toBeInTheDocument();
+    expect(screen.getByText("История")).toBeInTheDocument();
   });
 });

@@ -20,7 +20,7 @@ function renderFilterBar(overrides: Partial<Parameters<typeof FilterBar>[0]> = {
 describe("FilterBar", () => {
   it("renders search input", () => {
     renderFilterBar();
-    const input = screen.getByPlaceholderText(/search/i);
+    const input = screen.getByPlaceholderText(/поиск/i);
     expect(input).toBeInTheDocument();
   });
 
@@ -46,7 +46,7 @@ describe("FilterBar", () => {
   it("calls onSearchChange when typing", () => {
     const onSearchChange = vi.fn();
     renderFilterBar({ onSearchChange });
-    const input = screen.getByPlaceholderText(/search/i);
+    const input = screen.getByPlaceholderText(/поиск/i);
     fireEvent.change(input, { target: { value: "fix bug" } });
     expect(onSearchChange).toHaveBeenCalledWith("fix bug");
   });
@@ -69,7 +69,7 @@ describe("FilterBar", () => {
 
   it("displays current search value", () => {
     renderFilterBar({ search: "deploy" });
-    const input = screen.getByPlaceholderText(/search/i) as HTMLInputElement;
+    const input = screen.getByPlaceholderText(/поиск/i) as HTMLInputElement;
     expect(input.value).toBe("deploy");
   });
 

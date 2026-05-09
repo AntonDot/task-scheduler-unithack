@@ -47,7 +47,7 @@ export function DashboardPage({ projectId }: DashboardPageProps) {
   if (isLoading) {
     return (
       <div className="dashboard">
-        <p className="text-muted">Loading analytics...</p>
+        <p className="text-muted">Загрузка аналитики...</p>
       </div>
     );
   }
@@ -55,7 +55,7 @@ export function DashboardPage({ projectId }: DashboardPageProps) {
   if (!analytics) {
     return (
       <div className="dashboard">
-        <p className="text-muted">No analytics data available.</p>
+        <p className="text-muted">Нет данных аналитики.</p>
       </div>
     );
   }
@@ -72,12 +72,12 @@ export function DashboardPage({ projectId }: DashboardPageProps) {
   return (
     <div className="dashboard">
       <div className="dashboard__header">
-        <h2>Project Analytics</h2>
+        <h2>Аналитика проекта</h2>
         <button
           className="btn btn--secondary"
           onClick={handleExport}
         >
-          Export CSV
+          Экспорт CSV
         </button>
       </div>
 
@@ -85,7 +85,7 @@ export function DashboardPage({ projectId }: DashboardPageProps) {
         <div className="dashboard__card">
           <div className="dashboard__stat">
             <span className="dashboard__stat-value">{analytics.total_tasks}</span>
-            <span className="dashboard__stat-label">Total Tasks</span>
+            <span className="dashboard__stat-label">Всего задач</span>
           </div>
         </div>
 
@@ -94,7 +94,7 @@ export function DashboardPage({ projectId }: DashboardPageProps) {
             <span className="dashboard__stat-value dashboard__stat-value--overdue">
               {analytics.overdue_count}
             </span>
-            <span className="dashboard__stat-label">Overdue</span>
+            <span className="dashboard__stat-label">Просрочено</span>
           </div>
         </div>
 
@@ -102,17 +102,17 @@ export function DashboardPage({ projectId }: DashboardPageProps) {
           <div className="dashboard__stat">
             <span className="dashboard__stat-value">
               {analytics.avg_completion_hours != null
-                ? `${analytics.avg_completion_hours}h`
-                : "N/A"}
+                ? `${analytics.avg_completion_hours}ч`
+                : "Н/Д"}
             </span>
-            <span className="dashboard__stat-label">Avg Completion</span>
+            <span className="dashboard__stat-label">В среднем (часы)</span>
           </div>
         </div>
       </div>
 
       <div className="dashboard__sections">
         <div className="dashboard__card">
-          <h3>Status Breakdown</h3>
+          <h3>Разбивка по статусу</h3>
           <div className="dashboard__bars">
             {Object.entries(analytics.by_status).map(([status, count]) => (
               <div className="dashboard__bar-row" key={status}>
@@ -133,7 +133,7 @@ export function DashboardPage({ projectId }: DashboardPageProps) {
         </div>
 
         <div className="dashboard__card">
-          <h3>Urgency Breakdown</h3>
+          <h3>Разбивка по срочности</h3>
           <div className="dashboard__bars">
             {Object.entries(analytics.by_urgency).map(([urgency, count]) => (
               <div className="dashboard__bar-row" key={urgency}>
@@ -155,13 +155,13 @@ export function DashboardPage({ projectId }: DashboardPageProps) {
       </div>
 
       <div className="dashboard__card">
-        <h3>Assignee Workload</h3>
+        <h3>Нагрузка исполнителей</h3>
         <table className="dashboard__table">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Tasks</th>
-              <th>In Progress</th>
+              <th>Имя</th>
+              <th>Задачи</th>
+              <th>В работе</th>
             </tr>
           </thead>
           <tbody>

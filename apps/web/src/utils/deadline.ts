@@ -22,10 +22,10 @@ export function formatRelativeDeadline(deadline: string | null): string | null {
   const days = Math.floor(hours / 24);
 
   if (diff < 0) {
-    if (days > 0) return `Overdue by ${days}d`;
-    return `Overdue by ${Math.max(1, hours)}h`;
+    if (days > 0) return `Проср.: ${days} дн`;
+    return `Проср.: ${Math.max(1, hours)} ч`;
   }
 
-  if (days > 0) return `${days}d left`;
-  return `${Math.max(1, hours)}h left`;
+  if (days > 0) return `${days} дн ост.`;
+  return `${Math.max(1, hours)} ч ост.`;
 }

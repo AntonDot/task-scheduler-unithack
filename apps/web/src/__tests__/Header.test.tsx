@@ -78,7 +78,7 @@ describe("Header", () => {
   it("calls onLogout when logout button is clicked", () => {
     const onLogout = vi.fn();
     renderHeader({ onLogout });
-    fireEvent.click(screen.getByText("Logout"));
+    fireEvent.click(screen.getByText("Выйти"));
     expect(onLogout).toHaveBeenCalledOnce();
   });
 

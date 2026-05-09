@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 
-from tests.e2e.conftest import CORE_API_URL
+from .conftest import CORE_API_URL
 
 
 def skip_if_not_implemented(client, url, headers):

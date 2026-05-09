@@ -30,6 +30,7 @@ async def handle_incident(payload: IncidentPayload) -> dict:
             "description": parsed.description,
             "status": "TODO",
             "urgency": "URGENT",
+            "deadline": parsed.deadline,
         }
     else:
         task_data = {
@@ -37,6 +38,7 @@ async def handle_incident(payload: IncidentPayload) -> dict:
             "description": parsed.description,
             "status": "AI_DRAFT",
             "urgency": parsed.urgency,
+            "deadline": parsed.deadline,
         }
 
     try:
@@ -56,6 +58,7 @@ async def handle_draft_text(payload: DraftTextPayload) -> dict:
         "description": parsed.description,
         "status": "AI_DRAFT",
         "urgency": parsed.urgency,
+        "deadline": parsed.deadline,
     }
 
     try:

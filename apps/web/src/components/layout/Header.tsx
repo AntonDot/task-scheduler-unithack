@@ -50,13 +50,13 @@ export function Header({
               className={`header__view-btn ${currentView === "kanban" ? "active" : ""}`}
               onClick={() => onViewChange("kanban")}
             >
-              Kanban
+              Кабан
             </button>
             <button
               className={`header__view-btn ${currentView === "dashboard" ? "active" : ""}`}
               onClick={() => onViewChange("dashboard")}
             >
-              Dashboard
+              Дашборд
             </button>
           </div>
         )}
@@ -64,19 +64,19 @@ export function Header({
       <div className="header__right">
         {onAddTask && (
           <button className="header__add-btn" onClick={onAddTask}>
-            + New Task
+            + Новая задача
           </button>
         )}
         <label className="header__filter">
           <input type="checkbox" checked={showOnlyMine} onChange={onToggleMine} />
-          Only my tasks
+          Только мои задачи
         </label>
         <div className="header__user">
           <Avatar name={user.full_name} size={32} />
           <span>{user.full_name}</span>
         </div>
         <button className="btn btn--ghost" onClick={onLogout}>
-          Logout
+          Выйти
         </button>
       </div>
     </header>

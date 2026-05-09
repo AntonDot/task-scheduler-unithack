@@ -118,12 +118,12 @@ async def approve_draft(
 
 
 @router.delete("/api/v1/tasks/{task_id}", status_code=204)
-async def discard_task(
+async def delete_task_endpoint(
     task_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     _, access = await _get_task_access(task_id, current_user, db)
-    project_id, deleted_task_id = await task_service.discard_draft(db, task_id, access)
+    project_id, deleted_task_id = await task_service.delete_task(db, task_id, access)
     await db.commit()
-    await ws_manager.broadcast(project_id, "task_discarded", {"task_id": deleted_task_id})
+    await ws_manager.broadcast(project_id, "task_deleted", {"task_id": deleted_task_id})

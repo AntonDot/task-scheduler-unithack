@@ -1,3 +1,5 @@
+import json
+
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +8,7 @@ from sqlalchemy.orm import selectinload
 from app.domain import ASSIGNEE_ALLOWED_TARGETS, VALID_STATUS_TRANSITIONS, ProjectRole, TaskStatus
 from app.models import Task, UserProject
 from app.schemas import TaskCreate, TaskUpdate
+from app.services.audit_service import log_action
 
 
 async def list_tasks(db: AsyncSession, project_id: int, assignee_id: int | None = None) -> list[Task]:
@@ -42,6 +45,7 @@ async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: 
     await db.flush()
     await db.refresh(task)
     await db.refresh(task, attribute_names=["project", "assignee"])
+    await log_action(db, task.id, creator_id, "created")
     return task
 
 
@@ -63,11 +67,21 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
     if user_project.role == ProjectRole.ASSIGNEE and "assignee_id" in update_data:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can reassign task")
 
+    old_values = {field: getattr(task, field) for field in update_data}
     for field, value in update_data.items():
         setattr(task, field, value)
     await db.flush()
     await db.refresh(task)
     await db.refresh(task, attribute_names=["project", "assignee"])
+    new_values = {field: getattr(task, field) for field in update_data}
+    await log_action(
+        db,
+        task.id,
+        user_project.user_id,
+        "updated",
+        old_value=json.dumps(old_values, default=str),
+        new_value=json.dumps(new_values, default=str),
+    )
     return task
 
 
@@ -96,10 +110,19 @@ async def change_status(db: AsyncSession, task_id: int, new_status: TaskStatus, 
         if new_status not in ASSIGNEE_ALLOWED_TARGETS:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Assignee cannot set this status")
 
+    old_status = task.status
     task.status = new_status
     await db.flush()
     await db.refresh(task)
     await db.refresh(task, attribute_names=["project", "assignee"])
+    await log_action(
+        db,
+        task.id,
+        user_project.user_id,
+        "status_changed",
+        old_value=json.dumps({"status": old_status}),
+        new_value=json.dumps({"status": str(new_status)}),
+    )
     return task
 
 
@@ -123,10 +146,19 @@ async def approve_draft(db: AsyncSession, task_id: int, user_project: UserProjec
             detail="Only AI_DRAFT tasks can be approved",
         )
 
+    old_status = task.status
     task.status = TaskStatus.TODO
     await db.flush()
     await db.refresh(task)
     await db.refresh(task, attribute_names=["project", "assignee"])
+    await log_action(
+        db,
+        task.id,
+        user_project.user_id,
+        "status_changed",
+        old_value=json.dumps({"status": old_status}),
+        new_value=json.dumps({"status": str(TaskStatus.TODO)}),
+    )
     return task
 
 
@@ -149,6 +181,25 @@ async def discard_draft(db: AsyncSession, task_id: int, user_project: UserProjec
 
     project_id = task.project_id
     deleted_task_id = task.id
+    await db.delete(task)
+    await db.flush()
+    return project_id, deleted_task_id
+
+
+async def delete_task(db: AsyncSession, task_id: int, user_project: UserProject) -> tuple[int, int]:
+    if user_project.role != ProjectRole.OWNER:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can delete tasks")
+
+    task = await get_task(db, task_id)
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+
+    if task.project_id != user_project.project_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Task not in your project")
+
+    project_id = task.project_id
+    deleted_task_id = task.id
+    await log_action(db, task.id, user_project.user_id, "deleted")
     await db.delete(task)
     await db.flush()
     return project_id, deleted_task_id

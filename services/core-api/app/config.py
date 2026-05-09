@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    dev_login: bool = True
 
     model_config = {"env_prefix": "CORE_", "env_file": ".env", "extra": "ignore"}
 

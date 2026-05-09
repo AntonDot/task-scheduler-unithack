@@ -4,6 +4,13 @@ import { TaskDrawer } from "@/components/kanban/TaskDrawer";
 import { TaskStatus } from "@/types/domain";
 import type { Task } from "@/types/domain";
 
+// Mock fetch for comments
+vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+  ok: true,
+  status: 200,
+  json: () => Promise.resolve([]),
+}));
+
 const BASE_TASK: Task = {
   id: 10, project_id: 1, creator_id: 1, assignee_id: 2,
   title: "Test task", description: "Some description",
@@ -25,7 +32,7 @@ function renderDrawer(overrides: { task?: Partial<Task>; role?: string } = {}) {
     members: MOCK_MEMBERS,
     onClose: vi.fn(),
     onApprove: vi.fn(),
-    onDiscard: vi.fn(),
+    onDelete: vi.fn(),
     onStatusChange: vi.fn(),
     onAssigneeChange: vi.fn(),
   };
@@ -61,10 +68,10 @@ describe("TaskDrawer", () => {
     expect(onApprove).toHaveBeenCalledWith(10);
   });
 
-  it("calls onDiscard when discard button clicked", () => {
-    const { onDiscard } = renderDrawer({ role: "OWNER", task: { status: TaskStatus.AI_DRAFT } });
+  it("calls onDelete when discard button clicked on AI_DRAFT", () => {
+    const { onDelete } = renderDrawer({ role: "OWNER", task: { status: TaskStatus.AI_DRAFT } });
     fireEvent.click(screen.getByTestId("discard-btn"));
-    expect(onDiscard).toHaveBeenCalledWith(10);
+    expect(onDelete).toHaveBeenCalledWith(10);
   });
 
   it("shows Complete button for owner in REVIEW status", () => {
@@ -80,6 +87,30 @@ describe("TaskDrawer", () => {
   it("shows Start Work button in TODO status", () => {
     renderDrawer({ task: { status: TaskStatus.TODO } });
     expect(screen.getByText("Start Work")).toBeInTheDocument();
+  });
+
+  it("shows delete button for owner on non-AI_DRAFT tasks", () => {
+    renderDrawer({ role: "OWNER", task: { status: TaskStatus.TODO } });
+    expect(screen.getByTestId("delete-btn")).toBeInTheDocument();
+  });
+
+  it("shows delete confirmation on delete button click", () => {
+    renderDrawer({ role: "OWNER", task: { status: TaskStatus.TODO } });
+    fireEvent.click(screen.getByTestId("delete-btn"));
+    expect(screen.getByText("Delete this task?")).toBeInTheDocument();
+    expect(screen.getByTestId("delete-confirm-btn")).toBeInTheDocument();
+  });
+
+  it("calls onDelete after confirming deletion", () => {
+    const { onDelete } = renderDrawer({ role: "OWNER", task: { status: TaskStatus.TODO } });
+    fireEvent.click(screen.getByTestId("delete-btn"));
+    fireEvent.click(screen.getByTestId("delete-confirm-btn"));
+    expect(onDelete).toHaveBeenCalledWith(10);
+  });
+
+  it("hides delete button for assignee", () => {
+    renderDrawer({ role: "ASSIGNEE", task: { status: TaskStatus.TODO } });
+    expect(screen.queryByTestId("delete-btn")).not.toBeInTheDocument();
   });
 
   it("shows assignee select for owner", () => {
@@ -100,5 +131,30 @@ describe("TaskDrawer", () => {
     const select = screen.getByTestId("assignee-select");
     fireEvent.change(select, { target: { value: "1" } });
     expect(onAssigneeChange).toHaveBeenCalledWith(10, 1);
+  });
+
+  it("shows comment input field", () => {
+    renderDrawer();
+    expect(screen.getByTestId("comment-input")).toBeInTheDocument();
+  });
+
+  it("shows activity section header", () => {
+    renderDrawer();
+    expect(screen.getByText("Activity")).toBeInTheDocument();
+  });
+
+  it("shows attachments section", () => {
+    renderDrawer();
+    expect(screen.getByText("Attachments")).toBeInTheDocument();
+  });
+
+  it("shows file upload input", () => {
+    renderDrawer();
+    expect(screen.getByTestId("attachment-file-input")).toBeInTheDocument();
+  });
+
+  it("shows history section with dates", () => {
+    renderDrawer();
+    expect(screen.getByText("History")).toBeInTheDocument();
   });
 });

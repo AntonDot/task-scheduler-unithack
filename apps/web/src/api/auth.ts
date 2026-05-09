@@ -5,8 +5,18 @@ interface TokenResponse {
   token_type: string;
 }
 
-export async function login(email: string): Promise<string> {
-  const data = await api.post<TokenResponse>("/auth/token", { email });
+interface LoginMode {
+  dev_login: boolean;
+}
+
+export async function getLoginMode(): Promise<LoginMode> {
+  return api.get<LoginMode>("/auth/mode");
+}
+
+export async function login(email: string, password?: string): Promise<string> {
+  const body: Record<string, string> = { email };
+  if (password) body.password = password;
+  const data = await api.post<TokenResponse>("/auth/token", body);
   localStorage.setItem("token", data.access_token);
   return data.access_token;
 }

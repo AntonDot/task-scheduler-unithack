@@ -21,7 +21,7 @@ interface KanbanBoardProps {
   members: ProjectMember[];
   onStatusChange: (taskId: number, newStatus: TaskStatus) => void;
   onApprove: (taskId: number) => void;
-  onDiscard: (taskId: number) => void;
+  onDelete: (taskId: number) => void;
   onAssigneeChange: (taskId: number, assigneeId: number | null) => void;
   showOnlyMine: boolean;
 }
@@ -43,7 +43,7 @@ export function KanbanBoard({
   members,
   onStatusChange,
   onApprove,
-  onDiscard,
+  onDelete,
   onAssigneeChange,
   showOnlyMine,
 }: KanbanBoardProps) {
@@ -132,8 +132,8 @@ export function KanbanBoard({
             onApprove(id);
             setSelectedTask(null);
           }}
-          onDiscard={(id) => {
-            onDiscard(id);
+          onDelete={(id) => {
+            onDelete(id);
             setSelectedTask(null);
           }}
           onStatusChange={(id, status) => {

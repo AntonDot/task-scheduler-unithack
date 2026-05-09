@@ -2,16 +2,11 @@ import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import type { Task } from "@/types/domain";
 import { Avatar } from "./Avatar";
+import { getDeadlineStatus, formatRelativeDeadline } from "@/utils/deadline";
 
 interface TaskCardProps {
   task: Task;
   onSelect: (task: Task) => void;
-}
-
-function formatDeadline(deadline: string | null): string | null {
-  if (!deadline) return null;
-  const d = new Date(deadline);
-  return d.toLocaleDateString("ru-RU", { day: "numeric", month: "short" });
 }
 
 export function TaskCard({ task, onSelect }: TaskCardProps) {
@@ -24,13 +19,23 @@ export function TaskCard({ task, onSelect }: TaskCardProps) {
     opacity: isDragging ? 0.5 : 1,
   };
 
+  const deadlineStatus = getDeadlineStatus(task.deadline);
+  const relativeDeadline = formatRelativeDeadline(task.deadline);
+
+  const deadlineClass =
+    deadlineStatus === "overdue"
+      ? " task-card--overdue"
+      : deadlineStatus === "due-soon"
+        ? " task-card--due-soon"
+        : "";
+
   return (
     <div
       ref={setNodeRef}
       style={style}
       {...attributes}
       {...listeners}
-      className={`task-card urgency-${task.urgency.toLowerCase()}`}
+      className={`task-card urgency-${task.urgency.toLowerCase()}${deadlineClass}`}
       onClick={() => onSelect(task)}
       data-testid={`task-card-${task.id}`}
     >
@@ -48,7 +53,11 @@ export function TaskCard({ task, onSelect }: TaskCardProps) {
         )}
         <span className="task-card__meta">
           {task.deadline && (
-            <span className="task-card__deadline">{formatDeadline(task.deadline)}</span>
+            <span
+              className={`task-card__deadline${deadlineStatus === "overdue" ? " task-card__deadline--overdue" : deadlineStatus === "due-soon" ? " task-card__deadline--due-soon" : ""}`}
+            >
+              {relativeDeadline}
+            </span>
           )}
           {task.assignee && <Avatar name={task.assignee.full_name} size={24} />}
         </span>

@@ -152,17 +152,17 @@ class TestAIDraftFlow:
         resp = client.post(f"{CORE_API_URL}/api/v1/tasks/{task_id}/approve", headers=owner_headers)
         assert resp.status_code == 422
 
-    def test_cannot_discard_non_draft(self, client, owner_headers, onegin_project):
+    def test_owner_can_delete_non_draft(self, client, owner_headers, onegin_project):
         pid = onegin_project["id"]
         resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{pid}/tasks",
-            json={"title": "E2E non-draft discard", "status": "TODO", "urgency": "LOW"},
+            json={"title": "E2E non-draft delete", "status": "TODO", "urgency": "LOW"},
             headers=owner_headers,
         )
         task_id = resp.json()["id"]
 
         resp = client.delete(f"{CORE_API_URL}/api/v1/tasks/{task_id}", headers=owner_headers)
-        assert resp.status_code == 422
+        assert resp.status_code == 204
 
 
 @pytest.mark.e2e

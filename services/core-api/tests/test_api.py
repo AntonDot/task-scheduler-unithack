@@ -241,13 +241,13 @@ class TestDiscard:
             )
             assert resp.status_code == 204
 
-    async def test_discard_non_draft_returns_422(self, client, seed_data, get_token):
+    async def test_owner_can_delete_any_task(self, client, seed_data, get_token):
         tid = seed_data["todo_task"].id
         resp = await client.delete(
             f"/api/v1/tasks/{tid}",
             headers={"Authorization": f"Bearer {get_token(seed_data['manager'].id)}"},
         )
-        assert resp.status_code == 422
+        assert resp.status_code == 204
 
     async def test_assignee_cannot_discard(self, client, seed_data, get_token):
         tid = seed_data["draft_task"].id

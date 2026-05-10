@@ -83,7 +83,7 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
   }, [value]);
 
   const [menuIdx, setMenuIdx] = useState(0);
-  const refs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const refs = useRef<Record<string, any>>({});
 
   useEffect(() => {
     if (slashMenu) {
@@ -118,7 +118,7 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
   }
 
   function autoGrow(el: HTMLTextAreaElement | null) {
-    if (!el) return;
+    if (!el || el.tagName !== 'TEXTAREA') return;
     el.style.height = 'auto';
     el.style.height = el.scrollHeight + 'px';
   }
@@ -166,6 +166,14 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
     if (e.key === 'Backspace' && !block.text) {
       e.preventDefault();
       if (block.type !== 'paragraph') { upd(block.id, { type: 'paragraph' }); return; }
+      
+      const idx = blocks.findIndex(b => b.id === block.id);
+      const prev = blocks[idx - 1];
+      if (prev && prev.type === 'divider') {
+        commit(blocks.filter(b => b.id !== prev.id));
+        return;
+      }
+      
       deleteBlock(block.id);
     }
   }
@@ -204,7 +212,24 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
   function renderBlock(block: Block, idx: number) {
     if (block.type === 'divider') {
       return (
-        <div key={block.id} style={{ padding: '10px 0' }}>
+        <div 
+          key={block.id} 
+          tabIndex={readonly ? -1 : 0}
+          ref={el => { refs.current[block.id] = el; }}
+          onKeyDown={e => {
+            if (readonly) return;
+            if (e.key === 'Backspace' || e.key === 'Delete') {
+              e.preventDefault();
+              deleteBlock(block.id);
+            }
+          }}
+          style={{ 
+            padding: '10px 0', outline: 'none', cursor: readonly ? 'default' : 'pointer',
+            borderRadius: 4, transition: 'background 0.1s'
+          }}
+          onFocus={e => { if (!readonly) e.currentTarget.style.background = bord + '60'; }}
+          onBlur={e => { e.currentTarget.style.background = 'transparent'; }}
+        >
           <hr style={{ border: 'none', borderTop: `1.5px solid ${bord}`, margin: 0 }} />
         </div>
       );
@@ -272,7 +297,13 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
         onClick={e => {
           if (!readonly && e.target === e.currentTarget && blocks.length > 0) {
             const last = blocks[blocks.length - 1];
-            if (last) refs.current[last.id]?.focus();
+            if (last) {
+              if (last.type === 'divider') {
+                insertAfter(last.id, 'paragraph');
+              } else {
+                refs.current[last.id]?.focus();
+              }
+            }
           }
         }}
       >

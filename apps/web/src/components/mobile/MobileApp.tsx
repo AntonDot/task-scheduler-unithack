@@ -4,7 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/theme/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { fetchProjects } from '@/api/projects';
-import { fetchTasks, changeStatus, createTask } from '@/api/tasks';
+import { fetchTasks, changeStatus, createTask, updateTask } from '@/api/tasks';
 import { fetchProjectMembers } from '@/api/members';
 import { runReviewScraper, type ReviewScrapeResult } from '@/api/automations';
 import { fetchComments, addComment, type Comment } from '@/api/comments';
@@ -13,6 +13,7 @@ import {
   COLUMNS_DEF, getUrgencyMap, statusToColumn, columnToStatus,
   formatDeadline, isOverdue, apiUrgencyToDesign, type DesignColumn,
 } from '@/theme/theme';
+import { BlockEditor } from '@/components/editor/BlockEditor';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -363,9 +364,10 @@ function BoardView({ tasks, onTaskClick, onCreateTask, syncing, accent, th }: {
 
 // ─── Task Detail Sheet ────────────────────────────────────────────────────────
 
-function TaskSheet({ task, open, onClose, onStatusChange, accent, th }: {
+function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, accent, th }: {
   task: Task | null; open: boolean; onClose: () => void;
   onStatusChange: (taskId: number, col: DesignColumn) => void;
+  onDescriptionChange: (taskId: number, desc: string) => void;
   accent: string; th: ReturnType<typeof useTheme>['theme'];
 }) {
   const dragY = useRef(0);
@@ -533,20 +535,16 @@ function TaskSheet({ task, open, onClose, onStatusChange, accent, th }: {
           )}
 
           {/* Description */}
-          {task.description && (
-            <div style={{ marginBottom: 20 }}>
-              <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
-                Description
-              </p>
-              <p style={{
-                fontSize: 14, color: th.textSecondary, lineHeight: 1.6,
-                background: th.columnBg, borderRadius: 10, padding: '12px 14px',
-                whiteSpace: 'pre-wrap',
-              }}>
-                {task.description}
-              </p>
-            </div>
-          )}
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
+              Description
+            </p>
+            <BlockEditor
+              value={task.description ?? ''}
+              onChange={(text) => onDescriptionChange(task.id, text)}
+              theme={th}
+            />
+          </div>
 
           {/* Comments */}
           <div>
@@ -1118,6 +1116,17 @@ export function MobileApp() {
     }
   }
 
+  function handleDescriptionChange(taskId: number, desc: string) {
+    updateTask(taskId, { description: desc }).catch(() => {});
+    if (selTask?.id === taskId) {
+      setSelTask(prev => prev ? { ...prev, description: desc } : prev);
+    }
+    const key = ['tasks', resolvedProjectId] as const;
+    queryClient.setQueryData<Task[]>(key, old => 
+      (old ?? []).map(t => t.id === taskId ? { ...t, description: desc } : t)
+    );
+  }
+
   // Project switcher in settings (expose as top-level nav element if multiple projects)
   void setActiveProjectId;
 
@@ -1158,6 +1167,7 @@ export function MobileApp() {
         task={selTask} open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         onStatusChange={handleStatusChange}
+        onDescriptionChange={handleDescriptionChange}
         accent={accent} th={th}
       />
 

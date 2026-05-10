@@ -13,7 +13,9 @@ def skip_if_not_implemented(client, url, headers):
 
 @pytest.mark.e2e
 class TestAnalytics:
-    def test_analytics_returns_status_breakdown(self, client, owner_headers, onegin_project):
+    def test_analytics_returns_status_breakdown(
+        self, client, owner_headers, onegin_project
+    ):
         pid = onegin_project["id"]
         url = f"{CORE_API_URL}/api/v1/projects/{pid}/analytics"
         skip_if_not_implemented(client, url, owner_headers)
@@ -23,7 +25,9 @@ class TestAnalytics:
         data = resp.json()
         assert "by_status" in data
 
-    def test_analytics_returns_assignee_load(self, client, owner_headers, onegin_project):
+    def test_analytics_returns_assignee_load(
+        self, client, owner_headers, onegin_project
+    ):
         pid = onegin_project["id"]
         url = f"{CORE_API_URL}/api/v1/projects/{pid}/analytics"
         skip_if_not_implemented(client, url, owner_headers)
@@ -33,7 +37,9 @@ class TestAnalytics:
         data = resp.json()
         assert "assignee_load" in data
 
-    def test_analytics_requires_project_access(self, client, owner_headers, assignee_bereg_headers, onegin_project):
+    def test_analytics_requires_project_access(
+        self, client, owner_headers, assignee_bereg_headers, onegin_project
+    ):
         pid = onegin_project["id"]
         url = f"{CORE_API_URL}/api/v1/projects/{pid}/analytics"
         skip_if_not_implemented(client, url, owner_headers)
@@ -90,7 +96,9 @@ class TestExport:
         body = resp.text
         assert marker in body
 
-    def test_export_requires_project_access(self, client, owner_headers, assignee_bereg_headers, onegin_project):
+    def test_export_requires_project_access(
+        self, client, owner_headers, assignee_bereg_headers, onegin_project
+    ):
         pid = onegin_project["id"]
         url = f"{CORE_API_URL}/api/v1/projects/{pid}/export?format=csv"
         skip_if_not_implemented(client, url, owner_headers)

@@ -6,14 +6,19 @@ from .conftest import CORE_API_URL
 @pytest.mark.e2e
 class TestAuth:
     def test_get_token_for_valid_email(self, client):
-        resp = client.post(f"{CORE_API_URL}/api/v1/auth/token", json={"email": "d.morozov@victorygroup.ru"})
+        resp = client.post(
+            f"{CORE_API_URL}/api/v1/auth/token",
+            json={"email": "d.morozov@victorygroup.ru"},
+        )
         assert resp.status_code == 200
         data = resp.json()
         assert "access_token" in data
         assert data["token_type"] == "bearer"
 
     def test_get_token_for_invalid_email(self, client):
-        resp = client.post(f"{CORE_API_URL}/api/v1/auth/token", json={"email": "nobody@example.com"})
+        resp = client.post(
+            f"{CORE_API_URL}/api/v1/auth/token", json={"email": "nobody@example.com"}
+        )
         assert resp.status_code == 404
 
     def test_me_endpoint(self, client, owner_headers):
@@ -30,12 +35,18 @@ class TestAuth:
 
 @pytest.mark.e2e
 class TestManualTaskLifecycle:
-    def test_create_and_move_through_all_statuses(self, client, owner_headers, onegin_project):
+    def test_create_and_move_through_all_statuses(
+        self, client, owner_headers, onegin_project
+    ):
         pid = onegin_project["id"]
 
         resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{pid}/tasks",
-            json={"title": "E2E lifecycle task", "description": "Full flow test", "urgency": "MEDIUM"},
+            json={
+                "title": "E2E lifecycle task",
+                "description": "Full flow test",
+                "urgency": "MEDIUM",
+            },
             headers=owner_headers,
         )
         assert resp.status_code == 201
@@ -110,7 +121,9 @@ class TestManualTaskLifecycle:
 
 @pytest.mark.e2e
 class TestAIDraftFlow:
-    def test_owner_creates_and_approves_draft(self, client, owner_headers, onegin_project):
+    def test_owner_creates_and_approves_draft(
+        self, client, owner_headers, onegin_project
+    ):
         pid = onegin_project["id"]
         resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{pid}/tasks",
@@ -121,7 +134,9 @@ class TestAIDraftFlow:
         task_id = resp.json()["id"]
         assert resp.json()["status"] == "AI_DRAFT"
 
-        resp = client.post(f"{CORE_API_URL}/api/v1/tasks/{task_id}/approve", headers=owner_headers)
+        resp = client.post(
+            f"{CORE_API_URL}/api/v1/tasks/{task_id}/approve", headers=owner_headers
+        )
         assert resp.status_code == 200
         assert resp.json()["status"] == "TODO"
 
@@ -134,10 +149,14 @@ class TestAIDraftFlow:
         )
         task_id = resp.json()["id"]
 
-        resp = client.delete(f"{CORE_API_URL}/api/v1/tasks/{task_id}", headers=owner_headers)
+        resp = client.delete(
+            f"{CORE_API_URL}/api/v1/tasks/{task_id}", headers=owner_headers
+        )
         assert resp.status_code == 204
 
-        resp = client.get(f"{CORE_API_URL}/api/v1/tasks/{task_id}", headers=owner_headers)
+        resp = client.get(
+            f"{CORE_API_URL}/api/v1/tasks/{task_id}", headers=owner_headers
+        )
         assert resp.status_code == 404
 
     def test_cannot_approve_non_draft(self, client, owner_headers, onegin_project):
@@ -149,7 +168,9 @@ class TestAIDraftFlow:
         )
         task_id = resp.json()["id"]
 
-        resp = client.post(f"{CORE_API_URL}/api/v1/tasks/{task_id}/approve", headers=owner_headers)
+        resp = client.post(
+            f"{CORE_API_URL}/api/v1/tasks/{task_id}/approve", headers=owner_headers
+        )
         assert resp.status_code == 422
 
     def test_owner_can_delete_non_draft(self, client, owner_headers, onegin_project):
@@ -161,7 +182,9 @@ class TestAIDraftFlow:
         )
         task_id = resp.json()["id"]
 
-        resp = client.delete(f"{CORE_API_URL}/api/v1/tasks/{task_id}", headers=owner_headers)
+        resp = client.delete(
+            f"{CORE_API_URL}/api/v1/tasks/{task_id}", headers=owner_headers
+        )
         assert resp.status_code == 204
 
 
@@ -170,7 +193,9 @@ class TestTaskUpdate:
     def test_owner_can_reassign(self, client, owner_headers, onegin_project):
         pid = onegin_project["id"]
 
-        members = client.get(f"{CORE_API_URL}/api/v1/projects/{pid}/members", headers=owner_headers).json()
+        members = client.get(
+            f"{CORE_API_URL}/api/v1/projects/{pid}/members", headers=owner_headers
+        ).json()
         assignee = next((m for m in members if m["role"] == "ASSIGNEE"), None)
         assert assignee is not None
 
@@ -211,7 +236,9 @@ class TestTaskUpdate:
 class TestProjectMembers:
     def test_list_members(self, client, owner_headers, onegin_project):
         pid = onegin_project["id"]
-        resp = client.get(f"{CORE_API_URL}/api/v1/projects/{pid}/members", headers=owner_headers)
+        resp = client.get(
+            f"{CORE_API_URL}/api/v1/projects/{pid}/members", headers=owner_headers
+        )
         assert resp.status_code == 200
         members = resp.json()
         assert len(members) >= 2
@@ -219,14 +246,21 @@ class TestProjectMembers:
         assert "OWNER" in roles
         assert "ASSIGNEE" in roles
 
-    def test_assignee_can_also_list_members(self, client, assignee_onegin_headers, onegin_project):
+    def test_assignee_can_also_list_members(
+        self, client, assignee_onegin_headers, onegin_project
+    ):
         pid = onegin_project["id"]
-        resp = client.get(f"{CORE_API_URL}/api/v1/projects/{pid}/members", headers=assignee_onegin_headers)
+        resp = client.get(
+            f"{CORE_API_URL}/api/v1/projects/{pid}/members",
+            headers=assignee_onegin_headers,
+        )
         assert resp.status_code == 200
 
     def test_assignee_filter(self, client, owner_headers, onegin_project):
         pid = onegin_project["id"]
-        members = client.get(f"{CORE_API_URL}/api/v1/projects/{pid}/members", headers=owner_headers).json()
+        members = client.get(
+            f"{CORE_API_URL}/api/v1/projects/{pid}/members", headers=owner_headers
+        ).json()
         assignee = next((m for m in members if m["role"] == "ASSIGNEE"), None)
         if assignee is None:
             pytest.skip("No assignee in project")

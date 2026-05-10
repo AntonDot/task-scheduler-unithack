@@ -68,4 +68,5 @@ export interface Task {
   updated_at: string;
   project?: Project;
   assignee?: User;
+  co_assignees?: User[];
 }

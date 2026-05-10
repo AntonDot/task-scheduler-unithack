@@ -8,10 +8,14 @@ from .conftest import CORE_API_URL, ML_WORKER_URL, REVIEW_BOARD_URL, WEBHOOK_API
 
 def _wait_for_task(client, project_id, marker, headers, max_wait=10):
     for _ in range(max_wait * 2):
-        resp = client.get(f"{CORE_API_URL}/api/v1/projects/{project_id}/tasks", headers=headers)
+        resp = client.get(
+            f"{CORE_API_URL}/api/v1/projects/{project_id}/tasks", headers=headers
+        )
         resp.raise_for_status()
         for task in resp.json():
-            if marker in (task.get("title") or "") or marker in (task.get("description") or ""):
+            if marker in (task.get("title") or "") or marker in (
+                task.get("description") or ""
+            ):
                 return task
         time.sleep(0.5)
     return None
@@ -19,7 +23,9 @@ def _wait_for_task(client, project_id, marker, headers, max_wait=10):
 
 @pytest.mark.e2e
 class TestIncidentWebhookE2E:
-    def test_critical_incident_creates_todo_task(self, client, owner_headers, bereg_project, live_services):
+    def test_critical_incident_creates_todo_task(
+        self, client, owner_headers, bereg_project, live_services
+    ):
         if not live_services.get("ml"):
             pytest.skip("ML Worker not running")
 
@@ -45,7 +51,9 @@ class TestIncidentWebhookE2E:
         assert task["urgency"] == "URGENT"
         assert "[Auto]" not in (task.get("description") or "")
 
-    def test_non_critical_incident_creates_ai_draft(self, client, owner_headers, bereg_project, live_services):
+    def test_non_critical_incident_creates_ai_draft(
+        self, client, owner_headers, bereg_project, live_services
+    ):
         if not live_services.get("ml"):
             pytest.skip("ML Worker not running")
 
@@ -110,7 +118,9 @@ class TestIncidentWebhookE2E:
 
 @pytest.mark.e2e
 class TestDraftTextWebhookE2E:
-    def test_draft_text_creates_ai_draft(self, client, owner_headers, onegin_project, live_services):
+    def test_draft_text_creates_ai_draft(
+        self, client, owner_headers, onegin_project, live_services
+    ):
         if not live_services.get("ml"):
             pytest.skip("ML Worker not running")
 

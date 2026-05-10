@@ -1,8 +1,19 @@
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { KanbanBoard } from "@/components/kanban/KanbanBoard";
-import { KANBAN_COLUMNS, COLUMN_LABELS, TaskStatus } from "@/types/domain";
+import { ThemeProvider } from "@/theme/ThemeContext";
+import { TaskStatus } from "@/types/domain";
+import { COLUMNS_DEF, createTheme } from "@/theme/theme";
 import type { Task } from "@/types/domain";
+
+// Mock BlockEditor to avoid ESM issues in vitest
+vi.mock("@/components/editor/BlockEditor", () => ({
+  BlockEditor: ({ value }: { value: string }) => (
+    <div data-testid="block-editor">{value}</div>
+  ),
+}));
+
+const lightTheme = createTheme(false);
 
 const MOCK_TASKS: Task[] = [
   {
@@ -48,40 +59,64 @@ const MOCK_MEMBERS = [
 function renderBoard(overrides: Partial<Parameters<typeof KanbanBoard>[0]> = {}) {
   const defaultProps = {
     tasks: MOCK_TASKS,
-    role: "OWNER" as const,
-    currentUserId: 1,
     members: MOCK_MEMBERS,
     onStatusChange: vi.fn(),
-    onApprove: vi.fn(),
-    onDelete: vi.fn(),
-    onAssigneeChange: vi.fn(),
-    showOnlyMine: false,
+    onUpdate: vi.fn(),
+    accent: "#6366F1",
+    compact: false,
+    colWidth: 300,
+    theme: lightTheme,
   };
-  return render(<KanbanBoard {...defaultProps} {...overrides} />);
+  return render(
+    <ThemeProvider>
+      <KanbanBoard {...defaultProps} {...overrides} />
+    </ThemeProvider>,
+  );
 }
 
 describe("KanbanBoard", () => {
-  it("renders all five columns", () => {
+  it("renders all four design columns", () => {
     renderBoard();
-    for (const status of KANBAN_COLUMNS) {
-      expect(screen.getByTestId(`column-${status}`)).toBeInTheDocument();
+    for (const col of COLUMNS_DEF) {
+      expect(screen.getByTestId(`column-${col.id}`)).toBeInTheDocument();
     }
   });
 
   it("displays column labels", () => {
     renderBoard();
-    for (const label of Object.values(COLUMN_LABELS)) {
-      expect(screen.getByText(label)).toBeInTheDocument();
+    for (const col of COLUMNS_DEF) {
+      expect(screen.getByText(col.label)).toBeInTheDocument();
     }
   });
 
-  it("renders task cards in correct columns", () => {
+  it("renders task cards in correct columns — TODO maps to backlog", () => {
     renderBoard();
-    const todoCol = screen.getByTestId("column-TODO");
-    expect(todoCol).toHaveTextContent("Fix landing page");
+    const backlogCol = screen.getByTestId("column-backlog");
+    expect(backlogCol).toHaveTextContent("Fix landing page");
+  });
 
-    const draftCol = screen.getByTestId("column-AI_DRAFT");
-    expect(draftCol).toHaveTextContent("AI draft review response");
+  it("renders task cards in correct columns — AI_DRAFT maps to backlog", () => {
+    renderBoard();
+    const backlogCol = screen.getByTestId("column-backlog");
+    expect(backlogCol).toHaveTextContent("AI draft review response");
+  });
+
+  it("renders IN_PROGRESS task in in-progress column", () => {
+    renderBoard();
+    const col = screen.getByTestId("column-in-progress");
+    expect(col).toHaveTextContent("Deploy to staging");
+  });
+
+  it("renders REVIEW task in review column", () => {
+    renderBoard();
+    const col = screen.getByTestId("column-review");
+    expect(col).toHaveTextContent("Code review auth module");
+  });
+
+  it("renders DONE task in done column", () => {
+    renderBoard();
+    const col = screen.getByTestId("column-done");
+    expect(col).toHaveTextContent("Setup CI pipeline");
   });
 
   it("shows task title on card", () => {
@@ -98,12 +133,5 @@ describe("KanbanBoard", () => {
   it("shows assignee avatar initials", () => {
     renderBoard();
     expect(screen.getByTitle("Анна Козлова")).toBeInTheDocument();
-  });
-
-  it("filters tasks by current user when showOnlyMine=true", () => {
-    renderBoard({ showOnlyMine: true, currentUserId: 2 });
-    expect(screen.getByText("Fix landing page")).toBeInTheDocument();
-    expect(screen.getByText("Deploy to staging")).toBeInTheDocument();
-    expect(screen.queryByText("Setup CI pipeline")).not.toBeInTheDocument();
   });
 });

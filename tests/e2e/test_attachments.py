@@ -78,7 +78,9 @@ class TestAttachments:
         )
         assert all(a["id"] != att_id for a in resp.json())
 
-    def test_delete_attachment_assignee_forbidden(self, client, owner_headers, assignee_onegin_headers, onegin_project):
+    def test_delete_attachment_assignee_forbidden(
+        self, client, owner_headers, assignee_onegin_headers, onegin_project
+    ):
         task_id = self._create_task(client, owner_headers, onegin_project["id"])
 
         resp = client.post(
@@ -104,7 +106,9 @@ class TestAttachments:
         )
         assert resp.status_code == 422
 
-    def test_attachment_requires_project_access(self, client, owner_headers, assignee_bereg_headers, onegin_project):
+    def test_attachment_requires_project_access(
+        self, client, owner_headers, assignee_bereg_headers, onegin_project
+    ):
         task_id = self._create_task(client, owner_headers, onegin_project["id"])
 
         resp = client.post(

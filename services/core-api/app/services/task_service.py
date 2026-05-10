@@ -7,8 +7,11 @@ from sqlalchemy.orm import selectinload
 
 from app.domain import ASSIGNEE_ALLOWED_TARGETS, VALID_STATUS_TRANSITIONS, ProjectRole, TaskStatus
 from app.models import Task, UserProject
+from app.models.user import User
 from app.schemas import TaskCreate, TaskUpdate
 from app.services.audit_service import log_action
+
+_TASK_OPTS = [selectinload(Task.project), selectinload(Task.assignee), selectinload(Task.co_assignees)]
 
 
 async def list_tasks(db: AsyncSession, project_id: int, assignee_id: int | None = None) -> list[Task]:
@@ -16,18 +19,22 @@ async def list_tasks(db: AsyncSession, project_id: int, assignee_id: int | None 
     if assignee_id is not None:
         stmt = stmt.where(Task.assignee_id == assignee_id)
     result = await db.execute(
-        stmt.options(selectinload(Task.project), selectinload(Task.assignee)).order_by(
-            Task.deadline.asc().nulls_last(), Task.created_at.desc()
-        )
+        stmt.options(*_TASK_OPTS).order_by(Task.deadline.asc().nulls_last(), Task.created_at.desc())
     )
     return list(result.scalars().all())
 
 
 async def get_task(db: AsyncSession, task_id: int) -> Task | None:
-    result = await db.execute(
-        select(Task).where(Task.id == task_id).options(selectinload(Task.project), selectinload(Task.assignee))
-    )
+    result = await db.execute(select(Task).where(Task.id == task_id).options(*_TASK_OPTS))
     return result.scalar_one_or_none()
+
+
+async def _set_co_assignees(db: AsyncSession, task: Task, ids: list[int]) -> None:
+    if not ids:
+        task.co_assignees = []
+        return
+    result = await db.execute(select(User).where(User.id.in_(ids)))
+    task.co_assignees = list(result.scalars().all())
 
 
 async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: TaskCreate) -> Task:
@@ -43,16 +50,16 @@ async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: 
     )
     db.add(task)
     await db.flush()
+    if data.co_assignee_ids:
+        await _set_co_assignees(db, task, data.co_assignee_ids)
     await db.refresh(task)
-    await db.refresh(task, attribute_names=["project", "assignee"])
+    await db.refresh(task, attribute_names=["project", "assignee", "co_assignees"])
     await log_action(db, task.id, creator_id, "created")
     return task
 
 
 async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_project: UserProject) -> Task:
-    result = await db.execute(
-        select(Task).where(Task.id == task_id).options(selectinload(Task.project), selectinload(Task.assignee))
-    )
+    result = await db.execute(select(Task).where(Task.id == task_id).options(*_TASK_OPTS))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -60,19 +67,27 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
     if task.project_id != user_project.project_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Task not in your project")
 
-    if user_project.role == ProjectRole.ASSIGNEE and task.assignee_id != user_project.user_id:
+    co_ids_in_task = [u.id for u in task.co_assignees]
+    is_co = user_project.user_id in co_ids_in_task
+    if user_project.role == ProjectRole.ASSIGNEE and task.assignee_id != user_project.user_id and not is_co:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your task")
 
     update_data = data.model_dump(exclude_unset=True)
+    co_assignee_ids = update_data.pop("co_assignee_ids", None)
+
     if user_project.role == ProjectRole.ASSIGNEE and "assignee_id" in update_data:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can reassign task")
 
     old_values = {field: getattr(task, field) for field in update_data}
     for field, value in update_data.items():
         setattr(task, field, value)
+
+    if co_assignee_ids is not None:
+        await _set_co_assignees(db, task, co_assignee_ids)
+
     await db.flush()
     await db.refresh(task)
-    await db.refresh(task, attribute_names=["project", "assignee"])
+    await db.refresh(task, attribute_names=["project", "assignee", "co_assignees"])
     new_values = {field: getattr(task, field) for field in update_data}
     await log_action(
         db,
@@ -114,7 +129,7 @@ async def change_status(db: AsyncSession, task_id: int, new_status: TaskStatus, 
     task.status = new_status
     await db.flush()
     await db.refresh(task)
-    await db.refresh(task, attribute_names=["project", "assignee"])
+    await db.refresh(task, attribute_names=["project", "assignee", "co_assignees"])
     await log_action(
         db,
         task.id,
@@ -150,7 +165,7 @@ async def approve_draft(db: AsyncSession, task_id: int, user_project: UserProjec
     task.status = TaskStatus.TODO
     await db.flush()
     await db.refresh(task)
-    await db.refresh(task, attribute_names=["project", "assignee"])
+    await db.refresh(task, attribute_names=["project", "assignee", "co_assignees"])
     await log_action(
         db,
         task.id,

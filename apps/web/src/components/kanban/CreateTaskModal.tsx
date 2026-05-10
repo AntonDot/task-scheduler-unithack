@@ -1,112 +1,118 @@
-import { useState } from "react";
-import type { ProjectMember } from "@/api/members";
+import { useState } from 'react';
+import type { Theme } from '@/theme/theme';
+import { URGENCY_MAP } from '@/theme/theme';
+import { DatePicker } from '@/components/ui/DatePicker';
+import { IcoX } from '@/components/ui/Icons';
+import type { Project } from '@/types/domain';
+import type { ProjectMember } from '@/api/members';
 
 interface CreateTaskModalProps {
-  members: ProjectMember[];
+  open: boolean;
   onClose: () => void;
   onCreate: (body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string }) => void;
-  loading: boolean;
+  loading?: boolean;
+  members: ProjectMember[];
+  project?: Project | null;
+  accentColor?: string;
+  theme: Theme;
 }
 
-export function CreateTaskModal({ members, onClose, onCreate, loading }: CreateTaskModalProps) {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [assigneeId, setAssigneeId] = useState("");
-  const [urgency, setUrgency] = useState("MEDIUM");
-  const [deadline, setDeadline] = useState("");
+export function CreateTaskModal({ open, onClose, onCreate, loading, members, accentColor = '#6366F1', theme }: CreateTaskModalProps) {
+  const [form, setForm] = useState({ title: '', urgency: 'medium', assignee_id: '' as number | '', deadline: '' });
+  const th  = theme;
+  const acc = accentColor;
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!title.trim()) return;
-    onCreate({
-      title: title.trim(),
-      description: description.trim() || undefined,
-      assignee_id: assigneeId ? Number(assigneeId) : undefined,
-      urgency,
-      deadline: deadline || undefined,
-    });
+  const sel: React.CSSProperties = {
+    padding: '8px 12px', borderRadius: 8, border: `1px solid ${th.border}`,
+    fontSize: 13, color: th.text, background: th.surface, outline: 'none',
+    cursor: 'pointer', width: '100%', fontFamily: 'inherit', boxSizing: 'border-box',
   };
 
+  function handleCreate() {
+    if (!form.title.trim()) return;
+    onCreate({
+      title: form.title.trim(),
+      urgency: form.urgency.toUpperCase(),
+      assignee_id: form.assignee_id !== '' ? Number(form.assignee_id) : undefined,
+      deadline: form.deadline || undefined,
+    });
+    setForm({ title: '', urgency: 'medium', assignee_id: '', deadline: '' });
+  }
+
   return (
-    <div className="create-task-overlay" onClick={onClose}>
-      <div className="create-task-modal" onClick={(e) => e.stopPropagation()}>
-        <h2>Новая задача</h2>
-        <form className="create-task-form" onSubmit={handleSubmit}>
-          <div className="create-task-field">
-            <label htmlFor="ct-title">Название *</label>
+    <>
+      <div onClick={onClose} style={{
+        position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.22)',
+        zIndex: 60, opacity: open ? 1 : 0, transition: 'opacity 0.15s',
+        pointerEvents: open ? 'auto' : 'none',
+      }} />
+      <div style={{
+        position: 'fixed', top: '50%', left: '50%',
+        transform: open ? 'translate(-50%,-50%) scale(1)' : 'translate(-50%,-50%) scale(0.95)',
+        width: 480, background: th.surface, borderRadius: 16,
+        boxShadow: '0 24px 64px rgba(0,0,0,0.18)',
+        zIndex: 70, padding: '24px',
+        transition: 'transform 0.15s ease, opacity 0.15s',
+        opacity: open ? 1 : 0, pointerEvents: open ? 'auto' : 'none',
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+          <h3 style={{ margin: 0, fontSize: 16.5, fontWeight: 700, color: th.text }}>Create task</h3>
+          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: th.textMuted, padding: 4, borderRadius: 6, display: 'flex' }}>
+            <IcoX size={18} />
+          </button>
+        </div>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+          <div>
+            <label style={{ fontSize: 11.5, fontWeight: 600, color: th.textSecondary, display: 'block', marginBottom: 5 }}>Task title *</label>
             <input
-              id="ct-title"
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="Название задачи"
-              maxLength={500}
-              required
-              autoFocus
-              disabled={loading}
+              autoFocus value={form.title}
+              onChange={e => setForm({ ...form, title: e.target.value })}
+              onKeyDown={e => e.key === 'Enter' && handleCreate()}
+              placeholder="What needs to be done?"
+              style={{ ...sel, padding: '10px 14px', fontSize: 14 }}
             />
           </div>
-          <div className="create-task-field">
-            <label htmlFor="ct-desc">Описание</label>
-            <textarea
-              id="ct-desc"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Подробное описание..."
-              rows={3}
-              disabled={loading}
-            />
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <div>
+              <label style={{ fontSize: 11.5, fontWeight: 600, color: th.textSecondary, display: 'block', marginBottom: 5 }}>Urgency</label>
+              <select value={form.urgency} onChange={e => setForm({ ...form, urgency: e.target.value })} style={sel}>
+                {Object.entries(URGENCY_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label style={{ fontSize: 11.5, fontWeight: 600, color: th.textSecondary, display: 'block', marginBottom: 5 }}>Assignee</label>
+              <select value={form.assignee_id} onChange={e => setForm({ ...form, assignee_id: e.target.value ? Number(e.target.value) : '' })} style={sel}>
+                <option value="">Unassigned</option>
+                {members.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
+              </select>
+            </div>
           </div>
-          <div className="create-task-field">
-            <label htmlFor="ct-assignee">Исполнитель</label>
-            <select
-              id="ct-assignee"
-              value={assigneeId}
-              onChange={(e) => setAssigneeId(e.target.value)}
-              disabled={loading}
-            >
-              <option value="">Не назначен</option>
-              {members.map((m) => (
-                <option key={m.id} value={m.id}>
-                  {m.full_name} ({m.role})
-                </option>
-              ))}
-            </select>
+
+          <div>
+            <label style={{ fontSize: 11.5, fontWeight: 600, color: th.textSecondary, display: 'block', marginBottom: 5 }}>Deadline</label>
+            <DatePicker value={form.deadline || null} onChange={v => setForm({ ...form, deadline: v })} accent={acc} theme={th} placeholder="Pick a date" />
           </div>
-          <div className="create-task-field">
-            <label htmlFor="ct-urgency">Срочность</label>
-            <select
-              id="ct-urgency"
-              value={urgency}
-              onChange={(e) => setUrgency(e.target.value)}
-              disabled={loading}
-            >
-              <option value="LOW">Низкая</option>
-              <option value="MEDIUM">Средняя</option>
-              <option value="HIGH">Высокая</option>
-              <option value="URGENT">Критичная</option>
-            </select>
-          </div>
-          <div className="create-task-field">
-            <label htmlFor="ct-deadline">Дедлайн</label>
-            <input
-              id="ct-deadline"
-              type="datetime-local"
-              value={deadline}
-              onChange={(e) => setDeadline(e.target.value)}
-              disabled={loading}
-            />
-          </div>
-          <div className="create-task-actions">
-            <button type="button" className="btn btn--ghost" onClick={onClose} disabled={loading}>
-              Отмена
-            </button>
-            <button type="submit" className="btn btn--primary" disabled={loading || !title.trim()}>
-              {loading ? "Создание..." : "Создать задачу"}
-            </button>
-          </div>
-        </form>
+        </div>
+
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22 }}>
+          <button onClick={onClose} style={{
+            padding: '9px 18px', borderRadius: 9, border: `1px solid ${th.border}`,
+            background: 'none', fontSize: 13.5, fontWeight: 500, color: th.textSecondary,
+            cursor: 'pointer', fontFamily: 'inherit',
+          }}>Cancel</button>
+          <button onClick={handleCreate} disabled={!form.title.trim() || loading} style={{
+            padding: '9px 20px', borderRadius: 9, border: 'none',
+            background: form.title.trim() ? acc : th.border,
+            color: form.title.trim() ? 'white' : th.textMuted,
+            fontSize: 13.5, fontWeight: 600,
+            cursor: form.title.trim() ? 'pointer' : 'not-allowed',
+            boxShadow: form.title.trim() ? `0 2px 8px ${acc}44` : 'none',
+            transition: 'all 0.15s', fontFamily: 'inherit',
+          }}>{loading ? 'Creating…' : 'Create task'}</button>
+        </div>
       </div>
-    </div>
+    </>
   );
 }

@@ -1,66 +1,121 @@
-import { useSortable } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
-import type { Task } from "@/types/domain";
-import { Avatar } from "./Avatar";
-import { getDeadlineStatus, formatRelativeDeadline } from "@/utils/deadline";
+import { useState } from 'react';
+import type { Task } from '@/types/domain';
+import { URGENCY_MAP, formatDeadline, isOverdue, apiUrgencyToDesign, createTheme } from '@/theme/theme';
+import type { Theme } from '@/theme/theme';
+import { Avatar } from './Avatar';
+import { IcoChat, IcoClip } from '@/components/ui/Icons';
 
 interface TaskCardProps {
   task: Task;
   onSelect: (task: Task) => void;
+  onDragStart?: (e: React.DragEvent, taskId: number) => void;
+  onDragEnd?: () => void;
+  compact?: boolean;
+  theme?: Theme;
 }
 
-export function TaskCard({ task, onSelect }: TaskCardProps) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
-    useSortable({ id: `task-${task.id}` });
+const DEFAULT_URGENCY = { label: 'Medium', color: '#4338CA', bg: '#EEF2FF', border: '#6366F1' };
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-  };
+export function TaskCard({ task, onSelect, onDragStart, onDragEnd, compact = false, theme }: TaskCardProps) {
+  const [hovered, setHovered] = useState(false);
+  const th = theme ?? createTheme(false);
 
-  const deadlineStatus = getDeadlineStatus(task.deadline);
-  const relativeDeadline = formatRelativeDeadline(task.deadline);
+  const urgKey = apiUrgencyToDesign(task.urgency);
+  const urgency = URGENCY_MAP[urgKey] ?? DEFAULT_URGENCY;
 
-  const deadlineClass =
-    deadlineStatus === "overdue"
-      ? " task-card--overdue"
-      : deadlineStatus === "due-soon"
-        ? " task-card--due-soon"
-        : "";
+  const overdue = isOverdue(task.deadline, undefined);
+  const deadlineStr = formatDeadline(task.deadline);
+
+  // Use project color for project tag background
+  const projectBg   = task.project?.color ? task.project.color + '20' : '#EEF2FF';
+  const projectColor = task.project?.color || '#4338CA';
+
+  const commentCount = 0; // comments not on task object directly
+  const attachCount  = 0;
 
   return (
     <div
-      ref={setNodeRef}
-      style={style}
-      {...attributes}
-      {...listeners}
-      className={`task-card urgency-${task.urgency.toLowerCase()}${deadlineClass}`}
-      onClick={() => onSelect(task)}
       data-testid={`task-card-${task.id}`}
+      draggable
+      onDragStart={e => onDragStart?.(e, task.id)}
+      onDragEnd={onDragEnd}
+      onClick={() => onSelect(task)}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+      style={{
+        background: th.surface,
+        borderTop:    `1px solid ${hovered ? th.borderHover : th.border}`,
+        borderRight:  `1px solid ${hovered ? th.borderHover : th.border}`,
+        borderBottom: `1px solid ${hovered ? th.borderHover : th.border}`,
+        borderLeft:   `4px solid ${urgency.border}`,
+        borderRadius: 12,
+        padding: compact ? '10px 12px' : '13px 14px',
+        cursor: 'pointer',
+        transition: 'box-shadow 0.12s ease, transform 0.12s ease',
+        boxShadow: hovered ? '0 4px 16px rgba(0,0,0,0.08)' : '0 1px 2px rgba(0,0,0,0.04)',
+        transform: hovered ? 'translateY(-2px)' : 'translateY(0)',
+        userSelect: 'none',
+      }}
     >
-      <div className="task-card__header">
-        <span className="task-card__title">{task.title}</span>
-      </div>
-      <div className="task-card__footer">
-        {task.project && (
-          <span
-            className="task-card__project-tag"
-            style={{ borderColor: task.project.color }}
-          >
+      {/* Top row: project tag + urgency badge */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 7 }}>
+        {task.project ? (
+          <span style={{
+            display: 'inline-block', padding: '2px 7px', borderRadius: 20,
+            background: projectBg, color: projectColor,
+            fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap',
+          }}>
             {task.project.name}
           </span>
-        )}
-        <span className="task-card__meta">
+        ) : <span />}
+        <span style={{
+          display: 'inline-flex', alignItems: 'center', gap: 5,
+          padding: '2px 8px', borderRadius: 6,
+          background: urgency.bg, color: urgency.color,
+          fontSize: 11, fontWeight: 600, letterSpacing: '0.03em', flexShrink: 0,
+        }}>
+          <div style={{ width: 5, height: 5, borderRadius: '50%', background: urgency.border }} />
+          {urgency.label}
+        </span>
+      </div>
+
+      {/* Title */}
+      <p style={{
+        fontSize: 13.5, fontWeight: 500, color: th.text,
+        lineHeight: 1.45, marginBottom: compact ? 8 : 10,
+        display: '-webkit-box', WebkitLineClamp: 2,
+        WebkitBoxOrient: 'vertical', overflow: 'hidden',
+      }}>
+        {task.title}
+      </p>
+
+      {/* Footer */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+          <Avatar user={task.assignee} size={22} />
           {task.deadline && (
-            <span
-              className={`task-card__deadline${deadlineStatus === "overdue" ? " task-card__deadline--overdue" : deadlineStatus === "due-soon" ? " task-card__deadline--due-soon" : ""}`}
-            >
-              {relativeDeadline}
+            <span style={{
+              fontSize: 11, fontWeight: 500,
+              color: overdue ? '#991B1B' : th.textSecondary,
+              background: overdue ? '#FEF2F2' : 'transparent',
+              padding: overdue ? '1px 5px' : 0, borderRadius: 4,
+            }}>
+              {deadlineStr}
             </span>
           )}
-          {task.assignee && <Avatar name={task.assignee.full_name} size={24} />}
-        </span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {commentCount > 0 && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 2, color: th.textMuted, fontSize: 10.5 }}>
+              <IcoChat size={11} />{commentCount}
+            </span>
+          )}
+          {attachCount > 0 && (
+            <span style={{ display: 'flex', alignItems: 'center', gap: 2, color: th.textMuted, fontSize: 10.5 }}>
+              <IcoClip size={11} />{attachCount}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );

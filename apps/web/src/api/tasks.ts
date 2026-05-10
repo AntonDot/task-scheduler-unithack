@@ -15,7 +15,7 @@ export function createTask(
 
 export function updateTask(
   taskId: number,
-  body: { title?: string; description?: string; assignee_id?: number | null; urgency?: string; deadline?: string | null },
+  body: { title?: string; description?: string; assignee_id?: number | null; co_assignee_ids?: number[]; urgency?: string; deadline?: string | null },
 ): Promise<Task> {
   return api.patch<Task>(`/tasks/${taskId}`, body);
 }

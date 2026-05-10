@@ -24,6 +24,17 @@ class ParsedTask(BaseModel):
     deadline: str | None = None
 
 
+class ImproveRequest(BaseModel):
+    text: str
+    project_slug: str | None = None
+
+
+class ImproveResponse(BaseModel):
+    title: str
+    description: str
+    urgency: str
+
+
 class WebhookResponse(BaseModel):
     status: str
     task_id: int | None = None

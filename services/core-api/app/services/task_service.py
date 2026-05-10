@@ -110,19 +110,11 @@ async def change_status(db: AsyncSession, task_id: int, new_status: TaskStatus, 
     if task.project_id != user_project.project_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Task not in your project")
 
-    current = TaskStatus(task.status)
-    allowed = VALID_STATUS_TRANSITIONS.get(current, set())
-    if new_status not in allowed:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Cannot transition from {current} to {new_status}",
-        )
-
     if user_project.role == ProjectRole.ASSIGNEE:
-        if task.assignee_id != user_project.user_id:
+        co_ids_in_task = [u.id for u in task.co_assignees]
+        is_co = user_project.user_id in co_ids_in_task
+        if task.assignee_id != user_project.user_id and not is_co:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your task")
-        if new_status not in ASSIGNEE_ALLOWED_TARGETS:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Assignee cannot set this status")
 
     old_status = task.status
     task.status = new_status

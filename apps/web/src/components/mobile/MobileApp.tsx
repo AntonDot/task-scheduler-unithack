@@ -146,24 +146,10 @@ function MobileCard({ task, onClick, accent, th }: {
         userSelect: 'none',
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 7 }}>
-        {task.project && (
-          <span style={{
-            fontSize: 10.5, fontWeight: 500, padding: '2px 8px', borderRadius: 20,
-            background: task.project.color + '22', color: task.project.color, flexShrink: 0,
-          }}>{task.project.name}</span>
-        )}
-        {urg && (
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 6,
-            background: urg.bg, color: urg.color, fontSize: 10.5, fontWeight: 600, flexShrink: 0,
-          }}>
-            <div style={{ width: 5, height: 5, borderRadius: '50%', background: urg.border }} />
-            {urg.label}
-          </span>
-        )}
-      </div>
-      <p style={{ fontSize: 14, fontWeight: 600, color: th.text, lineHeight: 1.4, marginBottom: 10 }}>
+      <p style={{
+        fontSize: 14, fontWeight: 600, color: th.text, lineHeight: 1.4, marginBottom: 12,
+        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+      }}>
         {task.title}
       </p>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
@@ -196,7 +182,17 @@ function MobileCard({ task, onClick, accent, th }: {
             </span>
           )}
         </div>
-        <IcoChevR s={14} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {urg && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 6,
+              background: urg.bg, color: urg.color, fontSize: 10.5, fontWeight: 600, flexShrink: 0,
+            }}>
+              <div style={{ width: 5, height: 5, borderRadius: '50%', background: urg.border }} />
+              {urg.label}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -364,10 +360,12 @@ function BoardView({ tasks, onTaskClick, onCreateTask, syncing, accent, th }: {
 
 // ─── Task Detail Sheet ────────────────────────────────────────────────────────
 
-function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, accent, th }: {
+function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, onPriorityChange, onDeadlineChange, accent, th }: {
   task: Task | null; open: boolean; onClose: () => void;
   onStatusChange: (taskId: number, col: DesignColumn) => void;
   onDescriptionChange: (taskId: number, desc: string) => void;
+  onPriorityChange: (taskId: number, urgency: string) => void;
+  onDeadlineChange: (taskId: number, deadline: string | null) => void;
   accent: string; th: ReturnType<typeof useTheme>['theme'];
 }) {
   const dragY = useRef(0);
@@ -476,23 +474,47 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, a
               {COLUMNS_DEF.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
             {urg && (
-              <span style={{
-                padding: '7px 12px', borderRadius: 10, border: `1px solid ${urg.border}`,
-                background: urg.bg, color: urg.color, fontSize: 13, fontWeight: 600,
-              }}>
-                {urg.label}
-              </span>
+              <div style={{ position: 'relative', display: 'inline-block' }}>
+                <select
+                  value={task.urgency}
+                  onChange={e => onPriorityChange(task.id, e.target.value)}
+                  style={{
+                    position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', zIndex: 10
+                  }}
+                >
+                  <option value="LOW">Low</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="HIGH">High</option>
+                  <option value="CRITICAL">Critical</option>
+                </select>
+                <span style={{
+                  padding: '7px 12px', borderRadius: 10, border: `1px solid ${urg.border}`,
+                  background: urg.bg, color: urg.color, fontSize: 13, fontWeight: 600,
+                  display: 'inline-block'
+                }}>
+                  {urg.label}
+                </span>
+              </div>
             )}
-            {task.deadline && (
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <input 
+                type="date"
+                value={task.deadline ? task.deadline.substring(0, 10) : ''}
+                onChange={e => onDeadlineChange(task.id, e.target.value || null)}
+                style={{
+                  position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', zIndex: 10
+                }}
+              />
               <span style={{
                 padding: '7px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600,
                 border: `1px solid ${overdue ? '#EF4444' : th.border}`,
                 background: overdue ? '#FEF2F2' : th.columnBg,
                 color: overdue ? '#991B1B' : th.textSecondary,
+                display: 'inline-block'
               }}>
-                {formatDeadline(task.deadline)}
+                {task.deadline ? formatDeadline(task.deadline) : 'No deadline'}
               </span>
-            )}
+            </div>
           </div>
 
           {/* Assignee */}
@@ -1127,6 +1149,28 @@ export function MobileApp() {
     );
   }
 
+  function handlePriorityChange(taskId: number, urgency: string) {
+    updateTask(taskId, { urgency: urgency as Task['urgency'] }).catch(() => {});
+    if (selTask?.id === taskId) {
+      setSelTask(prev => prev ? { ...prev, urgency: urgency as Task['urgency'] } : prev);
+    }
+    const key = ['tasks', resolvedProjectId] as const;
+    queryClient.setQueryData<Task[]>(key, old => 
+      (old ?? []).map(t => t.id === taskId ? { ...t, urgency: urgency as Task['urgency'] } : t)
+    );
+  }
+
+  function handleDeadlineChange(taskId: number, deadline: string | null) {
+    updateTask(taskId, { deadline }).catch(() => {});
+    if (selTask?.id === taskId) {
+      setSelTask(prev => prev ? { ...prev, deadline } : prev);
+    }
+    const key = ['tasks', resolvedProjectId] as const;
+    queryClient.setQueryData<Task[]>(key, old => 
+      (old ?? []).map(t => t.id === taskId ? { ...t, deadline } : t)
+    );
+  }
+
   // Project switcher in settings (expose as top-level nav element if multiple projects)
   void setActiveProjectId;
 
@@ -1168,6 +1212,8 @@ export function MobileApp() {
         onClose={() => setSheetOpen(false)}
         onStatusChange={handleStatusChange}
         onDescriptionChange={handleDescriptionChange}
+        onPriorityChange={handlePriorityChange}
+        onDeadlineChange={handleDeadlineChange}
         accent={accent} th={th}
       />
 

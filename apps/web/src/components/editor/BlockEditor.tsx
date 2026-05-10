@@ -1,4 +1,4 @@
-import React, { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { Theme } from '@/theme/theme';
 
@@ -84,6 +84,13 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
 
   const [menuIdx, setMenuIdx] = useState(0);
   const refs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+
+  useEffect(() => {
+    if (slashMenu) {
+      const el = document.getElementById(`slash-cmd-${menuIdx}`);
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+  }, [menuIdx, slashMenu]);
 
   const surf = theme?.surface || '#fff';
   const bord = theme?.border  || '#E5E7EB';
@@ -281,13 +288,14 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
           width: 240, zIndex: 99999,
           background: surf, border: `1px solid ${bord}`,
           borderRadius: 12, boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
-          overflow: 'hidden',
+          maxHeight: 320, display: 'flex', flexDirection: 'column',
         }}>
-          <div style={{ padding: '7px 12px 5px', fontSize: 10.5, fontWeight: 600, color: txtM, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+          <div style={{ padding: '7px 12px 5px', fontSize: 10.5, fontWeight: 600, color: txtM, letterSpacing: '0.07em', textTransform: 'uppercase', flexShrink: 0, borderBottom: `1px solid ${bord}40` }}>
             Block type
           </div>
-          {filteredCmds.map((cmd, i) => (
-            <div key={cmd.type}
+          <div style={{ overflowY: 'auto', flex: 1, paddingBottom: 6 }}>
+            {filteredCmds.map((cmd, i) => (
+              <div key={cmd.type} id={`slash-cmd-${i}`}
               onMouseDown={e => { e.preventDefault(); applyCmd(cmd, slashMenu.blockId); }}
               onMouseEnter={() => setMenuIdx(i)}
               style={{
@@ -312,6 +320,7 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
               </div>
             </div>
           ))}
+          </div>
         </div>,
         document.body,
       )}

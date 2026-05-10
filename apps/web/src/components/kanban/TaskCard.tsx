@@ -32,6 +32,9 @@ export function TaskCard({ task, onSelect, onDragStart, onDragEnd, compact = fal
   const commentCount = 0; // comments not on task object directly
   const attachCount  = 0;
 
+  const assignees = [task.assignee, ...(task.co_assignees || [])].filter(Boolean) as NonNullable<typeof task.assignee>[];
+  const displayAssignees = assignees.slice(0, 5);
+
   return (
     <div
       data-testid={`task-card-${task.id}`}
@@ -69,7 +72,19 @@ export function TaskCard({ task, onSelect, onDragStart, onDragEnd, compact = fal
       {/* Footer */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          <Avatar user={task.assignee} size={22} />
+          <div style={{ display: 'flex', alignItems: 'center' }}>
+            {displayAssignees.map((u, i) => (
+              <div key={u.id} style={{
+                marginLeft: i > 0 ? -6 : 0,
+                position: 'relative',
+                zIndex: displayAssignees.length - i,
+                borderRadius: '50%',
+                boxShadow: `0 0 0 2px ${th.surface}`,
+              }}>
+                <Avatar user={u} size={22} />
+              </div>
+            ))}
+          </div>
           {task.deadline && (
             <span style={{
               fontSize: 11, fontWeight: 500,

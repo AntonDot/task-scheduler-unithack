@@ -125,6 +125,9 @@ function MobileCard({ task, onClick, accent, th }: {
   const urg = getUrgencyMap(th.dark)[apiUrgencyToDesign(task.urgency)];
   const overdue = isOverdue(task.deadline, col);
 
+  const assignees = [task.assignee, ...(task.co_assignees || [])].filter(Boolean) as NonNullable<typeof task.assignee>[];
+  const displayAssignees = assignees.slice(0, 5);
+
   return (
     <div
       onClick={() => onClick(task)}
@@ -164,16 +167,23 @@ function MobileCard({ task, onClick, accent, th }: {
       </p>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          {task.assignee && (
-            <div style={{
-              width: 24, height: 24, borderRadius: '50%',
-              background: userColor(task.assignee.id),
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white', fontSize: 9, fontWeight: 700, flexShrink: 0,
-            }}>
-              {getInitials(task.assignee.full_name)}
-            </div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', marginRight: displayAssignees.length > 1 ? 2 : 0 }}>
+            {displayAssignees.map((u, i) => (
+              <div key={u.id} style={{
+                marginLeft: i > 0 ? -6 : 0,
+                position: 'relative',
+                zIndex: displayAssignees.length - i,
+                borderRadius: '50%',
+                boxShadow: `0 0 0 2px ${th.surface}`,
+                width: 24, height: 24,
+                background: userColor(u.id),
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'white', fontSize: 9, fontWeight: 700, flexShrink: 0,
+              }}>
+                {getInitials(u.full_name)}
+              </div>
+            ))}
+          </div>
           {task.deadline && (
             <span style={{
               fontSize: 11, fontWeight: 500,

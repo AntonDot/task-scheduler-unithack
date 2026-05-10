@@ -75,8 +75,7 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
     update_data = data.model_dump(exclude_unset=True)
     co_assignee_ids = update_data.pop("co_assignee_ids", None)
 
-    if user_project.role == ProjectRole.ASSIGNEE and "assignee_id" in update_data:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can reassign task")
+
 
     old_values = {field: getattr(task, field) for field in update_data}
     for field, value in update_data.items():

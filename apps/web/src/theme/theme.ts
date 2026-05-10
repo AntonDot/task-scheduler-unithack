@@ -74,12 +74,24 @@ export interface UrgencyDef {
   border: string;
 }
 
-export const URGENCY_MAP: Record<string, UrgencyDef> = {
-  low:    { label: 'Low',    color: '#059669', bg: '#ECFDF5', border: '#10B981' },
-  medium: { label: 'Medium', color: '#4338CA', bg: '#EEF2FF', border: '#6366F1' },
-  high:   { label: 'High',   color: '#C2410C', bg: '#FFF7ED', border: '#F97316' },
-  urgent: { label: 'Urgent', color: '#991B1B', bg: '#FEF2F2', border: '#EF4444' },
-};
+export function getUrgencyMap(dark: boolean): Record<string, UrgencyDef> {
+  if (dark) {
+    return {
+      low:    { label: 'Low',    color: '#6EE7B7', bg: '#022C22', border: '#10B981' },
+      medium: { label: 'Medium', color: '#A5B4FC', bg: '#1E1B4B', border: '#6366F1' },
+      high:   { label: 'High',   color: '#FDBA74', bg: '#431407', border: '#F97316' },
+      urgent: { label: 'Urgent', color: '#FCA5A5', bg: '#450A0A', border: '#EF4444' },
+    };
+  }
+  return {
+    low:    { label: 'Low',    color: '#059669', bg: '#ECFDF5', border: '#10B981' },
+    medium: { label: 'Medium', color: '#4338CA', bg: '#EEF2FF', border: '#6366F1' },
+    high:   { label: 'High',   color: '#C2410C', bg: '#FFF7ED', border: '#F97316' },
+    urgent: { label: 'Urgent', color: '#991B1B', bg: '#FEF2F2', border: '#EF4444' },
+  };
+}
+
+export const URGENCY_MAP: Record<string, UrgencyDef> = getUrgencyMap(false);
 
 export interface StatusDef {
   label: string;

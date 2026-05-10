@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Task } from '@/types/domain';
 import type { Theme, DesignColumn } from '@/theme/theme';
-import { URGENCY_MAP, COLUMNS_DEF, apiUrgencyToDesign, statusToColumn, columnToStatus } from '@/theme/theme';
+import { getUrgencyMap, COLUMNS_DEF, apiUrgencyToDesign, statusToColumn, columnToStatus } from '@/theme/theme';
 import { BlockEditor } from '@/components/editor/BlockEditor';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Avatar } from './Avatar';
@@ -55,6 +55,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
 
   const urgKey  = apiUrgencyToDesign(display.urgency);
   const col     = statusToColumn(display.status);
+  const urgMap  = getUrgencyMap(th.dark);
 
   const role = display.project_id ? projectRoles[display.project_id] : undefined;
   const isLead = role === 'OWNER';
@@ -209,11 +210,6 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
             <div style={{ flex: 1, paddingRight: 12 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                {display.project && (
-                  <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 20, background: projectBg, color: projectColor, fontSize: 11, fontWeight: 500 }}>
-                    {display.project.name}
-                  </span>
-                )}
                 <span style={{ fontSize: 11.5, color: th.textMuted }}>#{display.id}</span>
               </div>
               <h2 style={{ fontSize: 19, fontWeight: 700, color: th.text, lineHeight: 1.3, margin: 0 }}>
@@ -259,7 +255,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
             <div style={{ ...metaRowStyle, borderBottom: `1px solid ${th.border}` }}>
               <span style={metaLabelStyle}>Urgency</span>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {Object.entries(URGENCY_MAP).map(([key, u]) => (
+                {Object.entries(urgMap).map(([key, u]) => (
                   <button key={key} onClick={() => patch({ urgency: key.toUpperCase() as Task['urgency'] })} style={{
                     padding: '3px 10px', borderRadius: 6, border: 'none', cursor: readonly ? 'default' : 'pointer',
                     fontFamily: 'inherit', fontSize: 11, fontWeight: 600,

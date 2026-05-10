@@ -10,7 +10,7 @@ import { runReviewScraper, type ReviewScrapeResult } from '@/api/automations';
 import { fetchComments, addComment, type Comment } from '@/api/comments';
 import type { Task, TaskStatus } from '@/types/domain';
 import {
-  COLUMNS_DEF, URGENCY_MAP, statusToColumn, columnToStatus,
+  COLUMNS_DEF, getUrgencyMap, statusToColumn, columnToStatus,
   formatDeadline, isOverdue, apiUrgencyToDesign, type DesignColumn,
 } from '@/theme/theme';
 
@@ -122,7 +122,7 @@ function MobileCard({ task, onClick, accent, th }: {
 }) {
   const [pressed, setPressed] = useState(false);
   const col = statusToColumn(task.status);
-  const urg = URGENCY_MAP[apiUrgencyToDesign(task.urgency)];
+  const urg = getUrgencyMap(th.dark)[apiUrgencyToDesign(task.urgency)];
   const overdue = isOverdue(task.deadline, col);
 
   return (
@@ -372,7 +372,7 @@ function TaskSheet({ task, open, onClose, onStatusChange, accent, th }: {
   if (!task) return null;
 
   const col = statusToColumn(task.status);
-  const urg = URGENCY_MAP[apiUrgencyToDesign(task.urgency)];
+  const urg = getUrgencyMap(th.dark)[apiUrgencyToDesign(task.urgency)];
   const overdue = isOverdue(task.deadline, col);
 
   function handleTouchStart(e: React.TouchEvent) {

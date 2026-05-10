@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Theme } from '@/theme/theme';
-import { URGENCY_MAP } from '@/theme/theme';
+import { getUrgencyMap } from '@/theme/theme';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { IcoX } from '@/components/ui/Icons';
 import type { Project } from '@/types/domain';
@@ -78,7 +78,7 @@ export function CreateTaskModal({ open, onClose, onCreate, loading, members, acc
             <div>
               <label style={{ fontSize: 11.5, fontWeight: 600, color: th.textSecondary, display: 'block', marginBottom: 5 }}>Urgency</label>
               <select value={form.urgency} onChange={e => setForm({ ...form, urgency: e.target.value })} style={sel}>
-                {Object.entries(URGENCY_MAP).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
+                {Object.entries(getUrgencyMap(theme.dark)).map(([k, v]) => <option key={k} value={k}>{v.label}</option>)}
               </select>
             </div>
             <div>

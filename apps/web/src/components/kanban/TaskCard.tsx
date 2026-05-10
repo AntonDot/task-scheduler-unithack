@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { Task } from '@/types/domain';
-import { URGENCY_MAP, formatDeadline, isOverdue, apiUrgencyToDesign, createTheme } from '@/theme/theme';
+import { getUrgencyMap, formatDeadline, isOverdue, apiUrgencyToDesign, createTheme } from '@/theme/theme';
 import type { Theme } from '@/theme/theme';
 import { Avatar } from './Avatar';
 import { IcoChat, IcoClip } from '@/components/ui/Icons';
@@ -21,14 +21,13 @@ export function TaskCard({ task, onSelect, onDragStart, onDragEnd, compact = fal
   const th = theme ?? createTheme(false);
 
   const urgKey = apiUrgencyToDesign(task.urgency);
-  const urgency = URGENCY_MAP[urgKey] ?? DEFAULT_URGENCY;
+  const urgMap = getUrgencyMap(th.dark);
+  const urgency = urgMap[urgKey] ?? DEFAULT_URGENCY;
 
   const overdue = isOverdue(task.deadline, undefined);
   const deadlineStr = formatDeadline(task.deadline);
 
-  // Use project color for project tag background
-  const projectBg   = task.project?.color ? task.project.color + '20' : '#EEF2FF';
-  const projectColor = task.project?.color || '#4338CA';
+
 
   const commentCount = 0; // comments not on task object directly
   const attachCount  = 0;
@@ -57,28 +56,6 @@ export function TaskCard({ task, onSelect, onDragStart, onDragEnd, compact = fal
         userSelect: 'none',
       }}
     >
-      {/* Top row: project tag + urgency badge */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 7 }}>
-        {task.project ? (
-          <span style={{
-            display: 'inline-block', padding: '2px 7px', borderRadius: 20,
-            background: projectBg, color: projectColor,
-            fontSize: 10.5, fontWeight: 500, whiteSpace: 'nowrap',
-          }}>
-            {task.project.name}
-          </span>
-        ) : <span />}
-        <span style={{
-          display: 'inline-flex', alignItems: 'center', gap: 5,
-          padding: '2px 8px', borderRadius: 6,
-          background: urgency.bg, color: urgency.color,
-          fontSize: 11, fontWeight: 600, letterSpacing: '0.03em', flexShrink: 0,
-        }}>
-          <div style={{ width: 5, height: 5, borderRadius: '50%', background: urgency.border }} />
-          {urgency.label}
-        </span>
-      </div>
-
       {/* Title */}
       <p style={{
         fontSize: 13.5, fontWeight: 500, color: th.text,
@@ -115,6 +92,15 @@ export function TaskCard({ task, onSelect, onDragStart, onDragEnd, compact = fal
               <IcoClip size={11} />{attachCount}
             </span>
           )}
+          <span style={{
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            padding: '2px 8px', borderRadius: 6,
+            background: urgency.bg, color: urgency.color,
+            fontSize: 10.5, fontWeight: 600, flexShrink: 0,
+          }}>
+            <div style={{ width: 5, height: 5, borderRadius: '50%', background: urgency.border }} />
+            {urgency.label}
+          </span>
         </div>
       </div>
     </div>

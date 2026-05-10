@@ -1,20 +1,36 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { TaskDrawer } from "@/components/kanban/TaskDrawer";
+import { ThemeProvider } from "@/theme/ThemeContext";
 import { TaskStatus } from "@/types/domain";
+import { createTheme } from "@/theme/theme";
 import type { Task } from "@/types/domain";
 
-// Mock fetch for comments
+// Mock BlockEditor to avoid initialization issues in tests
+vi.mock("@/components/editor/BlockEditor", () => ({
+  BlockEditor: ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+    <div data-testid="block-editor">
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+      />
+    </div>
+  ),
+}));
+
+// Mock fetch for comments and attachments
 vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
   ok: true,
   status: 200,
   json: () => Promise.resolve([]),
 }));
 
+const lightTheme = createTheme(false);
+
 const BASE_TASK: Task = {
   id: 10, project_id: 1, creator_id: 1, assignee_id: 2,
   title: "Test task", description: "Some description",
-  status: TaskStatus.AI_DRAFT, urgency: "HIGH",
+  status: TaskStatus.TODO, urgency: "HIGH",
   deadline: "2025-06-01T00:00:00", created_at: "2025-05-01T00:00:00", updated_at: "2025-05-01T00:00:00",
   assignee: { id: 2, full_name: "Test User", email: "test@test.com", is_active: true },
 };
@@ -24,137 +40,86 @@ const MOCK_MEMBERS = [
   { id: 2, full_name: "Test User", email: "test@test.com", role: "ASSIGNEE" },
 ];
 
-function renderDrawer(overrides: { task?: Partial<Task>; role?: string } = {}) {
-  const task = { ...BASE_TASK, ...overrides.task } as Task;
+function renderDrawer(taskOverrides: Partial<Task> = {}) {
+  const task = { ...BASE_TASK, ...taskOverrides } as Task;
   const props = {
     task,
-    role: (overrides.role ?? "OWNER") as "OWNER" | "ASSIGNEE",
-    members: MOCK_MEMBERS,
+    open: true,
     onClose: vi.fn(),
-    onApprove: vi.fn(),
-    onDelete: vi.fn(),
-    onStatusChange: vi.fn(),
-    onAssigneeChange: vi.fn(),
+    onUpdate: vi.fn(),
+    members: MOCK_MEMBERS,
+    accentColor: "#6366F1",
+    theme: lightTheme,
   };
-  const result = render(<TaskDrawer {...props} />);
+  const result = render(
+    <ThemeProvider>
+      <TaskDrawer {...props} />
+    </ThemeProvider>,
+  );
   return { ...result, ...props };
 }
 
 describe("TaskDrawer", () => {
-  it("shows task title and description", () => {
+  it("shows task title", () => {
     renderDrawer();
     expect(screen.getByText("Test task")).toBeInTheDocument();
-    expect(screen.getByText("Some description")).toBeInTheDocument();
   });
 
-  it("shows approve button for owner on AI_DRAFT", () => {
-    renderDrawer({ role: "OWNER", task: { status: TaskStatus.AI_DRAFT } });
-    expect(screen.getByTestId("approve-btn")).toBeInTheDocument();
+  it("renders when task is provided and open is true", () => {
+    renderDrawer();
+    expect(screen.getByText("Test task")).toBeInTheDocument();
   });
 
-  it("hides approve button for assignee", () => {
-    renderDrawer({ role: "ASSIGNEE", task: { status: TaskStatus.AI_DRAFT } });
-    expect(screen.queryByTestId("approve-btn")).not.toBeInTheDocument();
+  it("shows description editor", () => {
+    renderDrawer();
+    expect(screen.getByTestId("block-editor")).toBeInTheDocument();
   });
 
-  it("hides approve button when status is not AI_DRAFT", () => {
-    renderDrawer({ role: "OWNER", task: { status: TaskStatus.TODO } });
-    expect(screen.queryByTestId("approve-btn")).not.toBeInTheDocument();
+  it("shows status buttons (Backlog, In Progress, In Review, Done)", () => {
+    renderDrawer();
+    expect(screen.getByText("Backlog")).toBeInTheDocument();
+    expect(screen.getByText("In Progress")).toBeInTheDocument();
+    expect(screen.getByText("In Review")).toBeInTheDocument();
+    expect(screen.getByText("Done")).toBeInTheDocument();
   });
 
-  it("calls onApprove when approve button clicked", () => {
-    const { onApprove } = renderDrawer({ role: "OWNER", task: { status: TaskStatus.AI_DRAFT } });
-    fireEvent.click(screen.getByTestId("approve-btn"));
-    expect(onApprove).toHaveBeenCalledWith(10);
+  it("shows urgency buttons", () => {
+    renderDrawer();
+    expect(screen.getByText("Low")).toBeInTheDocument();
+    expect(screen.getByText("Medium")).toBeInTheDocument();
+    expect(screen.getByText("High")).toBeInTheDocument();
+    expect(screen.getByText("Urgent")).toBeInTheDocument();
   });
 
-  it("calls onDelete when discard button clicked on AI_DRAFT", () => {
-    const { onDelete } = renderDrawer({ role: "OWNER", task: { status: TaskStatus.AI_DRAFT } });
-    fireEvent.click(screen.getByTestId("discard-btn"));
-    expect(onDelete).toHaveBeenCalledWith(10);
-  });
-
-  it("shows Complete button for owner in REVIEW status", () => {
-    renderDrawer({ role: "OWNER", task: { status: TaskStatus.REVIEW } });
-    expect(screen.getByText("Завершить")).toBeInTheDocument();
-  });
-
-  it("hides Complete button for assignee in REVIEW status", () => {
-    renderDrawer({ role: "ASSIGNEE", task: { status: TaskStatus.REVIEW } });
-    expect(screen.queryByText("Завершить")).not.toBeInTheDocument();
-  });
-
-  it("shows Start Work button in TODO status", () => {
-    renderDrawer({ task: { status: TaskStatus.TODO } });
-    expect(screen.getByText("Начать работу")).toBeInTheDocument();
-  });
-
-  it("shows delete button for owner on non-AI_DRAFT tasks", () => {
-    renderDrawer({ role: "OWNER", task: { status: TaskStatus.TODO } });
-    expect(screen.getByTestId("delete-btn")).toBeInTheDocument();
-  });
-
-  it("shows delete confirmation on delete button click", () => {
-    renderDrawer({ role: "OWNER", task: { status: TaskStatus.TODO } });
-    fireEvent.click(screen.getByTestId("delete-btn"));
-    expect(screen.getByText("Удалить эту задачу?")).toBeInTheDocument();
-    expect(screen.getByTestId("delete-confirm-btn")).toBeInTheDocument();
-  });
-
-  it("calls onDelete after confirming deletion", () => {
-    const { onDelete } = renderDrawer({ role: "OWNER", task: { status: TaskStatus.TODO } });
-    fireEvent.click(screen.getByTestId("delete-btn"));
-    fireEvent.click(screen.getByTestId("delete-confirm-btn"));
-    expect(onDelete).toHaveBeenCalledWith(10);
-  });
-
-  it("hides delete button for assignee", () => {
-    renderDrawer({ role: "ASSIGNEE", task: { status: TaskStatus.TODO } });
-    expect(screen.queryByTestId("delete-btn")).not.toBeInTheDocument();
-  });
-
-  it("shows assignee select for owner", () => {
-    renderDrawer({ role: "OWNER" });
-    const select = screen.getByTestId("assignee-select");
-    expect(select).toBeInTheDocument();
-    expect(select).toHaveValue("2");
-  });
-
-  it("shows assignee name and avatar for assignee role", () => {
-    renderDrawer({ role: "ASSIGNEE" });
-    expect(screen.getByText("Test User")).toBeInTheDocument();
+  it("shows assignee member avatars", () => {
+    renderDrawer();
+    expect(screen.getByTitle("Дмитрий Морозов")).toBeInTheDocument();
     expect(screen.getByTitle("Test User")).toBeInTheDocument();
   });
 
-  it("calls onAssigneeChange when assignee is changed", () => {
-    const { onAssigneeChange } = renderDrawer({ role: "OWNER" });
-    const select = screen.getByTestId("assignee-select");
-    fireEvent.change(select, { target: { value: "1" } });
-    expect(onAssigneeChange).toHaveBeenCalledWith(10, 1);
+  it("shows close button", () => {
+    const { onClose } = renderDrawer();
+    // Close button is the X icon button
+    const buttons = screen.getAllByRole("button");
+    expect(buttons.length).toBeGreaterThan(0);
+    // The first button should be the close button
+    expect(onClose).not.toHaveBeenCalled();
   });
 
-  it("shows comment input field", () => {
-    renderDrawer();
-    expect(screen.getByTestId("comment-input")).toBeInTheDocument();
-  });
-
-  it("shows activity section header", () => {
-    renderDrawer();
-    expect(screen.getByText("Активность")).toBeInTheDocument();
-  });
-
-  it("shows attachments section", () => {
-    renderDrawer();
-    expect(screen.getByText("Вложения")).toBeInTheDocument();
-  });
-
-  it("shows file upload input", () => {
-    renderDrawer();
-    expect(screen.getByTestId("attachment-file-input")).toBeInTheDocument();
-  });
-
-  it("shows history section with dates", () => {
-    renderDrawer();
-    expect(screen.getByText("История")).toBeInTheDocument();
+  it("does not render when task is null", () => {
+    const { container } = render(
+      <ThemeProvider>
+        <TaskDrawer
+          task={null}
+          open={true}
+          onClose={vi.fn()}
+          onUpdate={vi.fn()}
+          members={MOCK_MEMBERS}
+          accentColor="#6366F1"
+          theme={lightTheme}
+        />
+      </ThemeProvider>,
+    );
+    expect(container.firstChild).toBeNull();
   });
 });

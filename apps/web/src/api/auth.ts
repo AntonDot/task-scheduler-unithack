@@ -24,3 +24,7 @@ export async function login(email: string, password?: string): Promise<string> {
 export function logout(): void {
   localStorage.removeItem("token");
 }
+
+export function updateProfile(body: { full_name?: string; email?: string }): Promise<{ id: number; full_name: string; email: string; is_active: boolean }> {
+  return api.patch('/auth/me', body);
+}

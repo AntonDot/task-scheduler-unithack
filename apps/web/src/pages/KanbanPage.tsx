@@ -1,275 +1,209 @@
-import { useState, useCallback, useMemo } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { fetchProjects } from "@/api/projects";
-import { fetchTasks, changeStatus, approveDraft, discardDraft, updateTask, createTask } from "@/api/tasks";
-import { fetchProjectMembers } from "@/api/members";
-import { useAuthStore } from "@/store/authStore";
-import { useTasksRealtime } from "@/hooks/useTasksRealtime";
-import { useToast } from "@/hooks/useToast";
-import { useIsMobile } from "@/hooks/useIsMobile";
-import { KanbanBoard } from "@/components/kanban/KanbanBoard";
-import { MobileListView } from "@/components/mobile/MobileListView";
-import { Header } from "@/components/layout/Header";
-import { CreateTaskModal } from "@/components/kanban/CreateTaskModal";
-import { FilterBar } from "@/components/kanban/FilterBar";
-import { DashboardPage } from "@/pages/DashboardPage";
-import { ToastContainer } from "@/components/ui/Toast";
-import type { Task, TaskStatus } from "@/types/domain";
-import type { AppView } from "@/components/layout/Header";
+import { useState, useCallback, useMemo, useEffect, useSyncExternalStore } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { fetchProjects } from '@/api/projects';
+import { fetchTasks, changeStatus, createTask } from '@/api/tasks';
+import { fetchProjectMembers } from '@/api/members';
+import { useAuthStore } from '@/store/authStore';
+import { useTheme } from '@/theme/ThemeContext';
+import { useToast } from '@/hooks/useToast';
+import { Sidebar, type AppView } from '@/components/layout/Sidebar';
+import { Header } from '@/components/layout/Header';
+import { KanbanBoard } from '@/components/kanban/KanbanBoard';
+import { CreateTaskModal } from '@/components/kanban/CreateTaskModal';
+import { ToastContainer } from '@/components/ui/Toast';
+import { AnalyticsView } from '@/pages/AnalyticsView';
+import { TeamView } from '@/pages/TeamView';
+import { SettingsView } from '@/pages/SettingsView';
+import { AutomationsView } from '@/pages/AutomationsView';
+import { MobileApp } from '@/components/mobile/MobileApp';
+import type { Task, TaskStatus } from '@/types/domain';
+import type { DesignColumn } from '@/theme/theme';
+import { columnToStatus } from '@/theme/theme';
+
+function useIsMobile() {
+  return useSyncExternalStore(
+    cb => {
+      const mq = window.matchMedia('(max-width: 640px)');
+      mq.addEventListener('change', cb);
+      return () => mq.removeEventListener('change', cb);
+    },
+    () => window.matchMedia('(max-width: 640px)').matches,
+    () => false,
+  );
+}
 
 export function KanbanPage() {
-  const { user, projectRoles, clearAuth } = useAuthStore();
-  const queryClient = useQueryClient();
   const isMobile = useIsMobile();
-  const [selectedProjectId, setSelectedProjectId] = useState<number | null>(null);
-  const [showOnlyMine, setShowOnlyMine] = useState(false);
-  const [showCreateModal, setShowCreateModal] = useState(false);
-  const [currentView, setCurrentView] = useState<AppView>("kanban");
+  if (isMobile) return <MobileApp />;
+  return <DesktopKanbanPage />;
+}
 
-  // Filter state
-  const [search, setSearch] = useState("");
-  const [urgencyFilter, setUrgencyFilter] = useState("ALL");
-  const [statusFilter, setStatusFilter] = useState("ALL");
+function DesktopKanbanPage() {
+  const { theme, isDark, toggleTheme, accentColor, setAccentColor } = useTheme();
+  const { user } = useAuthStore();
+  const queryClient = useQueryClient();
+  const { toasts, removeToast } = useToast();
 
-  // Toast
-  const { toasts, addToast, removeToast } = useToast();
+  const [view,             setView]            = useState<AppView>('kanban');
+  const [activeProjectId,  setActiveProjectId]  = useState<number | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [showCreate,       setShowCreate]       = useState(false);
+  const [search,           setSearch]           = useState('');
+  const [syncing,          setSyncing]          = useState(false);
+  const [compact]          = useState(false);
+  const [colWidth]         = useState(300);
 
-  const { data: projects = [] } = useQuery({
-    queryKey: ["projects"],
-    queryFn: fetchProjects,
-  });
+  const accent = accentColor;
 
-  const activeProjectId = selectedProjectId ?? projects[0]?.id ?? null;
-  const tasksQueryKey = ["tasks", activeProjectId, showOnlyMine, user?.id] as const;
+  // Periodic sync pulse
+  useEffect(() => {
+    const id = setInterval(() => {
+      setSyncing(true);
+      setTimeout(() => setSyncing(false), 1400);
+    }, 22000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Update body background when theme changes
+  useEffect(() => {
+    document.body.style.background = theme.bg;
+    document.body.style.color = theme.text;
+  }, [theme]);
+
+  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects });
+
+  const resolvedProjectId = activeProjectId ?? projects[0]?.id ?? null;
+  const tasksKey = ['tasks', resolvedProjectId] as const;
 
   const { data: tasks = [] } = useQuery({
-    queryKey: tasksQueryKey,
-    queryFn: () => fetchTasks(activeProjectId!, showOnlyMine ? user?.id : undefined),
-    enabled: !!activeProjectId,
+    queryKey: tasksKey,
+    queryFn: () => fetchTasks(resolvedProjectId!),
+    enabled: !!resolvedProjectId,
   });
 
   const { data: members = [] } = useQuery({
-    queryKey: ["members", activeProjectId],
-    queryFn: () => fetchProjectMembers(activeProjectId!),
-    enabled: !!activeProjectId,
+    queryKey: ['members', resolvedProjectId],
+    queryFn: () => fetchProjectMembers(resolvedProjectId!),
+    enabled: !!resolvedProjectId,
   });
 
-  useTasksRealtime(activeProjectId, addToast);
-
-  // Apply client-side filters
+  // Filter tasks by search
   const filteredTasks = useMemo(() => {
-    let result = tasks;
-    if (search.trim()) {
-      const lower = search.toLowerCase();
-      result = result.filter(
-        (t) =>
-          t.title.toLowerCase().includes(lower) ||
-          (t.description?.toLowerCase().includes(lower) ?? false),
-      );
-    }
-    if (urgencyFilter !== "ALL") {
-      result = result.filter((t) => t.urgency === urgencyFilter);
-    }
-    if (statusFilter !== "ALL") {
-      result = result.filter((t) => t.status === statusFilter);
-    }
-    return result;
-  }, [tasks, search, urgencyFilter, statusFilter]);
+    if (!search.trim()) return tasks;
+    const lower = search.toLowerCase();
+    return tasks.filter(t =>
+      t.title.toLowerCase().includes(lower) ||
+      (t.description?.toLowerCase().includes(lower) ?? false)
+    );
+  }, [tasks, search]);
 
-  const assigneeMutation = useMutation({
-    mutationFn: ({ taskId, assigneeId }: { taskId: number; assigneeId: number | null }) =>
-      updateTask(taskId, { assignee_id: assigneeId }),
-    onMutate: async ({ taskId, assigneeId }) => {
-      await queryClient.cancelQueries({ queryKey: tasksQueryKey });
-      const previous = queryClient.getQueryData<Task[]>(tasksQueryKey);
-      queryClient.setQueryData<Task[]>(tasksQueryKey, (old = []) =>
-        old.map((task) =>
-          task.id === taskId ? { ...task, assignee_id: assigneeId, updated_at: new Date().toISOString() } : task,
-        ),
-      );
-      return { previous };
-    },
-    onError: (_error, _variables, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(tasksQueryKey, context.previous);
-      }
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks", activeProjectId] }),
-  });
-
+  // Status change mutation
   const statusMutation = useMutation({
     mutationFn: ({ taskId, status }: { taskId: number; status: TaskStatus }) =>
       changeStatus(taskId, status),
     onMutate: async ({ taskId, status }) => {
-      await queryClient.cancelQueries({ queryKey: tasksQueryKey });
-      const previous = queryClient.getQueryData<Task[]>(tasksQueryKey);
-      queryClient.setQueryData<Task[]>(tasksQueryKey, (old = []) =>
-        old.map((task) =>
-          task.id === taskId ? { ...task, status, updated_at: new Date().toISOString() } : task,
-        ),
+      await queryClient.cancelQueries({ queryKey: tasksKey });
+      const prev = queryClient.getQueryData<Task[]>(tasksKey);
+      queryClient.setQueryData<Task[]>(tasksKey, old =>
+        (old || []).map(t => t.id === taskId ? { ...t, status, updated_at: new Date().toISOString() } : t)
       );
-      return { previous };
+      return { prev };
     },
-    onError: (_error, _variables, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(tasksQueryKey, context.previous);
-      }
+    onError: (_e, _v, ctx) => { if (ctx?.prev) queryClient.setQueryData(tasksKey, ctx.prev); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks', resolvedProjectId] });
+      setSyncing(true);
+      setTimeout(() => setSyncing(false), 1200);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks", activeProjectId] }),
-  });
-
-  const approveMutation = useMutation({
-    mutationFn: (taskId: number) => approveDraft(taskId),
-    onMutate: async (taskId) => {
-      await queryClient.cancelQueries({ queryKey: tasksQueryKey });
-      const previous = queryClient.getQueryData<Task[]>(tasksQueryKey);
-      queryClient.setQueryData<Task[]>(tasksQueryKey, (old = []) =>
-        old.map((task) =>
-          task.id === taskId
-            ? { ...task, status: "TODO", updated_at: new Date().toISOString() }
-            : task,
-        ),
-      );
-      return { previous };
-    },
-    onError: (_error, _taskId, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(tasksQueryKey, context.previous);
-      }
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks", activeProjectId] }),
-  });
-
-  const deleteMutation = useMutation({
-    mutationFn: (taskId: number) => discardDraft(taskId),
-    onMutate: async (taskId) => {
-      await queryClient.cancelQueries({ queryKey: tasksQueryKey });
-      const previous = queryClient.getQueryData<Task[]>(tasksQueryKey);
-      queryClient.setQueryData<Task[]>(tasksQueryKey, (old = []) =>
-        old.filter((task) => task.id !== taskId),
-      );
-      return { previous };
-    },
-    onError: (_error, _taskId, context) => {
-      if (context?.previous) {
-        queryClient.setQueryData(tasksQueryKey, context.previous);
-      }
-    },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["tasks", activeProjectId] }),
   });
 
   const createMutation = useMutation({
-    mutationFn: (body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string }) =>
-      createTask(activeProjectId!, body),
+    mutationFn: (body: Parameters<typeof createTask>[1]) => createTask(resolvedProjectId!, body),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["tasks", activeProjectId] });
-      setShowCreateModal(false);
+      queryClient.invalidateQueries({ queryKey: ['tasks', resolvedProjectId] });
+      setShowCreate(false);
+      setSyncing(true);
+      setTimeout(() => setSyncing(false), 800);
     },
   });
 
-  const handleStatusChange = useCallback(
-    (taskId: number, newStatus: TaskStatus) => {
-      statusMutation.mutate({ taskId, status: newStatus });
-    },
-    [statusMutation],
-  );
+  const handleStatusChange = useCallback((taskId: number, col: DesignColumn) => {
+    const status = columnToStatus(col) as TaskStatus;
+    statusMutation.mutate({ taskId, status });
+  }, [statusMutation]);
 
-  const handleApprove = useCallback(
-    (taskId: number) => {
-      approveMutation.mutate(taskId);
-    },
-    [approveMutation],
-  );
-
-  const handleDelete = useCallback(
-    (taskId: number) => {
-      deleteMutation.mutate(taskId);
-    },
-    [deleteMutation],
-  );
-
-  const handleAssigneeChange = useCallback(
-    (taskId: number, assigneeId: number | null) => {
-      assigneeMutation.mutate({ taskId, assigneeId });
-    },
-    [assigneeMutation],
-  );
-
-  const handleCreateTask = useCallback(
-    (body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string }) => {
-      createMutation.mutate(body);
-    },
-    [createMutation],
-  );
+  const handleUpdate = useCallback((updated: Task) => {
+    queryClient.setQueryData<Task[]>(tasksKey, old =>
+      (old || []).map(t => t.id === updated.id ? updated : t)
+    );
+  }, [queryClient, tasksKey]);
 
   if (!user) return null;
 
-  const role = activeProjectId ? projectRoles[activeProjectId] : undefined;
-  const isOwner = role === "OWNER";
+  const activeProject = projects.find(p => p.id === resolvedProjectId) ?? null;
 
   return (
-    <div className="kanban-page">
-      <Header
-        user={user}
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: theme.bg, fontFamily: "'Inter', -apple-system, sans-serif", color: theme.text }}>
+      <Sidebar
+        view={view} setView={setView}
         projects={projects}
-        selectedProjectId={activeProjectId}
-        onSelectProject={setSelectedProjectId}
-        showOnlyMine={showOnlyMine}
-        onToggleMine={() => setShowOnlyMine((v) => !v)}
-        onLogout={clearAuth}
-        onAddTask={isOwner && activeProjectId ? () => setShowCreateModal(true) : undefined}
-        currentView={currentView}
-        onViewChange={setCurrentView}
+        activeProjectId={resolvedProjectId}
+        setActiveProjectId={id => setActiveProjectId(id)}
+        collapsed={sidebarCollapsed}
+        onToggleCollapse={() => setSidebarCollapsed(c => !c)}
+        syncing={syncing} accent={accent} theme={theme}
       />
-      {activeProjectId ? (
-        currentView === "dashboard" ? (
-          <DashboardPage projectId={activeProjectId} />
-        ) : isMobile ? (
-          <MobileListView
-            tasks={filteredTasks}
-            role={role}
-            members={members}
-            onApprove={handleApprove}
-            onDelete={handleDelete}
-            onStatusChange={handleStatusChange}
-            onAssigneeChange={handleAssigneeChange}
-          />
-        ) : (
-          <>
-            <FilterBar
-              search={search}
-              onSearchChange={setSearch}
-              urgencyFilter={urgencyFilter}
-              onUrgencyChange={setUrgencyFilter}
-              statusFilter={statusFilter}
-              onStatusChange={setStatusFilter}
-            />
+
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
+        <Header
+          view={view}
+          search={search} setSearch={setSearch}
+          onAddTask={() => setShowCreate(true)}
+          accent={accent} theme={theme}
+          darkMode={isDark} onToggleDark={toggleTheme}
+          members={members}
+        />
+
+        <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: theme.bg }}>
+          {view === 'kanban' && (
             <KanbanBoard
               tasks={filteredTasks}
-              role={role}
-              currentUserId={user.id}
               members={members}
               onStatusChange={handleStatusChange}
-              onApprove={handleApprove}
-              onDelete={handleDelete}
-              onAssigneeChange={handleAssigneeChange}
-              showOnlyMine={showOnlyMine}
+              onUpdate={handleUpdate}
+              onAddTask={() => setShowCreate(true)}
+              accent={accent}
+              compact={compact}
+              colWidth={colWidth}
+              theme={theme}
             />
-          </>
-        )
-      ) : (
-        <div className="empty-state">
-          <p>Нет доступных проектов.</p>
+          )}
+          {view === 'automations' && <AutomationsView accent={accent} theme={theme} />}
+          {view === 'analytics'   && <AnalyticsView tasks={tasks} accent={accent} theme={theme} />}
+          {view === 'team'        && <TeamView tasks={tasks} members={members} accent={accent} theme={theme} />}
+          {view === 'settings'    && (
+            <SettingsView
+              accent={accent} theme={theme}
+              darkMode={isDark} onToggleDark={toggleTheme}
+              accentColor={accentColor} setAccentColor={setAccentColor}
+            />
+          )}
         </div>
-      )}
-      {showCreateModal && activeProjectId && (
+      </div>
+
+      {showCreate && resolvedProjectId && (
         <CreateTaskModal
-          members={members}
-          onClose={() => setShowCreateModal(false)}
-          onCreate={handleCreateTask}
+          open={showCreate}
+          onClose={() => setShowCreate(false)}
+          onCreate={body => createMutation.mutate(body)}
           loading={createMutation.isPending}
+          members={members}
+          project={activeProject}
+          accentColor={accent}
+          theme={theme}
         />
       )}
+
       <ToastContainer toasts={toasts} onRemove={removeToast} />
     </div>
   );

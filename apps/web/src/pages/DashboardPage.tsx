@@ -7,18 +7,18 @@ interface DashboardPageProps {
 }
 
 const STATUS_COLORS: Record<string, string> = {
-  AI_DRAFT: "var(--text-secondary)",
-  TODO: "var(--accent)",
-  IN_PROGRESS: "var(--warning)",
-  REVIEW: "#9b59b6",
-  DONE: "var(--success)",
+  AI_DRAFT: "#8B5CF6",
+  TODO: "#6366F1",
+  IN_PROGRESS: "#F59E0B",
+  REVIEW: "#3B82F6",
+  DONE: "#22C55E",
 };
 
-const URGENCY_COLORS: Record<string, string> = {
-  LOW: "var(--success)",
-  MEDIUM: "var(--accent)",
-  HIGH: "var(--warning)",
-  URGENT: "var(--urgent)",
+const DASHBOARD_URGENCY_COLORS: Record<string, string> = {
+  LOW: "#22C55E",
+  MEDIUM: "#6366F1",
+  HIGH: "#F59E0B",
+  URGENT: "#EF4444",
 };
 
 export function DashboardPage({ projectId }: DashboardPageProps) {
@@ -122,7 +122,7 @@ export function DashboardPage({ projectId }: DashboardPageProps) {
                     className="dashboard__bar"
                     style={{
                       width: `${(Number(count) / maxStatusCount) * 100}%`,
-                      background: STATUS_COLORS[status] ?? "var(--accent)",
+                      background: STATUS_COLORS[status] ?? "#6366F1",
                     }}
                   />
                 </div>
@@ -143,7 +143,7 @@ export function DashboardPage({ projectId }: DashboardPageProps) {
                     className="dashboard__bar"
                     style={{
                       width: `${(Number(count) / maxUrgencyCount) * 100}%`,
-                      background: URGENCY_COLORS[urgency] ?? "var(--accent)",
+                      background: DASHBOARD_URGENCY_COLORS[urgency] ?? "#6366F1",
                     }}
                   />
                 </div>

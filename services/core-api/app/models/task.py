@@ -7,6 +7,7 @@ from sqlalchemy import DateTime, ForeignKey, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
+from app.models.task_assignee import task_assignees
 
 if TYPE_CHECKING:
     from app.models.attachment import Attachment
@@ -35,6 +36,9 @@ class Task(Base):
     project: Mapped[Project] = relationship(back_populates="tasks")
     creator: Mapped[User] = relationship(back_populates="created_tasks", foreign_keys=[creator_id])
     assignee: Mapped[User | None] = relationship(back_populates="assigned_tasks", foreign_keys=[assignee_id])
+    co_assignees: Mapped[list[User]] = relationship(
+        "User", secondary=task_assignees, lazy="select"
+    )
     comments: Mapped[list[Comment]] = relationship(
         back_populates="task", cascade="all, delete-orphan", order_by="Comment.created_at"
     )

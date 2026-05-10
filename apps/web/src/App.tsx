@@ -4,6 +4,7 @@ import { login } from "@/api/auth";
 import { api } from "@/api/client";
 import { LoginPage } from "@/pages/LoginPage";
 import { KanbanPage } from "@/pages/KanbanPage";
+import { ThemeProvider } from "@/theme/ThemeContext";
 import type { User, ProjectRole } from "@/types/domain";
 
 const queryClient = new QueryClient({
@@ -42,7 +43,9 @@ function AppInner() {
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
-      <AppInner />
+      <ThemeProvider>
+        <AppInner />
+      </ThemeProvider>
     </QueryClientProvider>
   );
 }

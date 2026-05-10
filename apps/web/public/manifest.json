@@ -4,8 +4,8 @@
   "description": "Task management system for Victory Group digital agency",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#0f0f1a",
-  "theme_color": "#1a1a2e",
+  "background_color": "#F8FAFC",
+  "theme_color": "#6366F1",
   "icons": [
     {
       "src": "/icon-192.svg",

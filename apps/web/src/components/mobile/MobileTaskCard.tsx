@@ -98,7 +98,7 @@ export function MobileTaskCard({
             {task.project.name}
           </span>
         )}
-        {task.assignee && <Avatar name={task.assignee.full_name} size={24} />}
+        {task.assignee && <Avatar user={{ full_name: task.assignee.full_name, id: task.assignee.id }} size={24} />}
       </div>
       <div className="mobile-card__actions">
         {isDraft && isOwner && (

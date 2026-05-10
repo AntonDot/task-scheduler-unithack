@@ -22,6 +22,9 @@ services:
     env_file: .env
     environment:
       CORE_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-taskscheduler}
+      CORE_ML_WORKER_URL: http://ml-worker:8001
+      CORE_ML_WEBHOOK_API_KEY: ${ML_WEBHOOK_API_KEY:-dev-webhook-key}
+      CORE_REVIEW_BOARD_URL: http://mock-review-board:8002
     depends_on:
       postgres:
         condition: service_healthy

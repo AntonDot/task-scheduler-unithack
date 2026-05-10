@@ -1,8 +1,7 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
-import { DndContext } from "@dnd-kit/core";
-import { SortableContext } from "@dnd-kit/sortable";
 import { TaskCard } from "@/components/kanban/TaskCard";
+import { ThemeProvider } from "@/theme/ThemeContext";
 import type { Task } from "@/types/domain";
 import { TaskStatus } from "@/types/domain";
 
@@ -27,11 +26,9 @@ function makeTask(overrides: Partial<Task> = {}): Task {
 
 function renderTaskCard(task: Task, onSelect = vi.fn()) {
   return render(
-    <DndContext>
-      <SortableContext items={[`task-${task.id}`]}>
-        <TaskCard task={task} onSelect={onSelect} />
-      </SortableContext>
-    </DndContext>,
+    <ThemeProvider>
+      <TaskCard task={task} onSelect={onSelect} />
+    </ThemeProvider>,
   );
 }
 
@@ -41,35 +38,29 @@ describe("TaskCard", () => {
     expect(screen.getByText("Fix landing page")).toBeInTheDocument();
   });
 
-  it("applies urgency-high class", () => {
+  it("renders urgency badge with label for HIGH", () => {
     renderTaskCard(makeTask({ urgency: "HIGH" }));
-    const card = screen.getByTestId("task-card-1");
-    expect(card.className).toContain("urgency-high");
+    expect(screen.getByText("High")).toBeInTheDocument();
   });
 
-  it("applies urgency-urgent class", () => {
+  it("renders urgent urgency badge", () => {
     renderTaskCard(makeTask({ urgency: "URGENT" }));
-    const card = screen.getByTestId("task-card-1");
-    expect(card.className).toContain("urgency-urgent");
+    expect(screen.getByText("Urgent")).toBeInTheDocument();
   });
 
-  it("applies urgency-low class", () => {
+  it("renders low urgency badge", () => {
     renderTaskCard(makeTask({ urgency: "LOW" }));
-    const card = screen.getByTestId("task-card-1");
-    expect(card.className).toContain("urgency-low");
+    expect(screen.getByText("Low")).toBeInTheDocument();
   });
 
-  it("applies urgency-medium class", () => {
+  it("renders medium urgency badge", () => {
     renderTaskCard(makeTask({ urgency: "MEDIUM" }));
-    const card = screen.getByTestId("task-card-1");
-    expect(card.className).toContain("urgency-medium");
+    expect(screen.getByText("Medium")).toBeInTheDocument();
   });
 
   it("shows project tag when project is present", () => {
     renderTaskCard(makeTask());
     expect(screen.getByText("Онегин Парк")).toBeInTheDocument();
-    const tag = screen.getByText("Онегин Парк");
-    expect(tag.className).toContain("task-card__project-tag");
   });
 
   it("shows assignee avatar when assignee is present", () => {
@@ -100,17 +91,10 @@ describe("TaskCard", () => {
     expect(onSelect).toHaveBeenCalledWith(task);
   });
 
-  it("shows deadline when present", () => {
-    renderTaskCard(makeTask({ deadline: "2025-06-01T00:00:00" }));
+  it("has urgency stripe via borderLeft style", () => {
+    renderTaskCard(makeTask({ urgency: "URGENT" }));
     const card = screen.getByTestId("task-card-1");
-    const deadlineEl = card.querySelector(".task-card__deadline");
-    expect(deadlineEl).not.toBeNull();
-  });
-
-  it("hides deadline when null", () => {
-    renderTaskCard(makeTask({ deadline: null }));
-    const card = screen.getByTestId("task-card-1");
-    const deadlineEl = card.querySelector(".task-card__deadline");
-    expect(deadlineEl).toBeNull();
+    // Browser normalizes hex to rgb in computed styles
+    expect(card.style.borderLeft).toContain("rgb(239, 68, 68)");
   });
 });

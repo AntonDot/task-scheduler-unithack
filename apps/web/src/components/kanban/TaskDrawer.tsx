@@ -232,7 +232,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
         {/* Scrollable body */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '20px 24px 32px' }}>
           {/* Metadata */}
-          <div style={{ background: th.bg, border: `1px solid ${th.border}`, borderRadius: 12, marginBottom: 24, overflow: 'hidden' }}>
+          <div style={{ background: th.bg, border: `1px solid ${th.border}`, borderRadius: 12, marginBottom: 24 }}>
             {/* Status */}
             <div style={{ ...metaRowStyle, borderBottom: `1px solid ${th.border}` }}>
               <span style={metaLabelStyle}>Status</span>

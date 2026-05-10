@@ -41,13 +41,13 @@ function loadNotifs(): NotifSetting[] {
 function Toggle({ val, onChange, accent }: { val: boolean; onChange: (v: boolean) => void; accent: string }) {
   return (
     <div onClick={() => onChange(!val)} style={{
-      width: 38, height: 22, borderRadius: 11,
+      width: 57, height: 33, borderRadius: 16,
       background: val ? accent : '#D1D5DB',
       position: 'relative', cursor: 'pointer', flexShrink: 0, transition: 'background 0.2s',
     }}>
       <div style={{
-        position: 'absolute', top: 3, left: val ? 19 : 3,
-        width: 16, height: 16, borderRadius: '50%', background: 'white',
+        position: 'absolute', top: 4, left: val ? 28 : 4,
+        width: 25, height: 25, borderRadius: '50%', background: 'white',
         boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s',
       }} />
     </div>
@@ -97,8 +97,8 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
 
   function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
-      <div style={{ marginBottom: 28 }}>
-        <h3 style={{ fontSize: 13.5, fontWeight: 700, color: th.text, marginBottom: 14, paddingBottom: 10, borderBottom: `1px solid ${th.border}` }}>
+      <div style={{ marginBottom: 42 }}>
+        <h3 style={{ fontSize: 20, fontWeight: 700, color: th.text, marginBottom: 21, paddingBottom: 15, borderBottom: `1px solid ${th.border}` }}>
           {title}
         </h3>
         {children}
@@ -108,10 +108,10 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
 
   function Row({ label, sub, right }: { label: string; sub?: string; right: React.ReactNode }) {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 0', borderBottom: `1px solid ${th.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '18px 0', borderBottom: `1px solid ${th.border}` }}>
         <div>
-          <p style={{ fontSize: 13.5, fontWeight: 500, color: th.text, margin: 0 }}>{label}</p>
-          {sub && <p style={{ fontSize: 12, color: th.textMuted, marginTop: 2, margin: 0 }}>{sub}</p>}
+          <p style={{ fontSize: 20, fontWeight: 500, color: th.text, margin: 0 }}>{label}</p>
+          {sub && <p style={{ fontSize: 18, color: th.textMuted, marginTop: 3, margin: 0 }}>{sub}</p>}
         </div>
         {right}
       </div>
@@ -119,24 +119,25 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
   }
 
   const inputStyle: React.CSSProperties = {
-    padding: '8px 12px', borderRadius: 8, border: `1px solid ${th.border}`,
-    background: th.inputBg, color: th.text, fontSize: 13.5,
+    padding: '12px 18px', borderRadius: 12, border: `1px solid ${th.border}`,
+    background: th.inputBg, color: th.text, fontSize: 20,
     fontFamily: 'inherit', outline: 'none', width: '100%', boxSizing: 'border-box',
   };
 
   return (
-    <div style={{ padding: '28px 32px', overflowY: 'auto', flex: 1, maxWidth: 680 }}>
-      <h2 style={{ fontSize: 20, fontWeight: 700, color: th.text, marginBottom: 28 }}>Settings</h2>
+    <div style={{ flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center' }}>
+      <div style={{ width: '100%', maxWidth: 960, padding: '60px 48px', margin: '0 0' }}>
+        <h2 style={{ fontSize: 30, fontWeight: 700, color: th.text, marginBottom: 42 }}>Settings</h2>
 
       {/* Profile */}
       <Section title="Profile">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '16px', background: th.surface, border: `1px solid ${th.border}`, borderRadius: 12, marginBottom: 12 }}>
-          <Avatar user={{ full_name: user?.full_name ?? '?', id: user?.id ?? 0 }} size={52} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 24, padding: '24px', background: th.surface, border: `1px solid ${th.border}`, borderRadius: 18, marginBottom: 18 }}>
+          <Avatar user={{ full_name: user?.full_name ?? '?', id: user?.id ?? 0 }} size={78} />
           <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 15, fontWeight: 700, color: th.text, margin: 0 }}>{user?.full_name ?? '—'}</p>
-            <p style={{ fontSize: 12.5, color: th.textSecondary, margin: 0 }}>{user?.email ?? '—'}</p>
+            <p style={{ fontSize: 22, fontWeight: 700, color: th.text, margin: 0 }}>{user?.full_name ?? '—'}</p>
+            <p style={{ fontSize: 18, color: th.textSecondary, margin: 0 }}>{user?.email ?? '—'}</p>
           </div>
-          <button onClick={openEdit} style={{ padding: '7px 14px', borderRadius: 8, border: `1px solid ${th.border}`, background: 'none', fontSize: 13, fontWeight: 500, color: th.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
+          <button onClick={openEdit} style={{ padding: '10px 20px', borderRadius: 12, border: `1px solid ${th.border}`, background: 'none', fontSize: 19, fontWeight: 500, color: th.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
             Edit profile
           </button>
         </div>
@@ -151,7 +152,7 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
             <div style={{ display: 'flex', gap: 8 }}>
               {ACCENT_OPTIONS.map(c => (
                 <div key={c} onClick={() => setAccentColor(c)} style={{
-                  width: 22, height: 22, borderRadius: '50%', background: c, cursor: 'pointer',
+                  width: 33, height: 33, borderRadius: '50%', background: c, cursor: 'pointer',
                   border: accentColor === c ? `3px solid ${th.text}` : '3px solid transparent',
                   transition: 'border 0.1s', boxSizing: 'border-box',
                 }} />
@@ -174,14 +175,14 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
       <Section title="Workspace">
         <Row label="Export all data" sub="Download your tasks and automations as JSON"
           right={
-            <button style={{ padding: '6px 14px', borderRadius: 8, border: `1px solid ${th.border}`, background: 'none', fontSize: 12.5, fontWeight: 500, color: th.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <button style={{ padding: '9px 20px', borderRadius: 12, border: `1px solid ${th.border}`, background: 'none', fontSize: 18, fontWeight: 500, color: th.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
               Export
             </button>
           }
         />
         <Row label="Delete workspace" sub="Permanently delete this workspace and all its data"
           right={
-            <button style={{ padding: '6px 14px', borderRadius: 8, border: '1px solid #FECACA', background: '#FEF2F2', fontSize: 12.5, fontWeight: 500, color: '#991B1B', cursor: 'pointer', fontFamily: 'inherit' }}>
+            <button style={{ padding: '9px 20px', borderRadius: 12, border: '1px solid #FECACA', background: '#FEF2F2', fontSize: 18, fontWeight: 500, color: '#991B1B', cursor: 'pointer', fontFamily: 'inherit' }}>
               Delete
             </button>
           }
@@ -194,32 +195,33 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
           <div onClick={() => setEditOpen(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,0.35)', zIndex: 200 }} />
           <div style={{
             position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
-            width: 400, background: th.surface, borderRadius: 16,
-            boxShadow: '0 20px 60px rgba(0,0,0,0.2)', zIndex: 201, padding: '28px 28px 24px',
+            width: 600, background: th.surface, borderRadius: 24,
+            boxShadow: '0 20px 60px rgba(0,0,0,0.2)', zIndex: 201, padding: '42px 42px 36px',
           }}>
-            <h3 style={{ fontSize: 16, fontWeight: 700, color: th.text, marginBottom: 20, margin: 0 }}>Edit Profile</h3>
-            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <h3 style={{ fontSize: 24, fontWeight: 700, color: th.text, marginBottom: 30, margin: 0 }}>Edit Profile</h3>
+            <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: th.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 5 }}>Full name</label>
+                <label style={{ fontSize: 18, fontWeight: 600, color: th.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 8 }}>Full name</label>
                 <input value={editName} onChange={e => setEditName(e.target.value)} style={inputStyle} placeholder="Your name" />
               </div>
               <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: th.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 5 }}>Email</label>
+                <label style={{ fontSize: 18, fontWeight: 600, color: th.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 8 }}>Email</label>
                 <input value={editEmail} onChange={e => setEditEmail(e.target.value)} style={inputStyle} placeholder="your@email.com" />
               </div>
-              {editError && <p style={{ fontSize: 12.5, color: '#DC2626', margin: 0 }}>{editError}</p>}
+              {editError && <p style={{ fontSize: 18, color: '#DC2626', margin: 0 }}>{editError}</p>}
             </div>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 22 }}>
-              <button onClick={() => setEditOpen(false)} style={{ padding: '8px 18px', borderRadius: 8, border: `1px solid ${th.border}`, background: 'none', fontSize: 13.5, fontWeight: 500, color: th.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
+            <div style={{ display: 'flex', gap: 15, justifyContent: 'flex-end', marginTop: 32 }}>
+              <button onClick={() => setEditOpen(false)} style={{ padding: '12px 26px', borderRadius: 12, border: `1px solid ${th.border}`, background: 'none', fontSize: 20, fontWeight: 500, color: th.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
                 Cancel
               </button>
-              <button onClick={saveProfile} disabled={editSaving} style={{ padding: '8px 18px', borderRadius: 8, border: 'none', background: accent, color: 'white', fontSize: 13.5, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
+              <button onClick={saveProfile} disabled={editSaving} style={{ padding: '12px 26px', borderRadius: 12, border: 'none', background: accent, color: 'white', fontSize: 20, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
                 {editSaving ? 'Saving…' : 'Save'}
               </button>
             </div>
           </div>
         </>
       )}
+      </div>
     </div>
   );
 }

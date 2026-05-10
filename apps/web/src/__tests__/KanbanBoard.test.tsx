@@ -85,7 +85,7 @@ describe("KanbanBoard", () => {
   it("displays column labels", () => {
     renderBoard();
     for (const col of COLUMNS_DEF) {
-      expect(screen.getByText(col.label.toUpperCase())).toBeInTheDocument();
+      expect(screen.getByText(col.label)).toBeInTheDocument();
     }
   });
 

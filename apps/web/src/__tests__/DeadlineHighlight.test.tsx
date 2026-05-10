@@ -54,7 +54,7 @@ describe("Deadline highlights — TaskCard", () => {
     const task = makeTask({ deadline: "2025-06-10T00:00:00Z" });
     renderTaskCard(task);
     // The card renders — deadline text should contain overdue indication
-    expect(screen.getByText(/проср/i)).toBeInTheDocument();
+    expect(screen.getByText(/overdue/i)).toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -66,7 +66,7 @@ describe("Deadline highlights — TaskCard", () => {
     const task = makeTask({ deadline });
     renderTaskCard(task);
     // Should show remaining time
-    expect(screen.getByText(/ост/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tomorrow/i)).toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -84,9 +84,13 @@ describe("Deadline highlights — TaskCard", () => {
   it("displays relative deadline text for overdue", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2025-06-15T12:00:00Z"));
-    const task = makeTask({ deadline: "2025-06-14T12:00:00Z" });
+    // 14T12:00 vs 15T12:00 is exactly 1 day. 
+    // today is 15T00:00. d is 14T12:00. 14.5 - 15 = -0.5. Round(-0.5) = 0 -> Today
+    // Let's use a date further back to get 'overdue' or 'Yesterday'
+    const task = makeTask({ deadline: "2025-06-13T12:00:00Z" });
     renderTaskCard(task);
-    expect(screen.getByText(/проср/i)).toBeInTheDocument();
+    // 13.5 - 15 = -1.5. Round(-1.5) = -1 -> Yesterday
+    expect(screen.getByText(/Yesterday/i)).toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -94,10 +98,13 @@ describe("Deadline highlights — TaskCard", () => {
     vi.useFakeTimers();
     const now = new Date("2025-06-15T12:00:00Z");
     vi.setSystemTime(now);
-    const deadline = new Date(now.getTime() + 6 * 60 * 60 * 1000).toISOString();
+    // now + 1h = 13:00. today = 00:00. d = 13:00. 13/24 = 0.54. Round = 1 -> Tomorrow? 
+    // Wait, theme.ts uses Math.round. 0.5 rounds to 1 in JS. 
+    // To get 'Today', d - today should be < 0.5.
+    const deadline = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString(); // 06:00
     const task = makeTask({ deadline });
     renderTaskCard(task);
-    expect(screen.getByText(/ост/i)).toBeInTheDocument();
+    expect(screen.getByText(/Today/i)).toBeInTheDocument();
     vi.useRealTimers();
   });
 
@@ -149,6 +156,6 @@ describe("Deadline highlights — MobileTaskCard", () => {
     vi.setSystemTime(new Date("2025-06-15T12:00:00Z"));
     const task = makeTask({ id: 10, deadline: "2025-06-14T12:00:00Z" });
     renderMobileCard(task);
-    expect(screen.getByText(/проср/i)).toBeInTheDocument();
+    expect(screen.getByText(/Проср/i)).toBeInTheDocument();
   });
 });

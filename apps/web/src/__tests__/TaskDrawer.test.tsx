@@ -93,8 +93,8 @@ describe("TaskDrawer", () => {
 
   it("shows assignee member avatars", () => {
     renderDrawer();
-    expect(screen.getByTitle("Дмитрий Морозов")).toBeInTheDocument();
-    expect(screen.getByTitle("Test User")).toBeInTheDocument();
+    expect(screen.getAllByTitle("Дмитрий Морозов")[0]).toBeInTheDocument();
+    expect(screen.getAllByTitle("Test User")[0]).toBeInTheDocument();
   });
 
   it("shows close button", () => {

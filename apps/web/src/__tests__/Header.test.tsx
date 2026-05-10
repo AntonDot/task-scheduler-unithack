@@ -57,7 +57,7 @@ describe("Header", () => {
   it("calls onAddTask when add button is clicked", () => {
     const onAddTask = vi.fn();
     renderHeader({ onAddTask });
-    fireEvent.click(screen.getByText("+ New task"));
+    fireEvent.click(screen.getByText("New task"));
     expect(onAddTask).toHaveBeenCalledOnce();
   });
 

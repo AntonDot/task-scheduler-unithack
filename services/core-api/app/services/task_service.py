@@ -19,17 +19,13 @@ async def list_tasks(db: AsyncSession, project_id: int, assignee_id: int | None 
     if assignee_id is not None:
         stmt = stmt.where(Task.assignee_id == assignee_id)
     result = await db.execute(
-        stmt.options(*_TASK_OPTS).order_by(
-            Task.deadline.asc().nulls_last(), Task.created_at.desc()
-        )
+        stmt.options(*_TASK_OPTS).order_by(Task.deadline.asc().nulls_last(), Task.created_at.desc())
     )
     return list(result.scalars().all())
 
 
 async def get_task(db: AsyncSession, task_id: int) -> Task | None:
-    result = await db.execute(
-        select(Task).where(Task.id == task_id).options(*_TASK_OPTS)
-    )
+    result = await db.execute(select(Task).where(Task.id == task_id).options(*_TASK_OPTS))
     return result.scalar_one_or_none()
 
 
@@ -63,9 +59,7 @@ async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: 
 
 
 async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_project: UserProject) -> Task:
-    result = await db.execute(
-        select(Task).where(Task.id == task_id).options(*_TASK_OPTS)
-    )
+    result = await db.execute(select(Task).where(Task.id == task_id).options(*_TASK_OPTS))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")

@@ -13,7 +13,11 @@ class TestTaskLifecycleExtended:
 
         resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{pid}/tasks",
-            json={"title": marker, "description": "Created manually by owner", "urgency": "MEDIUM"},
+            json={
+                "title": marker,
+                "description": "Created manually by owner",
+                "urgency": "MEDIUM",
+            },
             headers=owner_headers,
         )
         assert resp.status_code == 201
@@ -35,16 +39,22 @@ class TestTaskLifecycleExtended:
         task_id = resp.json()["id"]
         assert resp.json()["status"] == "TODO"
 
-        resp = client.delete(f"{CORE_API_URL}/api/v1/tasks/{task_id}", headers=owner_headers)
+        resp = client.delete(
+            f"{CORE_API_URL}/api/v1/tasks/{task_id}", headers=owner_headers
+        )
         assert resp.status_code == 204
 
-        resp = client.get(f"{CORE_API_URL}/api/v1/tasks/{task_id}", headers=owner_headers)
+        resp = client.get(
+            f"{CORE_API_URL}/api/v1/tasks/{task_id}", headers=owner_headers
+        )
         assert resp.status_code == 404
 
     def test_assign_task_to_member(self, client, owner_headers, onegin_project):
         pid = onegin_project["id"]
 
-        members = client.get(f"{CORE_API_URL}/api/v1/projects/{pid}/members", headers=owner_headers).json()
+        members = client.get(
+            f"{CORE_API_URL}/api/v1/projects/{pid}/members", headers=owner_headers
+        ).json()
         assignee = next((m for m in members if m["role"] == "ASSIGNEE"), None)
         assert assignee is not None, "No assignee found in project"
 
@@ -64,11 +74,15 @@ class TestTaskLifecycleExtended:
         assert resp.status_code == 200
         assert resp.json()["assignee_id"] == assignee["id"]
 
-    def test_full_lifecycle_with_comments(self, client, owner_headers, assignee_onegin_headers, onegin_project):
+    def test_full_lifecycle_with_comments(
+        self, client, owner_headers, assignee_onegin_headers, onegin_project
+    ):
         pid = onegin_project["id"]
         marker = f"Full lifecycle {uuid.uuid4().hex[:8]}"
 
-        members = client.get(f"{CORE_API_URL}/api/v1/projects/{pid}/members", headers=owner_headers).json()
+        members = client.get(
+            f"{CORE_API_URL}/api/v1/projects/{pid}/members", headers=owner_headers
+        ).json()
         assignee = next(m for m in members if m["role"] == "ASSIGNEE")
 
         resp = client.post(
@@ -119,12 +133,16 @@ class TestTaskLifecycleExtended:
         assert resp.status_code == 200
         assert resp.json()["status"] == "DONE"
 
-        resp = client.get(f"{CORE_API_URL}/api/v1/tasks/{task_id}/comments", headers=owner_headers)
+        resp = client.get(
+            f"{CORE_API_URL}/api/v1/tasks/{task_id}/comments", headers=owner_headers
+        )
         assert resp.status_code == 200
         comments = resp.json()
         assert len(comments) >= 2
 
-    def test_task_creation_by_assignee(self, client, assignee_onegin_headers, onegin_project):
+    def test_task_creation_by_assignee(
+        self, client, assignee_onegin_headers, onegin_project
+    ):
         """Assignee should NOT be able to create tasks (RBAC enforcement)."""
         pid = onegin_project["id"]
 
@@ -144,7 +162,9 @@ class TestTaskLifecycleExtended:
             # This documents the actual behavior.
             assert resp.json()["status"] == "TODO"
         else:
-            pytest.fail(f"Unexpected status code {resp.status_code} for assignee task creation")
+            pytest.fail(
+                f"Unexpected status code {resp.status_code} for assignee task creation"
+            )
 
     def test_update_task_description(self, client, owner_headers, onegin_project):
         pid = onegin_project["id"]

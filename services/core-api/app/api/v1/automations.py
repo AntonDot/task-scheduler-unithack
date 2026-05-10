@@ -1,4 +1,5 @@
 """Automation trigger endpoints — lets the frontend run server-side automation jobs."""
+
 import logging
 from datetime import UTC, datetime
 
@@ -49,8 +50,12 @@ async def run_review_scraper(
         except Exception as exc:
             logger.error("Failed to fetch reviews: %s", exc)
             return ReviewScrapeResult(
-                reviews_found=0, negative_found=0, tasks_created=0,
-                duplicates=0, errors=1, ran_at=datetime.now(tz=UTC).isoformat(),
+                reviews_found=0,
+                negative_found=0,
+                tasks_created=0,
+                duplicates=0,
+                errors=1,
+                ran_at=datetime.now(tz=UTC).isoformat(),
                 details=[{"error": str(exc)}],
             )
 
@@ -78,13 +83,15 @@ async def run_review_scraper(
                 status = body.get("status", "unknown")
                 if status == "created":
                     tasks_created += 1
-                    details.append({
-                        "review_id": review["id"],
-                        "author": review.get("author"),
-                        "rating": review.get("rating"),
-                        "task_id": body.get("task_id"),
-                        "status": "created",
-                    })
+                    details.append(
+                        {
+                            "review_id": review["id"],
+                            "author": review.get("author"),
+                            "rating": review.get("rating"),
+                            "task_id": body.get("task_id"),
+                            "status": "created",
+                        }
+                    )
                 elif status == "duplicate":
                     duplicates += 1
                     details.append({"review_id": review["id"], "status": "duplicate"})

@@ -7,12 +7,13 @@ import { DatePicker } from '@/components/ui/DatePicker';
 import { Avatar } from './Avatar';
 import { IcoX } from '@/components/ui/Icons';
 import type { ProjectMember } from '@/api/members';
-import { updateTask, changeStatus } from '@/api/tasks';
+import { fetchTask, updateTask, changeStatus } from '@/api/tasks';
 import { fetchComments, addComment } from '@/api/comments';
 import { fetchAuditLogs } from '@/api/audit';
 import type { Comment } from '@/api/comments';
 import type { AuditLog } from '@/api/audit';
 import type { TaskStatus } from '@/types/domain';
+import { useAuthStore } from '@/store/authStore';
 
 interface TaskDrawerProps {
   task: Task | null;
@@ -29,6 +30,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const acc = accentColor;
   const th  = theme;
+  const { user, projectRoles } = useAuthStore();
 
   // Activity state
   const [comments,  setComments]  = useState<Comment[]>([]);
@@ -42,10 +44,11 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   }, [task]);
 
   useEffect(() => {
-    if (!task) return;
+    if (!task || !open) return;
+    fetchTask(task.id).then(t => setLocalTask(t)).catch(() => {});
     fetchComments(task.id).then(setComments).catch(() => {});
     fetchAuditLogs(task.id).then(setAuditLogs).catch(() => {});
-  }, [task?.id]);
+  }, [task?.id, open]);
 
   if (!task) return null;
   const display = localTask || task;
@@ -53,13 +56,21 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   const urgKey  = apiUrgencyToDesign(display.urgency);
   const col     = statusToColumn(display.status);
 
+  const role = display.project_id ? projectRoles[display.project_id] : undefined;
+  const isLead = role === 'OWNER';
+  const isAssignee = display.assignee_id === user?.id || display.co_assignees?.some(c => c.id === user?.id);
+  const canEdit = isLead || isAssignee;
+  const readonly = !canEdit;
+
   function patch(changes: Partial<Task>) {
+    if (readonly) return;
     const updated = { ...display, ...changes } as Task;
     setLocalTask(updated);
     onUpdate(updated);
   }
 
   function handleStatusChange(column: DesignColumn) {
+    if (readonly) return;
     const newStatus = columnToStatus(column) as TaskStatus;
     changeStatus(display.id, newStatus).then(updated => {
       setLocalTask(updated);
@@ -68,6 +79,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   }
 
   function handleDescriptionChange(text: string) {
+    if (readonly) return;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
       updateTask(display.id, { description: text }).then(updated => {
@@ -79,6 +91,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   }
 
   function handleDeadlineChange(val: string) {
+    if (readonly) return;
     const deadline = val || null;
     updateTask(display.id, { deadline }).then(updated => {
       setLocalTask(updated);
@@ -87,6 +100,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   }
 
   function handleAssigneeClick(memberId: number) {
+    if (readonly) return;
     const primaryId   = display.assignee_id;
     const coIds       = (display.co_assignees ?? []).map(u => u.id);
     const isPrimary   = primaryId === memberId;
@@ -229,7 +243,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {COLUMNS_DEF.map(c => (
                   <button key={c.id} onClick={() => handleStatusChange(c.id)} style={{
-                    padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                    padding: '3px 10px', borderRadius: 6, border: 'none', cursor: readonly ? 'default' : 'pointer',
                     fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600,
                     background: col === c.id ? acc + '18' : 'transparent',
                     color: col === c.id ? acc : th.textSecondary,
@@ -247,7 +261,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {Object.entries(URGENCY_MAP).map(([key, u]) => (
                   <button key={key} onClick={() => patch({ urgency: key.toUpperCase() as Task['urgency'] })} style={{
-                    padding: '3px 10px', borderRadius: 6, border: 'none', cursor: 'pointer',
+                    padding: '3px 10px', borderRadius: 6, border: 'none', cursor: readonly ? 'default' : 'pointer',
                     fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
                     background: urgKey === key ? u.bg : 'transparent',
                     color: urgKey === key ? u.color : th.textMuted,
@@ -267,7 +281,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
                   const selected = display.assignee_id === m.id || (display.co_assignees ?? []).some(u => u.id === m.id);
                   return (
                     <button key={m.id} onClick={() => handleAssigneeClick(m.id)} title={m.full_name} style={{
-                      background: 'none', border: 'none', cursor: 'pointer', padding: 2, borderRadius: '50%',
+                      background: 'none', border: 'none', cursor: readonly ? 'default' : 'pointer', padding: 2, borderRadius: '50%',
                       outline: selected ? `2px solid ${acc}` : '2px solid transparent',
                       outlineOffset: 2, transition: 'outline 0.1s', opacity: selected ? 1 : 0.45,
                     }}>
@@ -290,6 +304,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
                 onChange={handleDeadlineChange}
                 accent={acc}
                 theme={th}
+                readonly={readonly}
               />
             </div>
             {/* Project */}
@@ -313,6 +328,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
               onChange={handleDescriptionChange}
               accent={acc}
               theme={th}
+              readonly={readonly}
             />
           </div>
 

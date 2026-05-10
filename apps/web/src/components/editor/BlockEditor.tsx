@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import type { Theme } from '@/theme/theme';
 
@@ -68,11 +68,20 @@ interface BlockEditorProps {
   onChange: (text: string) => void;
   accent?: string;
   theme?: Theme;
+  readonly?: boolean;
 }
 
-export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: BlockEditorProps) {
+export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readonly }: BlockEditorProps) {
   const [blocks, setBlocks] = useState<Block[]>(() => textToBlocks(value));
   const [slashMenu, setSlashMenu] = useState<{ blockId: string; filter: string; y: number; x: number } | null>(null);
+
+  React.useEffect(() => {
+    const currentText = blocksToText(blocks);
+    if (value !== currentText) {
+      setBlocks(textToBlocks(value));
+    }
+  }, [value]);
+
   const [menuIdx, setMenuIdx] = useState(0);
   const refs = useRef<Record<string, HTMLTextAreaElement | null>>({});
 
@@ -134,6 +143,7 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: Bloc
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, block: Block) {
+    if (readonly) return;
     if (slashMenu && filteredCmds.length > 0) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setMenuIdx(i => Math.min(i+1, filteredCmds.length-1)); return; }
       if (e.key === 'ArrowUp')   { e.preventDefault(); setMenuIdx(i => Math.max(i-1, 0)); return; }
@@ -154,6 +164,7 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: Bloc
   }
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>, block: Block) {
+    if (readonly) return;
     const text = e.target.value;
     autoGrow(e.target);
     upd(block.id, { text });
@@ -208,13 +219,13 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: Bloc
       <span style={{ color: txtM, fontSize: 13, lineHeight: 1.8, flexShrink: 0, minWidth: 18, userSelect: 'none' }}>{idx + 1}.</span>
     ) : block.type === 'todo' ? (
       <div
-        onMouseDown={e => { e.preventDefault(); upd(block.id, { checked: !block.checked }); }}
+        onMouseDown={e => { if (!readonly) { e.preventDefault(); upd(block.id, { checked: !block.checked }); } }}
         style={{
           width: 16, height: 16, borderRadius: 4, flexShrink: 0, marginTop: 5,
           border: block.checked ? 'none' : `1.5px solid ${bord}`,
           background: block.checked ? accent : 'transparent',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', transition: 'all 0.15s',
+          cursor: readonly ? 'default' : 'pointer', transition: 'all 0.15s',
         }}
       >
         {block.checked && (
@@ -231,8 +242,9 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: Bloc
         <textarea
           ref={el => { refs.current[block.id] = el; if (el) autoGrow(el); }}
           value={block.text}
-          placeholder={block.type === 'paragraph' ? "Type '/' for commands…" : ''}
+          placeholder={block.type === 'paragraph' && !readonly ? "Type '/' for commands…" : ''}
           rows={1}
+          readOnly={readonly}
           onChange={e => handleChange(e, block)}
           onKeyDown={e => handleKeyDown(e, block)}
           style={getTextareaStyle(block.type, block.checked)}
@@ -248,10 +260,10 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: Bloc
           border: `1px solid ${bord}`, borderRadius: 10,
           padding: '12px 16px', background: surf,
           minHeight: 100, display: 'flex', flexDirection: 'column', gap: 2,
-          cursor: 'text',
+          cursor: readonly ? 'default' : 'text',
         }}
         onClick={e => {
-          if (e.target === e.currentTarget && blocks.length > 0) {
+          if (!readonly && e.target === e.currentTarget && blocks.length > 0) {
             const last = blocks[blocks.length - 1];
             if (last) refs.current[last.id]?.focus();
           }

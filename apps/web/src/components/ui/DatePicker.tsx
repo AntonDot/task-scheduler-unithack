@@ -8,9 +8,10 @@ interface DatePickerProps {
   accent?: string;
   theme?: Theme;
   placeholder?: string;
+  readonly?: boolean;
 }
 
-export function DatePicker({ value, onChange, accent = '#6366F1', theme, placeholder = 'Set deadline' }: DatePickerProps) {
+export function DatePicker({ value, onChange, accent = '#6366F1', theme, placeholder = 'Set deadline', readonly }: DatePickerProps) {
   const [open, setOpen] = useState(false);
   const [viewDate, setViewDate] = useState<Date>(() => {
     const d = value ? new Date(value.includes('T') ? value : value + 'T00:00:00') : new Date();
@@ -61,12 +62,12 @@ export function DatePicker({ value, onChange, accent = '#6366F1', theme, placeho
           border: `1px solid ${overdue ? '#FECACA' : bord}`,
           background: overdue ? '#FEF2F2' : surf,
           color: selDate ? (overdue ? '#991B1B' : txt) : txtM,
-          fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
+          fontSize: 12.5, fontWeight: 500, cursor: readonly ? 'default' : 'pointer',
           fontFamily: 'inherit', transition: 'border-color 0.12s',
         }}
-        onClick={() => setOpen(o => !o)}
-        onMouseEnter={e => (e.currentTarget.style.borderColor = accent)}
-        onMouseLeave={e => (e.currentTarget.style.borderColor = overdue ? '#FECACA' : bord)}
+        onClick={() => !readonly && setOpen(o => !o)}
+        onMouseEnter={e => !readonly && (e.currentTarget.style.borderColor = accent)}
+        onMouseLeave={e => !readonly && (e.currentTarget.style.borderColor = overdue ? '#FECACA' : bord)}
       >
         <IcoCalendar size={13} />
         {displayStr}

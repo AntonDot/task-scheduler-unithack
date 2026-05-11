@@ -8,7 +8,7 @@ export function fetchTasks(projectId: number, assigneeId?: number): Promise<Task
 
 export function createTask(
   projectId: number,
-  body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string },
+  body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string; status?: string },
 ): Promise<Task> {
   return api.post<Task>(`/projects/${projectId}/tasks`, body);
 }

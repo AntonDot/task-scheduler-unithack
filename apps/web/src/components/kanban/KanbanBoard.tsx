@@ -11,7 +11,7 @@ interface KanbanBoardProps {
   members: ProjectMember[];
   onStatusChange: (taskId: number, col: DesignColumn) => void;
   onUpdate: (task: Task) => void;
-  onAddTask?: () => void;
+  onAddTask?: (col: DesignColumn) => void;
   accent: string;
   compact: boolean;
   colWidth: number;

@@ -1,6 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { Theme } from '@/theme/theme';
+import { improveText, type ImproveResponse } from '@/api/ai';
 
 // ─── Block types ─────────────────────────────────────────────────────────────
 
@@ -69,9 +70,10 @@ interface BlockEditorProps {
   accent?: string;
   theme?: Theme;
   readonly?: boolean;
+  onAiResult?: (result: ImproveResponse) => void;
 }
 
-export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readonly }: BlockEditorProps) {
+export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readonly, onAiResult }: BlockEditorProps) {
   const [blocks, setBlocks] = useState<Block[]>(() => textToBlocks(value));
   const [slashMenu, setSlashMenu] = useState<{ blockId: string; filter: string; y: number; x: number } | null>(null);
 
@@ -83,7 +85,27 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
   }, [value]);
 
   const [menuIdx, setMenuIdx] = useState(0);
+  const [aiLoading, setAiLoading] = useState(false);
   const refs = useRef<Record<string, any>>({});
+
+  async function handleAiImprove() {
+    const text = blocksToText(blocks).trim();
+    if (!text || aiLoading) return;
+    setAiLoading(true);
+    try {
+      const result = await improveText(text);
+      if (result.description) {
+        const next = textToBlocks(result.description);
+        setBlocks(next);
+        onChange(blocksToText(next));
+      }
+      onAiResult?.(result);
+    } catch {
+      // silently ignore — user sees no change
+    } finally {
+      setAiLoading(false);
+    }
+  }
 
   useEffect(() => {
     if (slashMenu) {
@@ -159,8 +181,24 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      const continueType = ['bullet','numbered','todo'].includes(block.type) && block.text ? block.type as BlockType : 'paragraph';
-      insertAfter(block.id, continueType);
+      const ta = e.currentTarget;
+      const pos = ta.selectionStart ?? block.text.length;
+      const before = block.text.slice(0, pos);
+      const after  = block.text.slice(pos);
+      const continueType: BlockType =
+        ['bullet','numbered','todo'].includes(block.type) && block.text
+          ? block.type as BlockType
+          : 'paragraph';
+      const nb = makeBlock(continueType, after);
+      const idx2 = blocks.findIndex(b => b.id === block.id);
+      const next = [...blocks];
+      next[idx2] = { ...block, text: before };
+      next.splice(idx2 + 1, 0, nb);
+      commit(next);
+      setTimeout(() => {
+        const el = refs.current[nb.id];
+        if (el) { el.focus(); el.setSelectionRange(0, 0); autoGrow(el); }
+      }, 20);
       return;
     }
     if (e.key === 'Backspace' && !block.text) {
@@ -274,7 +312,7 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
         <textarea
           ref={el => { refs.current[block.id] = el; if (el) autoGrow(el); }}
           value={block.text}
-          placeholder={block.type === 'paragraph' && !readonly ? "Type '/' for commands…" : ''}
+          placeholder={block.type === 'paragraph' && !readonly && idx === 0 ? "Type '/' for commands…" : ''}
           rows={1}
           readOnly={readonly}
           onChange={e => handleChange(e, block)}
@@ -287,6 +325,30 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
 
   return (
     <div style={{ position: 'relative' }}>
+      {!readonly && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+          <button
+            onClick={handleAiImprove}
+            disabled={aiLoading}
+            title="Improve with AI"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '4px 10px', borderRadius: 7, border: `1px solid ${accent}44`,
+              background: aiLoading ? accent + '12' : accent + '0e',
+              color: accent, fontSize: 11.5, fontWeight: 600,
+              cursor: aiLoading ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit', transition: 'background 0.12s',
+            }}
+            onMouseEnter={e => { if (!aiLoading) (e.currentTarget.style.background = accent + '22'); }}
+            onMouseLeave={e => { (e.currentTarget.style.background = aiLoading ? accent + '12' : accent + '0e'); }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill={accent} stroke="none">
+              <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+            </svg>
+            {aiLoading ? 'Improving…' : 'AI Writer'}
+          </button>
+        </div>
+      )}
       <div
         style={{
           border: `1px solid ${bord}`, borderRadius: 10,

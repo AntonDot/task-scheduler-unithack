@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react';
 import type { Theme } from '@/theme/theme';
 import type { AppView } from './Sidebar';
 import { Avatar } from '@/components/kanban/Avatar';
@@ -16,6 +17,12 @@ interface HeaderProps {
   members: ProjectMember[];
 }
 
+const NOTIF_ITEMS = [
+  { id: 1, title: 'New task assigned to you', body: 'Review design mockups — Maria assigned you', time: '5m ago', unread: true },
+  { id: 2, title: 'Comment on your task',      body: '"Looks good, but needs copy changes"',    time: '1h ago', unread: true },
+  { id: 3, title: 'Deadline reminder',          body: 'Google Ads campaign is due tomorrow',      time: '3h ago', unread: false },
+];
+
 export function Header({ view, search, setSearch, onAddTask, accent, theme, darkMode, onToggleDark, members }: HeaderProps) {
   const th = theme;
   const titles: Record<AppView, string> = {
@@ -23,19 +30,45 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
     team: 'Team', settings: 'Settings',
   };
 
-  const iconBtn: React.CSSProperties = {
-    background: 'none', border: 'none', cursor: 'pointer',
-    color: th.textSecondary, padding: '6px 8px', borderRadius: 7,
-    display: 'flex', transition: 'color 0.12s, background 0.12s',
-  };
+  const [darkHover, setDarkHover] = useState(false);
+  const [bellOpen, setBellOpen]   = useState(false);
+  const [notifs, setNotifs]       = useState(NOTIF_ITEMS);
+  const bellRef = useRef<HTMLButtonElement>(null);
+  const dropRef = useRef<HTMLDivElement>(null);
 
-  // Show only up to 3 online members in header
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!bellOpen) return;
+    function handler(e: MouseEvent) {
+      if (
+        bellRef.current && !bellRef.current.contains(e.target as Node) &&
+        dropRef.current && !dropRef.current.contains(e.target as Node)
+      ) {
+        setBellOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [bellOpen]);
+
+  const unreadCount = notifs.filter(n => n.unread).length;
   const onlineMembers = members.slice(0, 4);
+
+  function iconBtn(hovered: boolean): React.CSSProperties {
+    return {
+      background: hovered ? th.columnBg : 'none',
+      border: 'none', cursor: 'pointer',
+      color: hovered ? th.text : th.textSecondary,
+      padding: '6px 8px', borderRadius: 7,
+      display: 'flex', transition: 'color 0.12s, background 0.12s',
+    };
+  }
 
   return (
     <div style={{
       height: 56, background: th.surface, borderBottom: `1px solid ${th.border}`,
       display: 'flex', alignItems: 'center', padding: '0 20px', gap: 14, flexShrink: 0,
+      position: 'relative',
     }}>
       <h1 style={{ fontSize: 15, fontWeight: 700, color: th.text, whiteSpace: 'nowrap' }}>
         {titles[view] || 'Board'}
@@ -78,26 +111,77 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
         </div>
       )}
 
-      {/* Dark mode toggle */}
-      <button onClick={onToggleDark} title={darkMode ? 'Light mode' : 'Dark mode'} style={iconBtn}
-        onMouseEnter={e => { e.currentTarget.style.color = th.text; e.currentTarget.style.background = th.columnBg; }}
-        onMouseLeave={e => { e.currentTarget.style.color = th.textSecondary; e.currentTarget.style.background = 'none'; }}
+      {/* Dark mode toggle — uses React state so bg resets correctly on theme change */}
+      <button
+        ref={undefined}
+        onClick={onToggleDark}
+        title={darkMode ? 'Light mode' : 'Dark mode'}
+        style={iconBtn(darkHover)}
+        onMouseEnter={() => setDarkHover(true)}
+        onMouseLeave={() => setDarkHover(false)}
       >
         {darkMode ? <IcoSun size={18} /> : <IcoMoon size={18} />}
       </button>
 
       {/* Bell */}
-      <button style={{ ...iconBtn, position: 'relative' }}
-        onMouseEnter={e => { e.currentTarget.style.color = th.text; e.currentTarget.style.background = th.columnBg; }}
-        onMouseLeave={e => { e.currentTarget.style.color = th.textSecondary; e.currentTarget.style.background = 'none'; }}
-      >
-        <IcoBell size={18} />
-        <div style={{
-          position: 'absolute', top: 5, right: 5,
-          width: 7, height: 7, borderRadius: '50%', background: '#EF4444',
-          border: `2px solid ${th.surface}`,
-        }} />
-      </button>
+      <div style={{ position: 'relative' }}>
+        <button
+          ref={bellRef}
+          onClick={() => { setBellOpen(o => !o); setNotifs(ns => ns.map(n => ({ ...n, unread: false }))); }}
+          style={{ ...iconBtn(bellOpen), position: 'relative' }}
+        >
+          <IcoBell size={18} />
+          {unreadCount > 0 && (
+            <div style={{
+              position: 'absolute', top: 4, right: 4,
+              width: 8, height: 8, borderRadius: '50%', background: '#EF4444',
+              border: `2px solid ${th.surface}`,
+            }} />
+          )}
+        </button>
+
+        {/* Notification dropdown */}
+        {bellOpen && (
+          <div ref={dropRef} style={{
+            position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+            width: 320, background: th.surface,
+            border: `1px solid ${th.border}`, borderRadius: 14,
+            boxShadow: '0 12px 40px rgba(0,0,0,0.14)',
+            zIndex: 200, overflow: 'hidden',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px 10px', borderBottom: `1px solid ${th.border}` }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: th.text }}>Notifications</span>
+              <button onClick={() => setNotifs(ns => ns.map(n => ({ ...n, unread: false })))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, color: accent, fontWeight: 600, fontFamily: 'inherit' }}>
+                Mark all read
+              </button>
+            </div>
+            {notifs.length === 0 ? (
+              <div style={{ padding: '32px 16px', textAlign: 'center', color: th.textMuted, fontSize: 13 }}>
+                No notifications
+              </div>
+            ) : (
+              notifs.map(n => (
+                <div key={n.id} style={{
+                  padding: '12px 16px', borderBottom: `1px solid ${th.border}`,
+                  background: n.unread ? accent + '08' : 'transparent',
+                  display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer',
+                  transition: 'background 0.1s',
+                }}>
+                  <div style={{
+                    width: 8, height: 8, borderRadius: '50%', background: n.unread ? accent : 'transparent',
+                    flexShrink: 0, marginTop: 5,
+                  }} />
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 12.5, fontWeight: 600, color: th.text, margin: 0, marginBottom: 2 }}>{n.title}</p>
+                    <p style={{ fontSize: 11.5, color: th.textSecondary, margin: 0, lineHeight: 1.4 }}>{n.body}</p>
+                    <p style={{ fontSize: 10.5, color: th.textMuted, margin: 0, marginTop: 4 }}>{n.time}</p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+      </div>
 
       {/* New task */}
       <button onClick={onAddTask} style={{

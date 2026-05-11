@@ -14,6 +14,7 @@ import type { Comment } from '@/api/comments';
 import type { AuditLog } from '@/api/audit';
 import type { TaskStatus } from '@/types/domain';
 import { useAuthStore } from '@/store/authStore';
+import { fetchAttachments, uploadAttachment, deleteAttachment, getDownloadUrl, type Attachment } from '@/api/attachments';
 
 interface TaskDrawerProps {
   task: Task | null;
@@ -28,6 +29,7 @@ interface TaskDrawerProps {
 export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor, theme }: TaskDrawerProps) {
   const [localTask, setLocalTask] = useState<Task | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openTaskIdRef = useRef<number | null>(null);
   const acc = accentColor;
   const th  = theme;
   const { user, projectRoles } = useAuthStore();
@@ -39,15 +41,23 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   const [sendingComment, setSendingComment] = useState(false);
   const activityEndRef = useRef<HTMLDivElement>(null);
 
+  // Attachment state
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     if (task) setLocalTask(task);
   }, [task]);
 
   useEffect(() => {
     if (!task || !open) return;
-    fetchTask(task.id).then(t => setLocalTask(t)).catch(() => {});
-    fetchComments(task.id).then(setComments).catch(() => {});
-    fetchAuditLogs(task.id).then(setAuditLogs).catch(() => {});
+    const id = task.id;
+    openTaskIdRef.current = id;
+    fetchTask(id).then(t   => { if (openTaskIdRef.current === id) setLocalTask(t); }).catch(() => {});
+    fetchComments(id).then(cs => { if (openTaskIdRef.current === id) setComments(cs); }).catch(() => {});
+    fetchAuditLogs(id).then(ls => { if (openTaskIdRef.current === id) setAuditLogs(ls); }).catch(() => {});
+    fetchAttachments(id).then(as => { if (openTaskIdRef.current === id) setAttachments(as); }).catch(() => {});
   }, [task?.id, open]);
 
   if (!task) return null;
@@ -89,6 +99,35 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
       });
     }, 1000);
     setLocalTask(prev => prev ? { ...prev, description: text } : prev);
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !display) return;
+    e.target.value = '';
+    setUploadingFile(true);
+    try {
+      const att = await uploadAttachment(display.id, file);
+      setAttachments(prev => [...prev, att]);
+    } catch {}
+    finally { setUploadingFile(false); }
+  }
+
+  async function handleDeleteAttachment(attId: number) {
+    await deleteAttachment(attId).catch(() => {});
+    setAttachments(prev => prev.filter(a => a.id !== attId));
+  }
+
+  function handleAiResult(result: { title: string; description: string; urgency: string }) {
+    if (readonly) return;
+    const updates: { description?: string; urgency?: string } = {};
+    if (result.description) updates.description = result.description;
+    if (result.urgency) updates.urgency = result.urgency;
+    if (Object.keys(updates).length === 0) return;
+    updateTask(display.id, updates).then(updated => {
+      setLocalTask(updated);
+      onUpdate(updated);
+    });
   }
 
   function handleDeadlineChange(val: string) {
@@ -155,7 +194,9 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
 
   const timeline: ActivityItem[] = [
     ...comments.map(c => ({ kind: 'comment' as const, ts: new Date(c.created_at).getTime(), data: c })),
-    ...auditLogs.map(l => ({ kind: 'log' as const, ts: new Date(l.created_at).getTime(), data: l })),
+    ...auditLogs
+      .filter(l => l.action !== 'comment_added' && l.action !== 'attachment_added')
+      .map(l => ({ kind: 'log' as const, ts: new Date(l.created_at).getTime(), data: l })),
   ].sort((a, b) => a.ts - b.ts);
 
   function fmtTime(iso: string) {
@@ -322,10 +363,97 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
             <BlockEditor
               value={display.description || ''}
               onChange={handleDescriptionChange}
+              onAiResult={handleAiResult}
               accent={acc}
               theme={th}
               readonly={readonly}
             />
+          </div>
+
+          {/* Attachments */}
+          <div style={{ marginBottom: 24 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+                Attachments {attachments.length > 0 && `(${attachments.length})`}
+              </p>
+              {!readonly && (
+                <>
+                  <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={uploadingFile}
+                    style={{
+                      padding: '3px 10px', borderRadius: 6, border: `1px solid ${acc}44`,
+                      background: 'none', color: acc, fontSize: 11.5, fontWeight: 600,
+                      cursor: uploadingFile ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                    }}
+                  >
+                    {uploadingFile ? 'Uploading…' : '+ Attach'}
+                  </button>
+                </>
+              )}
+            </div>
+            {attachments.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {attachments.map(att => {
+                  const isImg = att.content_type.startsWith('image/');
+                  const sizeKb = Math.round(att.size_bytes / 1024);
+                  return (
+                    <div key={att.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '8px 10px', borderRadius: 9,
+                      border: `1px solid ${th.border}`, background: th.surface,
+                    }}>
+                      <div style={{
+                        width: 32, height: 32, borderRadius: 7, flexShrink: 0, overflow: 'hidden',
+                        background: th.columnBg, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 11, fontWeight: 700, color: th.textMuted,
+                      }}>
+                        {isImg
+                          ? <img src={getDownloadUrl(att.id) + `?token=${localStorage.getItem('token') ?? ''}`}
+                              alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : att.filename.split('.').pop()?.toUpperCase().slice(0, 3) ?? 'FILE'
+                        }
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 12.5, fontWeight: 600, color: th.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {att.filename}
+                        </p>
+                        <p style={{ fontSize: 11, color: th.textMuted, margin: 0 }}>
+                          {sizeKb < 1024 ? `${sizeKb} KB` : `${(sizeKb / 1024).toFixed(1)} MB`}
+                        </p>
+                      </div>
+                      <a
+                        href={getDownloadUrl(att.id)}
+                        download={att.filename}
+                        style={{ color: acc, fontSize: 11.5, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}
+                      >
+                        ↓
+                      </a>
+                      {!readonly && (
+                        <button onClick={() => handleDeleteAttachment(att.id)} style={{
+                          background: 'none', border: 'none', cursor: 'pointer',
+                          color: th.textMuted, padding: 2, flexShrink: 0, display: 'flex',
+                        }}>
+                          <IcoX size={13} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {attachments.length === 0 && !readonly && (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  padding: '14px', borderRadius: 9, border: `1.5px dashed ${th.border}`,
+                  textAlign: 'center', cursor: 'pointer', color: th.textMuted, fontSize: 12.5,
+                }}
+              >
+                Drop files or click "+ Attach"
+              </div>
+            )}
           </div>
 
           {/* Activity */}

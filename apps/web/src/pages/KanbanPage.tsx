@@ -48,6 +48,7 @@ function DesktopKanbanPage() {
   const [activeProjectId,  setActiveProjectId]  = useState<number | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showCreate,       setShowCreate]       = useState(false);
+  const [createColumn,     setCreateColumn]     = useState<DesignColumn>('backlog');
   const [search,           setSearch]           = useState('');
   const [syncing,          setSyncing]          = useState(false);
   const [compact]          = useState(false);
@@ -171,7 +172,7 @@ function DesktopKanbanPage() {
               members={members}
               onStatusChange={handleStatusChange}
               onUpdate={handleUpdate}
-              onAddTask={() => setShowCreate(true)}
+              onAddTask={col => { setCreateColumn(col); setShowCreate(true); }}
               accent={accent}
               compact={compact}
               colWidth={colWidth}
@@ -201,6 +202,7 @@ function DesktopKanbanPage() {
           project={activeProject}
           accentColor={accent}
           theme={theme}
+          initialColumn={createColumn}
         />
       )}
 

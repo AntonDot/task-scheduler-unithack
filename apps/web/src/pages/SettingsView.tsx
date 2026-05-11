@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Theme } from '@/theme/theme';
-import { Avatar } from '@/components/kanban/Avatar';
+import { Avatar, setAvatarUrl } from '@/components/kanban/Avatar';
 import { useAuthStore } from '@/store/authStore';
 import { updateProfile } from '@/api/auth';
 
@@ -64,6 +64,21 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
   const [editEmail, setEditEmail] = useState('');
   const [editError, setEditError] = useState('');
   const [editSaving, setEditSaving] = useState(false);
+  const [avatarKey, setAvatarKey] = useState(0);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+
+  function handleAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      setAvatarUrl(user.id, dataUrl);
+      setAvatarKey(k => k + 1);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
 
   // Persist notification settings to localStorage whenever they change
   useEffect(() => {
@@ -132,10 +147,27 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
       {/* Profile */}
       <Section title="Profile">
         <div style={{ display: 'flex', alignItems: 'center', gap: 24, padding: '24px', background: th.surface, border: `1px solid ${th.border}`, borderRadius: 18, marginBottom: 18 }}>
-          <Avatar user={{ full_name: user?.full_name ?? '?', id: user?.id ?? 0 }} size={78} />
+          <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => avatarInputRef.current?.click()} title="Change photo">
+            <input ref={avatarInputRef} type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} />
+            <Avatar key={avatarKey} user={{ full_name: user?.full_name ?? '?', id: user?.id ?? 0 }} size={78} />
+            <div style={{
+              position: 'absolute', inset: 0, borderRadius: '50%',
+              background: 'rgba(0,0,0,0.35)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              opacity: 0, transition: 'opacity 0.15s',
+            }}
+              onMouseEnter={e => (e.currentTarget.style.opacity = '1')}
+              onMouseLeave={e => (e.currentTarget.style.opacity = '0')}
+            >
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                <circle cx="12" cy="13" r="4"/>
+              </svg>
+            </div>
+          </div>
           <div style={{ flex: 1 }}>
             <p style={{ fontSize: 22, fontWeight: 700, color: th.text, margin: 0 }}>{user?.full_name ?? '—'}</p>
             <p style={{ fontSize: 18, color: th.textSecondary, margin: 0 }}>{user?.email ?? '—'}</p>
+            <p style={{ fontSize: 13, color: th.textMuted, marginTop: 4, margin: 0 }}>Click photo to change</p>
           </div>
           <button onClick={openEdit} style={{ padding: '10px 20px', borderRadius: 12, border: `1px solid ${th.border}`, background: 'none', fontSize: 19, fontWeight: 500, color: th.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
             Edit profile

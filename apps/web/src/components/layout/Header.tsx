@@ -4,6 +4,23 @@ import type { AppView } from './Sidebar';
 import { Avatar } from '@/components/kanban/Avatar';
 import { IcoSearch, IcoBell, IcoMoon, IcoSun, IcoPlus } from '@/components/ui/Icons';
 import type { ProjectMember } from '@/api/members';
+import { fetchNotifications, type NotificationItem } from '@/api/notifications';
+
+const NOTIF_SETTINGS_KEY = 'vt_notif_settings';
+
+function loadNotifPrefs(): Record<string, boolean> {
+  try { return JSON.parse(localStorage.getItem(NOTIF_SETTINGS_KEY) ?? '{}'); } catch { return {}; }
+}
+
+function timeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'только что';
+  if (m < 60) return `${m}м назад`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}ч назад`;
+  return `${Math.floor(h / 24)}д назад`;
+}
 
 interface HeaderProps {
   view: AppView;
@@ -15,15 +32,10 @@ interface HeaderProps {
   darkMode: boolean;
   onToggleDark: () => void;
   members: ProjectMember[];
+  onOpenTask?: (taskId: number, section?: 'comments' | 'description') => void;
 }
 
-const NOTIF_ITEMS = [
-  { id: 1, title: 'New task assigned to you', body: 'Review design mockups — Maria assigned you', time: '5m ago', unread: true },
-  { id: 2, title: 'Comment on your task',      body: '"Looks good, but needs copy changes"',    time: '1h ago', unread: true },
-  { id: 3, title: 'Deadline reminder',          body: 'Google Ads campaign is due tomorrow',      time: '3h ago', unread: false },
-];
-
-export function Header({ view, search, setSearch, onAddTask, accent, theme, darkMode, onToggleDark, members }: HeaderProps) {
+export function Header({ view, search, setSearch, onAddTask, accent, theme, darkMode, onToggleDark, members, onOpenTask }: HeaderProps) {
   const th = theme;
   const titles: Record<AppView, string> = {
     kanban: 'Board', automations: 'Automations', analytics: 'Analytics',
@@ -31,10 +43,29 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
   };
 
   const [darkHover, setDarkHover] = useState(false);
-  const [bellOpen, setBellOpen]   = useState(false);
-  const [notifs, setNotifs]       = useState(NOTIF_ITEMS);
+  const [bellOpen,  setBellOpen]  = useState(false);
+  const [allNotifs,   setAllNotifs]   = useState<NotificationItem[]>([]);
+  const [readIds,     setReadIds]     = useState<Set<string>>(new Set());
   const bellRef = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
+
+  // Fetch real notifications
+  useEffect(() => {
+    fetchNotifications().then(setAllNotifs).catch(() => {});
+    const id = setInterval(() => fetchNotifications().then(setAllNotifs).catch(() => {}), 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  // Filter by user's notification preferences
+  const prefs = loadNotifPrefs();
+  const defaultEnabled: Record<string, boolean> = {
+    task_assigned: true, comment: true, deadline: true,
+    mention: true, status_change: false, weekly: false,
+  };
+  const notifs = allNotifs.filter(n => {
+    const enabled = prefs[n.type] ?? defaultEnabled[n.type] ?? true;
+    return enabled;
+  });
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -51,7 +82,7 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
     return () => document.removeEventListener('mousedown', handler);
   }, [bellOpen]);
 
-  const unreadCount = notifs.filter(n => n.unread).length;
+  const unreadCount = notifs.filter(n => !readIds.has(n.id)).length;
   const onlineMembers = members.slice(0, 4);
 
   function iconBtn(hovered: boolean): React.CSSProperties {
@@ -127,7 +158,7 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
       <div style={{ position: 'relative' }}>
         <button
           ref={bellRef}
-          onClick={() => { setBellOpen(o => !o); setNotifs(ns => ns.map(n => ({ ...n, unread: false }))); }}
+          onClick={() => { setBellOpen(o => !o); setReadIds(new Set(notifs.map(n => n.id))); }}
           style={{ ...iconBtn(bellOpen), position: 'relative' }}
         >
           <IcoBell size={18} />
@@ -144,41 +175,58 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
         {bellOpen && (
           <div ref={dropRef} style={{
             position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-            width: 320, background: th.surface,
+            width: 340, background: th.surface,
             border: `1px solid ${th.border}`, borderRadius: 14,
             boxShadow: '0 12px 40px rgba(0,0,0,0.14)',
-            zIndex: 200, overflow: 'hidden',
+            zIndex: 200, overflow: 'hidden', maxHeight: 440, display: 'flex', flexDirection: 'column',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px 10px', borderBottom: `1px solid ${th.border}` }}>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: th.text }}>Notifications</span>
-              <button onClick={() => setNotifs(ns => ns.map(n => ({ ...n, unread: false })))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, color: accent, fontWeight: 600, fontFamily: 'inherit' }}>
-                Mark all read
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px 10px', borderBottom: `1px solid ${th.border}`, flexShrink: 0 }}>
+              <span style={{ fontSize: 13.5, fontWeight: 700, color: th.text }}>Уведомления</span>
+              <button onClick={() => setReadIds(new Set(notifs.map(n => n.id)))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, color: accent, fontWeight: 600, fontFamily: 'inherit' }}>
+                Прочитать все
               </button>
             </div>
-            {notifs.length === 0 ? (
-              <div style={{ padding: '32px 16px', textAlign: 'center', color: th.textMuted, fontSize: 13 }}>
-                No notifications
-              </div>
-            ) : (
-              notifs.map(n => (
-                <div key={n.id} style={{
-                  padding: '12px 16px', borderBottom: `1px solid ${th.border}`,
-                  background: n.unread ? accent + '08' : 'transparent',
-                  display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer',
-                  transition: 'background 0.1s',
-                }}>
-                  <div style={{
-                    width: 8, height: 8, borderRadius: '50%', background: n.unread ? accent : 'transparent',
-                    flexShrink: 0, marginTop: 5,
-                  }} />
-                  <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 12.5, fontWeight: 600, color: th.text, margin: 0, marginBottom: 2 }}>{n.title}</p>
-                    <p style={{ fontSize: 11.5, color: th.textSecondary, margin: 0, lineHeight: 1.4 }}>{n.body}</p>
-                    <p style={{ fontSize: 10.5, color: th.textMuted, margin: 0, marginTop: 4 }}>{n.time}</p>
-                  </div>
+            <div style={{ overflowY: 'auto', flex: 1 }}>
+              {notifs.length === 0 ? (
+                <div style={{ padding: '32px 16px', textAlign: 'center', color: th.textMuted, fontSize: 13 }}>
+                  Нет уведомлений
                 </div>
-              ))
-            )}
+              ) : (
+                notifs.map(n => {
+                  const unread = !readIds.has(n.id);
+                  const section = (n.type === 'comment' || n.type === 'mention') ? 'comments' : undefined;
+                  return (
+                    <div
+                      key={n.id}
+                      onClick={() => {
+                        setBellOpen(false);
+                        setReadIds(prev => new Set([...prev, n.id]));
+                        onOpenTask?.(n.task_id, section);
+                      }}
+                      style={{
+                        padding: '11px 16px', borderBottom: `1px solid ${th.border}`,
+                        background: unread ? accent + '08' : 'transparent',
+                        display: 'flex', gap: 10, alignItems: 'flex-start', cursor: 'pointer',
+                        transition: 'background 0.1s',
+                      }}
+                      onMouseEnter={e => { (e.currentTarget.style.background = accent + '12'); }}
+                      onMouseLeave={e => { (e.currentTarget.style.background = unread ? accent + '08' : 'transparent'); }}
+                    >
+                      <div style={{
+                        width: 7, height: 7, borderRadius: '50%',
+                        background: unread ? accent : 'transparent',
+                        flexShrink: 0, marginTop: 6,
+                      }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 12.5, fontWeight: 600, color: th.text, margin: 0, marginBottom: 2 }}>{n.title}</p>
+                        <p style={{ fontSize: 11.5, color: th.textSecondary, margin: 0, lineHeight: 1.4 }}>{n.body}</p>
+                        <p style={{ fontSize: 10.5, color: th.textMuted, margin: 0, marginTop: 3 }}>{timeAgo(n.created_at)}</p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
           </div>
         )}
       </div>

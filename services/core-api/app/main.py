@@ -2,6 +2,7 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.v1.ai import router as ai_router
+from app.api.v1.notifications import router as notifications_router
 from app.api.v1.attachments import router as attachments_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
@@ -23,6 +24,7 @@ app.add_middleware(
 )
 
 app.include_router(ai_router)
+app.include_router(notifications_router)
 app.include_router(attachments_router)
 app.include_router(audit_router)
 app.include_router(auth_router)

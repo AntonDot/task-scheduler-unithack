@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Task } from '@/types/domain';
 import type { Theme, DesignColumn } from '@/theme/theme';
 import { COLUMNS_DEF, statusToColumn } from '@/theme/theme';
@@ -16,15 +16,32 @@ interface KanbanBoardProps {
   compact: boolean;
   colWidth: number;
   theme: Theme;
+  openTaskId?: number | null;
+  openTaskSection?: 'comments' | 'description';
+  onTaskOpened?: () => void;
 }
 
 export function KanbanBoard({
   tasks, members, onStatusChange, onUpdate, onAddTask,
   accent, compact, colWidth, theme,
+  openTaskId, openTaskSection, onTaskOpened,
 }: KanbanBoardProps) {
   const [dragOverCol, setDragOverCol] = useState<DesignColumn | null>(null);
   const [selTask, setSelTask] = useState<Task | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [drawerSection, setDrawerSection] = useState<'comments' | 'description' | undefined>(undefined);
+
+  useEffect(() => {
+    if (openTaskId != null) {
+      const task = tasks.find(t => t.id === openTaskId);
+      if (task) {
+        setSelTask(task);
+        setDrawerSection(openTaskSection);
+        setDrawerOpen(true);
+        onTaskOpened?.();
+      }
+    }
+  }, [openTaskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleDrop(e: React.DragEvent, targetCol: DesignColumn) {
     const taskId = parseInt(e.dataTransfer.getData('taskId'), 10);
@@ -35,6 +52,7 @@ export function KanbanBoard({
 
   function handleTaskClick(task: Task) {
     setSelTask(task);
+    setDrawerSection(undefined);
     setDrawerOpen(true);
   }
 
@@ -72,11 +90,12 @@ export function KanbanBoard({
       <TaskDrawer
         task={selTask}
         open={drawerOpen}
-        onClose={() => setDrawerOpen(false)}
+        onClose={() => { setDrawerOpen(false); setDrawerSection(undefined); }}
         onUpdate={handleTaskUpdate}
         members={members}
         accentColor={accent}
         theme={theme}
+        scrollToSection={drawerSection}
       />
     </>
   );

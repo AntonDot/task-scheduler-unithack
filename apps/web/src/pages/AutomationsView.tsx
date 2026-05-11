@@ -1,7 +1,17 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Theme } from '@/theme/theme';
 import { IcoChevronR } from '@/components/ui/Icons';
 import { runReviewScraper, type ReviewScrapeResult } from '@/api/automations';
+
+const RUNS_KEY = 'vt_scraper_runs';
+const LOG_KEY  = 'vt_scraper_log';
+
+function loadRuns(): number {
+  try { return parseInt(localStorage.getItem(RUNS_KEY) ?? '0', 10) || 0; } catch { return 0; }
+}
+function loadLog(): ReviewScrapeResult | null {
+  try { const r = localStorage.getItem(LOG_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
+}
 
 interface AutomationsViewProps { accent: string; theme: Theme; }
 
@@ -9,10 +19,13 @@ export function AutomationsView({ accent, theme }: AutomationsViewProps) {
   const th = theme;
 
   const [scraperActive, setScraperActive] = useState(true);
-  const [scraperRuns, setScraperRuns]   = useState(0);
+  const [scraperRuns, setScraperRuns]   = useState<number>(loadRuns);
   const [scraperRunning, setScraperRunning] = useState(false);
-  const [scraperLog, setScraperLog]     = useState<ReviewScrapeResult | null>(null);
+  const [scraperLog, setScraperLog]     = useState<ReviewScrapeResult | null>(loadLog);
   const [showLog, setShowLog]           = useState(false);
+
+  useEffect(() => { localStorage.setItem(RUNS_KEY, String(scraperRuns)); }, [scraperRuns]);
+  useEffect(() => { if (scraperLog) localStorage.setItem(LOG_KEY, JSON.stringify(scraperLog)); }, [scraperLog]);
 
   async function handleRunScraper() {
     if (scraperRunning) return;

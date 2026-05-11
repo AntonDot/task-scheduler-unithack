@@ -7,18 +7,52 @@ from app.schemas.webhook import ParsedTask
 
 logger = logging.getLogger(__name__)
 
+MOCK_DESCRIPTION_TEMPLATE = """\
+## Описание
+
+Задача автоматически создана на основе входящего обращения.
+
+## Что нужно сделать
+
+- [ ] Изучить суть проблемы
+- [ ] Связаться с автором обращения
+- [ ] Предложить решение
+
+## Контекст
+
+> Требуется ревью менеджера перед исполнением.
+
+## Шаги
+
+1. Прочитать исходное сообщение
+2. Определить приоритет и ответственного
+3. Взять в работу
+"""
+
 MOCK_RESPONSE = ParsedTask(
     title="Задача из входящего сообщения",
-    description="Автоматически распознанная задача. Требуется ревью менеджера.",
+    description=MOCK_DESCRIPTION_TEMPLATE,
     urgency="MEDIUM",
 )
 
-SYSTEM_PROMPT = (
-    "Parse the following text into a task. "
-    "Return JSON with fields: title (short, under 100 chars), "
-    "description (full text), urgency (LOW/MEDIUM/HIGH/URGENT), "
-    "and deadline (ISO-8601 format, or null if missing)."
-)
+SYSTEM_PROMPT = """\
+Ты — ассистент по управлению задачами компании Victory Group. \
+Преобразуй входящий текст в структурированную задачу.
+
+Отвечай СТРОГО в формате JSON (без markdown-оборачивания), поля:
+- "title": краткий заголовок на русском языке, до 80 символов
+- "description": подробное описание на русском языке в формате Markdown. \
+Обязательно используй структуру: заголовки (## Раздел), \
+bullet-списки (- пункт), нумерованные списки (1. пункт), \
+todo-чекбоксы (- [ ] задача), цитаты (> важное). Минимум 3 раздела.
+- "urgency": одно из LOW / MEDIUM / HIGH / URGENT
+- "deadline": дата ISO-8601 или null
+
+Пример ответа:
+{"title":"Исправить ошибку оплаты","description":"## Проблема\\n\\n> Пользователь не может оплатить заказ.\\n\\n## Шаги воспроизведения\\n\\n1. Перейти в корзину\\n2. Нажать «Оплатить»\\n\\n## Что нужно сделать\\n\\n- [ ] Воспроизвести баг\\n- [ ] Найти причину\\n- [ ] Задеплоить фикс","urgency":"HIGH","deadline":null}
+
+Отвечай только JSON без каких-либо пояснений.\
+"""
 
 
 def try_repair_json(raw: str) -> str:
@@ -91,13 +125,25 @@ async def _call_anthropic(text: str) -> str:
 
 async def parse_task(text: str) -> ParsedTask:
     if settings.use_mock_llm:
-        logger.info("Using mock LLM — returning stub ParsedTask")
+        logger.info("Using mock LLM — returning structured stub ParsedTask")
         words = text.split()
-        title = " ".join(words[:8]) if len(words) > 3 else "Новая задача из входящего текста"
-        if len(title) > 100:
-            title = title[:97] + "..."
-        description = f"Задача создана на основе входящего обращения.\n\n{text}\n\nТребуется обработка и ответ."
-        urgency = "HIGH" if any(w in text.lower() for w in ["срочно", "кошмар", "ужас", "не работает"]) else "MEDIUM"
+        title = " ".join(words[:8]) if len(words) > 3 else "Новая задача"
+        if len(title) > 80:
+            title = title[:77] + "..."
+        urgency = "URGENT" if any(w in text.lower() for w in ["срочно", "критично", "кошмар", "ужас", "не работает"]) \
+                  else "HIGH" if any(w in text.lower() for w in ["важно", "проблема", "баг", "ошибка"]) \
+                  else "MEDIUM"
+        description = (
+            f"## Описание\n\n> {text[:200]}{'...' if len(text) > 200 else ''}\n\n"
+            "## Что нужно сделать\n\n"
+            "- [ ] Изучить суть обращения\n"
+            "- [ ] Определить ответственного\n"
+            "- [ ] Связаться с автором\n\n"
+            "## Критерии выполнения\n\n"
+            "1. Проблема устранена\n"
+            "2. Автор уведомлён о результате\n"
+            "3. Задача закрыта\n"
+        )
         return ParsedTask(title=title, description=description, urgency=urgency)
 
     # Choose API backend based on llm_base_url

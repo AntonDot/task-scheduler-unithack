@@ -24,15 +24,30 @@ interface TaskDrawerProps {
   members: ProjectMember[];
   accentColor: string;
   theme: Theme;
+  scrollToSection?: 'comments' | 'description';
 }
 
-export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor, theme }: TaskDrawerProps) {
+export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor, theme, scrollToSection }: TaskDrawerProps) {
   const [localTask, setLocalTask] = useState<Task | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openTaskIdRef = useRef<number | null>(null);
+  const currentTaskIdRef = useRef<number | null>(null);
   const acc = accentColor;
   const th  = theme;
   const { user, projectRoles } = useAuthStore();
+
+  // Scroll refs for notification deep-linking
+  const descriptionRef   = useRef<HTMLDivElement>(null);
+  const commentsRef      = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open || !scrollToSection) return;
+    const t = setTimeout(() => {
+      const target = scrollToSection === 'comments' ? commentsRef.current : descriptionRef.current;
+      target?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 350);
+    return () => clearTimeout(t);
+  }, [open, scrollToSection]);
 
   // Activity state
   const [comments,  setComments]  = useState<Comment[]>([]);
@@ -46,9 +61,20 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   const [uploadingFile, setUploadingFile] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Mention state
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIdx, setMentionIdx]     = useState(0);
+  const commentInputRef = useRef<HTMLTextAreaElement>(null);
+
   useEffect(() => {
+    // Cancel any in-flight description save for the previous task
+    if (saveTimer.current) {
+      clearTimeout(saveTimer.current);
+      saveTimer.current = null;
+    }
+    currentTaskIdRef.current = task?.id ?? null;
     if (task) setLocalTask(task);
-  }, [task]);
+  }, [task?.id]);
 
   useEffect(() => {
     if (!task || !open) return;
@@ -91,9 +117,12 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
 
   function handleDescriptionChange(text: string) {
     if (readonly) return;
+    const taskId = display.id;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(() => {
-      updateTask(display.id, { description: text }).then(updated => {
+      if (currentTaskIdRef.current !== taskId) return;
+      updateTask(taskId, { description: text }).then(updated => {
+        if (currentTaskIdRef.current !== taskId) return;
         setLocalTask(updated);
         onUpdate(updated);
       });
@@ -356,7 +385,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
           </div>
 
           {/* Description */}
-          <div style={{ marginBottom: 24 }}>
+          <div ref={descriptionRef} style={{ marginBottom: 24 }}>
             <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
               Description
             </p>
@@ -367,6 +396,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
               accent={acc}
               theme={th}
               readonly={readonly}
+              members={members}
             />
           </div>
 
@@ -424,7 +454,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
                         </p>
                       </div>
                       <a
-                        href={getDownloadUrl(att.id)}
+                        href={`${getDownloadUrl(att.id)}?token=${localStorage.getItem('token') ?? ''}`}
                         download={att.filename}
                         style={{ color: acc, fontSize: 11.5, fontWeight: 600, textDecoration: 'none', flexShrink: 0 }}
                       >
@@ -457,7 +487,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
           </div>
 
           {/* Activity */}
-          <div>
+          <div ref={commentsRef}>
             <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 12 }}>
               Activity
             </p>
@@ -514,12 +544,88 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
             </div>
 
             {/* Comment input */}
+            <div style={{ position: 'relative' }}>
+              {mentionQuery !== null && (() => {
+                const filtered = members.filter(m =>
+                  m.full_name.toLowerCase().includes(mentionQuery.toLowerCase())
+                );
+                if (!filtered.length) return null;
+                return (
+                  <div style={{
+                    position: 'absolute', bottom: '100%', left: 0, right: 0,
+                    background: th.surface, border: `1px solid ${th.border}`,
+                    borderRadius: 10, boxShadow: '0 4px 20px rgba(0,0,0,0.12)',
+                    zIndex: 100, marginBottom: 4, overflow: 'hidden',
+                  }}>
+                    {filtered.slice(0, 5).map((m, i) => (
+                      <div
+                        key={m.id}
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          const ta = commentInputRef.current;
+                          if (!ta) return;
+                          const pos = ta.selectionStart ?? commentText.length;
+                          const atPos = commentText.lastIndexOf('@', pos - 1);
+                          const before = commentText.slice(0, atPos);
+                          const after  = commentText.slice(pos);
+                          setCommentText(before + `@${m.full_name} ` + after);
+                          setMentionQuery(null);
+                          setTimeout(() => { ta.focus(); ta.setSelectionRange(before.length + m.full_name.length + 2, before.length + m.full_name.length + 2); }, 10);
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '8px 12px', cursor: 'pointer',
+                          background: i === mentionIdx ? acc + '14' : 'transparent',
+                        }}
+                        onMouseEnter={() => setMentionIdx(i)}
+                      >
+                        <Avatar user={{ id: m.id, full_name: m.full_name }} size={22} />
+                        <span style={{ fontSize: 13, fontWeight: 600, color: th.text }}>{m.full_name}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
             <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
               <textarea
+                ref={commentInputRef}
                 value={commentText}
-                onChange={e => setCommentText(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendComment(); } }}
-                placeholder="Написать комментарий… (Enter — отправить)"
+                onChange={e => {
+                  const val = e.target.value;
+                  setCommentText(val);
+                  const pos = e.target.selectionStart ?? val.length;
+                  const atPos = val.lastIndexOf('@', pos - 1);
+                  if (atPos >= 0 && (atPos === 0 || val[atPos - 1] === ' ' || val[atPos - 1] === '\n')) {
+                    const query = val.slice(atPos + 1, pos);
+                    if (!query.includes(' ')) { setMentionQuery(query); setMentionIdx(0); return; }
+                  }
+                  setMentionQuery(null);
+                }}
+                onKeyDown={e => {
+                  if (mentionQuery !== null) {
+                    const filtered = members.filter(m => m.full_name.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 5);
+                    if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIdx(i => Math.min(i + 1, filtered.length - 1)); return; }
+                    if (e.key === 'ArrowUp')   { e.preventDefault(); setMentionIdx(i => Math.max(i - 1, 0)); return; }
+                    if (e.key === 'Enter' || e.key === 'Tab') {
+                      const m = filtered[mentionIdx];
+                      if (m) {
+                        e.preventDefault();
+                        const ta = commentInputRef.current;
+                        if (!ta) return;
+                        const pos = ta.selectionStart ?? commentText.length;
+                        const atPos = commentText.lastIndexOf('@', pos - 1);
+                        const before = commentText.slice(0, atPos);
+                        const after  = commentText.slice(pos);
+                        setCommentText(before + `@${m.full_name} ` + after);
+                        setMentionQuery(null);
+                        return;
+                      }
+                    }
+                    if (e.key === 'Escape') { setMentionQuery(null); return; }
+                  }
+                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendComment(); }
+                }}
+                placeholder="Написать комментарий… (@ для упоминания)"
                 rows={2}
                 style={{
                   flex: 1, padding: '8px 11px', borderRadius: 10,
@@ -548,6 +654,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
             </div>
           </div>
         </div>
+      </div>
       </div>
     </>
   );

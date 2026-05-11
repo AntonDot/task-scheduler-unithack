@@ -772,12 +772,22 @@ function CreateSheet({ open, onClose, onCreate, members, accent, th }: {
 
 // ─── Automations Mobile View ──────────────────────────────────────────────────
 
+const MBL_RUNS_KEY = 'vt_scraper_runs';
+const MBL_LOG_KEY  = 'vt_scraper_log';
+
 function AutomationsMobileView({ accent, th }: { accent: string; th: ReturnType<typeof useTheme>['theme'] }) {
   const [scraperActive, setScraperActive] = useState(true);
   const [scraperRunning, setScraperRunning] = useState(false);
-  const [scraperRuns, setScraperRuns] = useState(0);
-  const [scraperLog, setScraperLog] = useState<ReviewScrapeResult | null>(null);
+  const [scraperRuns, setScraperRuns] = useState<number>(() => {
+    try { return parseInt(localStorage.getItem(MBL_RUNS_KEY) ?? '0', 10) || 0; } catch { return 0; }
+  });
+  const [scraperLog, setScraperLog] = useState<ReviewScrapeResult | null>(() => {
+    try { const r = localStorage.getItem(MBL_LOG_KEY); return r ? JSON.parse(r) as ReviewScrapeResult : null; } catch { return null; }
+  });
   const [showLog, setShowLog] = useState(false);
+
+  useEffect(() => { localStorage.setItem(MBL_RUNS_KEY, String(scraperRuns)); }, [scraperRuns]);
+  useEffect(() => { if (scraperLog) localStorage.setItem(MBL_LOG_KEY, JSON.stringify(scraperLog)); }, [scraperLog]);
 
   async function handleRunScraper() {
     if (scraperRunning || !scraperActive) return;
@@ -917,7 +927,7 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
   accent: string; th: ReturnType<typeof useTheme>['theme'];
   isDark: boolean; onToggleDark: () => void; onSetAccent: (c: string) => void;
 }) {
-  const { user } = useAuthStore();
+  const { user, clearAuth } = useAuthStore();
   const [notifs, setNotifs] = useState({ task_assigned: true, comment: true, deadline: true, mention: true, status_change: false });
 
   function Row({ label, sub, right, danger = false }: { label: string; sub?: string; right?: React.ReactNode; danger?: boolean }) {
@@ -1008,7 +1018,16 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
         <Row label="Delete workspace" danger right={<span style={{ fontSize: 12, color: '#991B1B' }}>Delete</span>} />
       </Section>
 
-      <div style={{ textAlign: 'center', padding: '12px 0' }}>
+      <button onClick={clearAuth} style={{
+        width: '100%', padding: '15px', borderRadius: 14,
+        border: `1px solid #FECACA`, background: '#FEF2F2',
+        color: '#DC2626', fontSize: 15, fontWeight: 600,
+        cursor: 'pointer', fontFamily: 'inherit', marginBottom: 16,
+      }}>
+        Sign out
+      </button>
+
+      <div style={{ textAlign: 'center', padding: '4px 0 12px' }}>
         <p style={{ fontSize: 11.5, color: th.textMuted }}>Victory Task · PWA v1.0.0</p>
       </div>
     </div>

@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import type { Theme } from '@/theme/theme';
 import { improveText, type ImproveResponse } from '@/api/ai';
 
+type MentionState = { blockId: string; query: string; top: number; left: number; idx: number } | null;
+
 // ─── Block types ─────────────────────────────────────────────────────────────
 
 type BlockType = 'paragraph'|'h1'|'h2'|'h3'|'bullet'|'numbered'|'todo'|'quote'|'code'|'divider';
@@ -71,11 +73,22 @@ interface BlockEditorProps {
   theme?: Theme;
   readonly?: boolean;
   onAiResult?: (result: ImproveResponse) => void;
+  members?: { id: number; full_name: string }[];
 }
 
-export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readonly, onAiResult }: BlockEditorProps) {
+function getNumberedPosition(blocks: Block[], currentIdx: number): number {
+  let n = 1;
+  for (let i = currentIdx - 1; i >= 0; i--) {
+    if (blocks[i]?.type === 'numbered') n++;
+    else break;
+  }
+  return n;
+}
+
+export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readonly, onAiResult, members }: BlockEditorProps) {
   const [blocks, setBlocks] = useState<Block[]>(() => textToBlocks(value));
   const [slashMenu, setSlashMenu] = useState<{ blockId: string; filter: string; y: number; x: number } | null>(null);
+  const [mentionState, setMentionState] = useState<MentionState>(null);
 
   React.useEffect(() => {
     const currentText = blocksToText(blocks);
@@ -171,8 +184,40 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
     setTimeout(() => refs.current[blockId]?.focus(), 20);
   }
 
+  function insertMention(m: { id: number; full_name: string }, blockId: string) {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+    const ta = refs.current[blockId] as HTMLTextAreaElement | null;
+    const pos = ta?.selectionStart ?? block.text.length;
+    const atPos = block.text.lastIndexOf('@', pos - 1);
+    const before = block.text.slice(0, atPos);
+    const after  = block.text.slice(pos);
+    const newText = before + `@${m.full_name} ` + after;
+    upd(blockId, { text: newText });
+    setMentionState(null);
+    setTimeout(() => {
+      const el = refs.current[blockId] as HTMLTextAreaElement | null;
+      if (el) {
+        el.focus();
+        const newPos = before.length + m.full_name.length + 2;
+        el.setSelectionRange(newPos, newPos);
+        autoGrow(el);
+      }
+    }, 20);
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, block: Block) {
     if (readonly) return;
+    if (mentionState && members?.length) {
+      const filtered = members.filter(m => m.full_name.toLowerCase().includes(mentionState.query.toLowerCase())).slice(0, 5);
+      if (e.key === 'ArrowDown') { e.preventDefault(); setMentionState(s => s ? { ...s, idx: Math.min(s.idx + 1, filtered.length - 1) } : s); return; }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setMentionState(s => s ? { ...s, idx: Math.max(s.idx - 1, 0) } : s); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        const m = filtered[mentionState.idx];
+        if (m) { e.preventDefault(); insertMention(m, block.id); return; }
+      }
+      if (e.key === 'Escape') { setMentionState(null); return; }
+    }
     if (slashMenu && filteredCmds.length > 0) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setMenuIdx(i => Math.min(i+1, filteredCmds.length-1)); return; }
       if (e.key === 'ArrowUp')   { e.preventDefault(); setMenuIdx(i => Math.max(i-1, 0)); return; }
@@ -221,6 +266,23 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
     const text = e.target.value;
     autoGrow(e.target);
     upd(block.id, { text });
+
+    // @mention detection
+    if (members?.length) {
+      const pos = e.target.selectionStart ?? text.length;
+      const atPos = text.lastIndexOf('@', pos - 1);
+      if (atPos >= 0 && (atPos === 0 || /[\s\n]/.test(text[atPos - 1] ?? ''))) {
+        const query = text.slice(atPos + 1, pos);
+        if (!query.includes(' ') && !query.includes('\n')) {
+          const rect = e.target.getBoundingClientRect();
+          setMentionState({ blockId: block.id, query, top: rect.bottom + 4, left: rect.left + 8, idx: 0 });
+          setSlashMenu(null);
+          return;
+        }
+      }
+      setMentionState(null);
+    }
+
     const si = text.lastIndexOf('/');
     if (si >= 0 && (si === 0 || text[si-1] === ' ') && !text.slice(si).includes(' ')) {
       const rect = e.target.getBoundingClientRect();
@@ -286,7 +348,7 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
     const prefix = block.type === 'bullet' ? (
       <span style={{ color: txtM, fontSize: 20, lineHeight: 1.5, flexShrink: 0, userSelect: 'none', marginTop: 1 }}>·</span>
     ) : block.type === 'numbered' ? (
-      <span style={{ color: txtM, fontSize: 13, lineHeight: 1.8, flexShrink: 0, minWidth: 18, userSelect: 'none' }}>{idx + 1}.</span>
+      <span style={{ color: txtM, fontSize: 13, lineHeight: 1.8, flexShrink: 0, minWidth: 18, userSelect: 'none' }}>{getNumberedPosition(blocks, idx)}.</span>
     ) : block.type === 'todo' ? (
       <div
         onMouseDown={e => { if (!readonly) { e.preventDefault(); upd(block.id, { checked: !block.checked }); } }}
@@ -317,6 +379,7 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
           readOnly={readonly}
           onChange={e => handleChange(e, block)}
           onKeyDown={e => handleKeyDown(e, block)}
+          onBlur={() => setTimeout(() => setMentionState(null), 150)}
           style={getTextareaStyle(block.type, block.checked)}
         />
       </div>
@@ -371,6 +434,48 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
       >
         {blocks.map((block, idx) => renderBlock(block, idx))}
       </div>
+
+      {/* @mention dropdown */}
+      {mentionState && members?.length && (() => {
+        const filtered = members.filter(m =>
+          m.full_name.toLowerCase().includes(mentionState.query.toLowerCase())
+        ).slice(0, 5);
+        if (!filtered.length) return null;
+        return createPortal(
+          <div style={{
+            position: 'fixed',
+            top: Math.min(mentionState.top, window.innerHeight - 200),
+            left: Math.min(mentionState.left, window.innerWidth - 220),
+            width: 210, zIndex: 99999,
+            background: surf, border: `1px solid ${bord}`,
+            borderRadius: 10, boxShadow: '0 8px 30px rgba(0,0,0,0.14)',
+            overflow: 'hidden',
+          }}>
+            {filtered.map((m, i) => (
+              <div
+                key={m.id}
+                onMouseDown={e => { e.preventDefault(); insertMention(m, mentionState.blockId); }}
+                onMouseEnter={() => setMentionState(s => s ? { ...s, idx: i } : s)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '7px 10px', cursor: 'pointer',
+                  background: mentionState.idx === i ? accent + '18' : 'transparent',
+                }}
+              >
+                <span style={{
+                  width: 24, height: 24, borderRadius: '50%', background: accent + '22',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 700, color: accent, flexShrink: 0,
+                }}>
+                  {m.full_name.charAt(0).toUpperCase()}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: txt }}>{m.full_name}</span>
+              </div>
+            ))}
+          </div>,
+          document.body,
+        );
+      })()}
 
       {/* Slash command menu — rendered via portal to escape transformed/overflow ancestors */}
       {slashMenu && filteredCmds.length > 0 && createPortal(

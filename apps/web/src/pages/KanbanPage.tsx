@@ -40,7 +40,7 @@ export function KanbanPage() {
 
 function DesktopKanbanPage() {
   const { theme, isDark, toggleTheme, accentColor, setAccentColor } = useTheme();
-  const { user } = useAuthStore();
+  const { user, clearAuth } = useAuthStore();
   const queryClient = useQueryClient();
   const { toasts, removeToast } = useToast();
 
@@ -53,6 +53,7 @@ function DesktopKanbanPage() {
   const [syncing,          setSyncing]          = useState(false);
   const [compact]          = useState(false);
   const [colWidth]         = useState(300);
+  const [notifTarget, setNotifTarget] = useState<{ taskId: number; section?: 'comments' | 'description' } | null>(null);
 
   const accent = accentColor;
 
@@ -153,6 +154,7 @@ function DesktopKanbanPage() {
         collapsed={sidebarCollapsed}
         onToggleCollapse={() => setSidebarCollapsed(c => !c)}
         syncing={syncing} accent={accent} theme={theme}
+        onLogout={clearAuth}
       />
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', minWidth: 0 }}>
@@ -163,6 +165,10 @@ function DesktopKanbanPage() {
           accent={accent} theme={theme}
           darkMode={isDark} onToggleDark={toggleTheme}
           members={members}
+          onOpenTask={(taskId, section) => {
+            setView('kanban');
+            setNotifTarget({ taskId, section });
+          }}
         />
 
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: theme.bg }}>
@@ -177,6 +183,9 @@ function DesktopKanbanPage() {
               compact={compact}
               colWidth={colWidth}
               theme={theme}
+              openTaskId={notifTarget?.taskId ?? null}
+              openTaskSection={notifTarget?.section}
+              onTaskOpened={() => setNotifTarget(null)}
             />
           )}
           {view === 'automations' && <AutomationsView accent={accent} theme={theme} />}

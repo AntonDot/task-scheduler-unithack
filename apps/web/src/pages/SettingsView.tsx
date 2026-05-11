@@ -167,7 +167,6 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
           <div style={{ flex: 1 }}>
             <p style={{ fontSize: 22, fontWeight: 700, color: th.text, margin: 0 }}>{user?.full_name ?? '—'}</p>
             <p style={{ fontSize: 18, color: th.textSecondary, margin: 0 }}>{user?.email ?? '—'}</p>
-            <p style={{ fontSize: 13, color: th.textMuted, marginTop: 4, margin: 0 }}>Click photo to change</p>
           </div>
           <button onClick={openEdit} style={{ padding: '10px 20px', borderRadius: 12, border: `1px solid ${th.border}`, background: 'none', fontSize: 19, fontWeight: 500, color: th.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
             Edit profile

@@ -15,7 +15,7 @@ interface KanbanColumnProps {
   compact: boolean;
   colWidth: number;
   theme: Theme;
-  onAddTask?: () => void;
+  onAddTask?: (col: DesignColumn) => void;
 }
 
 export function KanbanColumn({
@@ -62,7 +62,7 @@ export function KanbanColumn({
           </span>
         </div>
         <button
-          onClick={onAddTask}
+          onClick={() => onAddTask?.(column.id)}
           style={{
             background: 'none', border: 'none', cursor: 'pointer',
             color: th.textMuted, padding: 2, borderRadius: 5, display: 'flex',

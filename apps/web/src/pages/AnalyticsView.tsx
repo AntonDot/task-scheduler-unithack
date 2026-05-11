@@ -1,6 +1,6 @@
 import type { Task } from '@/types/domain';
 import type { Theme } from '@/theme/theme';
-import { URGENCY_MAP, statusToColumn } from '@/theme/theme';
+import { getUrgencyMap, statusToColumn } from '@/theme/theme';
 
 interface AnalyticsViewProps {
   tasks: Task[];
@@ -73,7 +73,7 @@ export function AnalyticsView({ tasks, accent, theme }: AnalyticsViewProps) {
         <div style={{ background: th.surface, border: `1px solid ${th.border}`, borderRadius: 14, padding: '20px 22px' }}>
           <p style={{ fontSize: 13.5, fontWeight: 600, color: th.text, marginBottom: 16 }}>Tasks by urgency</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {Object.entries(URGENCY_MAP).map(([id, u]) => {
+            {Object.entries(getUrgencyMap(theme.dark)).map(([id, u]) => {
               const count = tasks.filter(t => t.urgency.toLowerCase() === id).length;
               return (
                 <div key={id} style={{

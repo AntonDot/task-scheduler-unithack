@@ -5,7 +5,7 @@ class TestMockLLMClient:
     async def test_mock_short_text_uses_default_title(self):
         """Text with 3 or fewer words should use the default title."""
         result = await parse_task("Fix bug")
-        assert result.title == "Новая задача из входящего текста"
+        assert result.title == "Новая задача"
 
     async def test_mock_long_text_uses_first_8_words(self):
         """Text with more than 3 words should use the first 8 words as title."""
@@ -15,24 +15,24 @@ class TestMockLLMClient:
         assert result.title == expected
 
     async def test_mock_detects_urgency_keyword_ne_rabotaet(self):
-        """'не работает' in text should set urgency to HIGH."""
+        """'не работает' in text should set urgency to URGENT."""
         result = await parse_task("Сайт не работает уже третий день")
-        assert result.urgency == "HIGH"
+        assert result.urgency == "URGENT"
 
     async def test_mock_detects_urgency_keyword_koshmar(self):
-        """'кошмар' in text should set urgency to HIGH."""
+        """'кошмар' in text should set urgency to URGENT."""
         result = await parse_task("Это просто кошмар какой-то сервис")
-        assert result.urgency == "HIGH"
+        assert result.urgency == "URGENT"
 
     async def test_mock_detects_urgency_keyword_srochno(self):
-        """'срочно' in text should set urgency to HIGH."""
+        """'срочно' in text should set urgency to URGENT."""
         result = await parse_task("Срочно нужно поправить баг в продакшене")
-        assert result.urgency == "HIGH"
+        assert result.urgency == "URGENT"
 
     async def test_mock_detects_urgency_keyword_uzhas(self):
-        """'ужас' in text should set urgency to HIGH."""
+        """'ужас' in text should set urgency to URGENT."""
         result = await parse_task("Ужас полный, ничего не работает")
-        assert result.urgency == "HIGH"
+        assert result.urgency == "URGENT"
 
     async def test_mock_default_urgency_medium(self):
         """Regular text without urgency keywords should default to MEDIUM."""

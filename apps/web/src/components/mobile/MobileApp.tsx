@@ -4,15 +4,16 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/theme/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { fetchProjects } from '@/api/projects';
-import { fetchTasks, changeStatus, createTask } from '@/api/tasks';
+import { fetchTasks, changeStatus, createTask, updateTask } from '@/api/tasks';
 import { fetchProjectMembers } from '@/api/members';
 import { runReviewScraper, type ReviewScrapeResult } from '@/api/automations';
 import { fetchComments, addComment, type Comment } from '@/api/comments';
 import type { Task, TaskStatus } from '@/types/domain';
 import {
-  COLUMNS_DEF, URGENCY_MAP, statusToColumn, columnToStatus,
+  COLUMNS_DEF, getUrgencyMap, statusToColumn, columnToStatus,
   formatDeadline, isOverdue, apiUrgencyToDesign, type DesignColumn,
 } from '@/theme/theme';
+import { BlockEditor } from '@/components/editor/BlockEditor';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -53,14 +54,7 @@ const IcoCog     = ({ s = 22 }) => <Ico size={s} paths={['M19.4 15a1.65 1.65 0 0
 const IcoPlus    = ({ s = 22 }) => <Ico size={s} paths={['M12 5v14','M5 12h14']} />;
 const IcoX       = ({ s = 22 }) => <Ico size={s} paths={['M18 6 6 18','M6 6l12 12']} />;
 const IcoSearch  = ({ s = 22 }) => <Ico size={s} d="M21 21l-4.35-4.35" circle="11 11 8" />;
-const IcoSync    = ({ s = 22, spin = false }) => (
-  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8"
-    strokeLinecap="round" strokeLinejoin="round"
-    style={{ animation: spin ? 'mbl-spin 1s linear infinite' : 'none', flexShrink: 0 }}>
-    <polyline points="23 4 23 10 17 10" /><polyline points="1 20 1 14 7 14" />
-    <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
-  </svg>
-);
+
 const IcoChevR   = ({ s = 22 }) => <Ico size={s} poly="9 18 15 12 9 6" />;
 const IcoCheck   = ({ s = 22 }) => <Ico size={s} poly="20 6 9 17 4 12" />;
 
@@ -122,8 +116,11 @@ function MobileCard({ task, onClick, accent, th }: {
 }) {
   const [pressed, setPressed] = useState(false);
   const col = statusToColumn(task.status);
-  const urg = URGENCY_MAP[apiUrgencyToDesign(task.urgency)];
+  const urg = getUrgencyMap(th.dark)[apiUrgencyToDesign(task.urgency)];
   const overdue = isOverdue(task.deadline, col);
+
+  const assignees = [task.assignee, ...(task.co_assignees || [])].filter(Boolean) as NonNullable<typeof task.assignee>[];
+  const displayAssignees = assignees.slice(0, 5);
 
   return (
     <div
@@ -142,38 +139,31 @@ function MobileCard({ task, onClick, accent, th }: {
         userSelect: 'none',
       }}
     >
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 8, marginBottom: 7 }}>
-        {task.project && (
-          <span style={{
-            fontSize: 10.5, fontWeight: 500, padding: '2px 8px', borderRadius: 20,
-            background: task.project.color + '22', color: task.project.color, flexShrink: 0,
-          }}>{task.project.name}</span>
-        )}
-        {urg && (
-          <span style={{
-            display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 6,
-            background: urg.bg, color: urg.color, fontSize: 10.5, fontWeight: 600, flexShrink: 0,
-          }}>
-            <div style={{ width: 5, height: 5, borderRadius: '50%', background: urg.border }} />
-            {urg.label}
-          </span>
-        )}
-      </div>
-      <p style={{ fontSize: 14, fontWeight: 600, color: th.text, lineHeight: 1.4, marginBottom: 10 }}>
+      <p style={{
+        fontSize: 14, fontWeight: 600, color: th.text, lineHeight: 1.4, marginBottom: 12,
+        display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
+      }}>
         {task.title}
       </p>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-          {task.assignee && (
-            <div style={{
-              width: 24, height: 24, borderRadius: '50%',
-              background: userColor(task.assignee.id),
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: 'white', fontSize: 9, fontWeight: 700, flexShrink: 0,
-            }}>
-              {getInitials(task.assignee.full_name)}
-            </div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', marginRight: displayAssignees.length > 1 ? 2 : 0 }}>
+            {displayAssignees.map((u, i) => (
+              <div key={u.id} style={{
+                marginLeft: i > 0 ? -6 : 0,
+                position: 'relative',
+                zIndex: displayAssignees.length - i,
+                borderRadius: '50%',
+                boxShadow: `0 0 0 2px ${th.surface}`,
+                width: 24, height: 24,
+                background: userColor(u.id),
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                color: 'white', fontSize: 9, fontWeight: 700, flexShrink: 0,
+              }}>
+                {getInitials(u.full_name)}
+              </div>
+            ))}
+          </div>
           {task.deadline && (
             <span style={{
               fontSize: 11, fontWeight: 500,
@@ -185,7 +175,17 @@ function MobileCard({ task, onClick, accent, th }: {
             </span>
           )}
         </div>
-        <IcoChevR s={14} />
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {urg && (
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 7px', borderRadius: 6,
+              background: urg.bg, color: urg.color, fontSize: 10.5, fontWeight: 600, flexShrink: 0,
+            }}>
+              <div style={{ width: 5, height: 5, borderRadius: '50%', background: urg.border }} />
+              {urg.label}
+            </span>
+          )}
+        </div>
       </div>
     </div>
   );
@@ -193,13 +193,16 @@ function MobileCard({ task, onClick, accent, th }: {
 
 // ─── Board View ───────────────────────────────────────────────────────────────
 
-function BoardView({ tasks, onTaskClick, onCreateTask, syncing, accent, th }: {
+function BoardView({ tasks, onTaskClick, onCreateTask, projects, activeProjectId, onProjectChange, accent, th }: {
   tasks: Task[]; onTaskClick: (t: Task) => void; onCreateTask: () => void;
-  syncing: boolean; accent: string; th: ReturnType<typeof useTheme>['theme'];
+  projects: Array<{ id: number; name: string; color: string }>;
+  activeProjectId: number | null; onProjectChange: (id: number) => void;
+  accent: string; th: ReturnType<typeof useTheme>['theme'];
 }) {
   const [colIdx, setColIdx] = useState(0);
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
+  const [projOpen, setProjOpen] = useState(false);
 
   const col = COLUMNS_DEF[colIdx] ?? COLUMNS_DEF[0]!;
   const dotColors: Record<string, string> = {
@@ -210,6 +213,8 @@ function BoardView({ tasks, onTaskClick, onCreateTask, syncing, accent, th }: {
     statusToColumn(t.status) === col.id &&
     (!search || t.title.toLowerCase().includes(search.toLowerCase()))
   );
+
+  const activeProject = projects.find(p => p.id === activeProjectId) ?? projects[0] ?? null;
 
   const handleRefresh = useCallback(() => {}, []);
   const { el: ptrEl, pulling } = usePullToRefresh(handleRefresh);
@@ -222,30 +227,66 @@ function BoardView({ tasks, onTaskClick, onCreateTask, syncing, accent, th }: {
         background: th.surface, borderBottom: `1px solid ${th.border}`, flexShrink: 0,
       }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <div style={{
-              width: 32, height: 32, borderRadius: 9, background: accent,
-              display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white',
+          {/* Project switcher */}
+          <div style={{ position: 'relative' }}>
+            <button onClick={() => setProjOpen(o => !o)} style={{
+              display: 'flex', alignItems: 'center', gap: 8,
+              background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px 4px 4px',
+              borderRadius: 10, fontFamily: 'inherit',
             }}>
-              <IcoBolt s={16} />
-            </div>
-            <span style={{ fontSize: 17, fontWeight: 700, color: th.text, letterSpacing: '-0.02em' }}>Victory</span>
-          </div>
-          <div style={{ display: 'flex', gap: 4, alignItems: 'center' }}>
-            <IcoSync s={16} spin={syncing} />
-            <span style={{ fontSize: 11, color: syncing ? '#F59E0B' : '#10B981', fontWeight: 600, marginRight: 4 }}>
-              {syncing ? 'Sync...' : 'Live'}
-            </span>
-            <button onClick={() => setSearchOpen(o => !o)} style={{
-              width: 36, height: 36, borderRadius: '50%',
-              background: searchOpen ? accent + '18' : th.columnBg,
-              border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
-              color: searchOpen ? accent : th.textSecondary,
-            }}>
-              <IcoSearch s={17} />
+              <div style={{
+                width: 32, height: 32, borderRadius: 9,
+                background: activeProject?.color ?? accent,
+                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0,
+              }}>
+                <IcoBolt s={16} />
+              </div>
+              <span style={{ fontSize: 17, fontWeight: 700, color: th.text, letterSpacing: '-0.02em', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {activeProject?.name ?? 'Victory'}
+              </span>
+              {projects.length > 1 && (
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={th.textMuted} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              )}
             </button>
+
+            {projOpen && projects.length > 1 && (
+              <>
+                <div onClick={() => setProjOpen(false)} style={{ position: 'fixed', inset: 0, zIndex: 200 }} />
+                <div style={{
+                  position: 'absolute', top: '100%', left: 0, marginTop: 6,
+                  background: th.surface, border: `1px solid ${th.border}`,
+                  borderRadius: 14, padding: 6, minWidth: 200,
+                  boxShadow: '0 8px 30px rgba(0,0,0,0.15)', zIndex: 201,
+                }}>
+                  {projects.map(p => (
+                    <button key={p.id} onClick={() => { onProjectChange(p.id); setProjOpen(false); }} style={{
+                      display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                      padding: '10px 12px', background: p.id === activeProjectId ? accent + '12' : 'none',
+                      border: 'none', borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit', textAlign: 'left',
+                    }}>
+                      <div style={{ width: 28, height: 28, borderRadius: 8, background: p.color, flexShrink: 0 }} />
+                      <span style={{ fontSize: 14, fontWeight: 600, color: th.text }}>{p.name}</span>
+                      {p.id === activeProjectId && (
+                        <IcoCheck s={14} />
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
+
+          <button onClick={() => setSearchOpen(o => !o)} style={{
+            width: 36, height: 36, borderRadius: '50%',
+            background: searchOpen ? accent + '18' : th.columnBg,
+            border: 'none', cursor: 'pointer',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            color: searchOpen ? accent : th.textSecondary,
+          }}>
+            <IcoSearch s={17} />
+          </button>
         </div>
 
         {searchOpen && (
@@ -353,9 +394,12 @@ function BoardView({ tasks, onTaskClick, onCreateTask, syncing, accent, th }: {
 
 // ─── Task Detail Sheet ────────────────────────────────────────────────────────
 
-function TaskSheet({ task, open, onClose, onStatusChange, accent, th }: {
+function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, onPriorityChange, onDeadlineChange, accent, th }: {
   task: Task | null; open: boolean; onClose: () => void;
   onStatusChange: (taskId: number, col: DesignColumn) => void;
+  onDescriptionChange: (taskId: number, desc: string) => void;
+  onPriorityChange: (taskId: number, urgency: string) => void;
+  onDeadlineChange: (taskId: number, deadline: string | null) => void;
   accent: string; th: ReturnType<typeof useTheme>['theme'];
 }) {
   const dragY = useRef(0);
@@ -372,7 +416,7 @@ function TaskSheet({ task, open, onClose, onStatusChange, accent, th }: {
   if (!task) return null;
 
   const col = statusToColumn(task.status);
-  const urg = URGENCY_MAP[apiUrgencyToDesign(task.urgency)];
+  const urg = getUrgencyMap(th.dark)[apiUrgencyToDesign(task.urgency)];
   const overdue = isOverdue(task.deadline, col);
 
   function handleTouchStart(e: React.TouchEvent) {
@@ -464,23 +508,47 @@ function TaskSheet({ task, open, onClose, onStatusChange, accent, th }: {
               {COLUMNS_DEF.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
             </select>
             {urg && (
-              <span style={{
-                padding: '7px 12px', borderRadius: 10, border: `1px solid ${urg.border}`,
-                background: urg.bg, color: urg.color, fontSize: 13, fontWeight: 600,
-              }}>
-                {urg.label}
-              </span>
+              <div style={{ position: 'relative', display: 'inline-block' }}>
+                <select
+                  value={task.urgency}
+                  onChange={e => onPriorityChange(task.id, e.target.value)}
+                  style={{
+                    position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', zIndex: 10
+                  }}
+                >
+                  <option value="LOW">Low</option>
+                  <option value="MEDIUM">Medium</option>
+                  <option value="HIGH">High</option>
+                  <option value="CRITICAL">Critical</option>
+                </select>
+                <span style={{
+                  padding: '7px 12px', borderRadius: 10, border: `1px solid ${urg.border}`,
+                  background: urg.bg, color: urg.color, fontSize: 13, fontWeight: 600,
+                  display: 'inline-block'
+                }}>
+                  {urg.label}
+                </span>
+              </div>
             )}
-            {task.deadline && (
+            <div style={{ position: 'relative', display: 'inline-block' }}>
+              <input 
+                type="date"
+                value={task.deadline ? task.deadline.substring(0, 10) : ''}
+                onChange={e => onDeadlineChange(task.id, e.target.value || null)}
+                style={{
+                  position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', zIndex: 10
+                }}
+              />
               <span style={{
                 padding: '7px 12px', borderRadius: 10, fontSize: 13, fontWeight: 600,
                 border: `1px solid ${overdue ? '#EF4444' : th.border}`,
                 background: overdue ? '#FEF2F2' : th.columnBg,
                 color: overdue ? '#991B1B' : th.textSecondary,
+                display: 'inline-block'
               }}>
-                {formatDeadline(task.deadline)}
+                {task.deadline ? formatDeadline(task.deadline) : 'No deadline'}
               </span>
-            )}
+            </div>
           </div>
 
           {/* Assignee */}
@@ -523,20 +591,16 @@ function TaskSheet({ task, open, onClose, onStatusChange, accent, th }: {
           )}
 
           {/* Description */}
-          {task.description && (
-            <div style={{ marginBottom: 20 }}>
-              <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
-                Description
-              </p>
-              <p style={{
-                fontSize: 14, color: th.textSecondary, lineHeight: 1.6,
-                background: th.columnBg, borderRadius: 10, padding: '12px 14px',
-                whiteSpace: 'pre-wrap',
-              }}>
-                {task.description}
-              </p>
-            </div>
-          )}
+          <div style={{ marginBottom: 20 }}>
+            <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
+              Description
+            </p>
+            <BlockEditor
+              value={task.description ?? ''}
+              onChange={(text) => onDescriptionChange(task.id, text)}
+              theme={th}
+            />
+          </div>
 
           {/* Comments */}
           <div>
@@ -708,19 +772,22 @@ function CreateSheet({ open, onClose, onCreate, members, accent, th }: {
 
 // ─── Automations Mobile View ──────────────────────────────────────────────────
 
-const STATIC_AUTOS = [
-  { id: 'a2', name: 'Overdue escalation',    trigger: 'Deadline is overdue',      action: 'Escalate to Urgent',       active: true,  runs: 12, lastRun: '1d ago', triggerColor: '#DC2626', actionColor: '#F97316' },
-  { id: 'a3', name: 'Auto-assign new tasks', trigger: 'New task created',         action: 'Assign to first available', active: false, runs: 8,  lastRun: '3d ago', triggerColor: '#4338CA', actionColor: '#6366F1' },
-  { id: 'a4', name: 'Review trigger',        trigger: 'Task moves to In Review',  action: 'Create review request',    active: true,  runs: 23, lastRun: '5h ago', triggerColor: '#D97706', actionColor: '#B45309' },
-];
+const MBL_RUNS_KEY = 'vt_scraper_runs';
+const MBL_LOG_KEY  = 'vt_scraper_log';
 
 function AutomationsMobileView({ accent, th }: { accent: string; th: ReturnType<typeof useTheme>['theme'] }) {
-  const [autos, setAutos] = useState(STATIC_AUTOS);
   const [scraperActive, setScraperActive] = useState(true);
   const [scraperRunning, setScraperRunning] = useState(false);
-  const [scraperRuns, setScraperRuns] = useState(0);
-  const [scraperLog, setScraperLog] = useState<ReviewScrapeResult | null>(null);
+  const [scraperRuns, setScraperRuns] = useState<number>(() => {
+    try { return parseInt(localStorage.getItem(MBL_RUNS_KEY) ?? '0', 10) || 0; } catch { return 0; }
+  });
+  const [scraperLog, setScraperLog] = useState<ReviewScrapeResult | null>(() => {
+    try { const r = localStorage.getItem(MBL_LOG_KEY); return r ? JSON.parse(r) as ReviewScrapeResult : null; } catch { return null; }
+  });
   const [showLog, setShowLog] = useState(false);
+
+  useEffect(() => { localStorage.setItem(MBL_RUNS_KEY, String(scraperRuns)); }, [scraperRuns]);
+  useEffect(() => { if (scraperLog) localStorage.setItem(MBL_LOG_KEY, JSON.stringify(scraperLog)); }, [scraperLog]);
 
   async function handleRunScraper() {
     if (scraperRunning || !scraperActive) return;
@@ -735,20 +802,19 @@ function AutomationsMobileView({ accent, th }: { accent: string; th: ReturnType<
     } finally { setScraperRunning(false); }
   }
 
-  const activeCount = (scraperActive ? 1 : 0) + autos.filter(a => a.active).length;
-  const totalRuns = scraperRuns + autos.reduce((s, a) => s + a.runs, 0);
+  const activeCount = scraperActive ? 1 : 0;
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 'calc(var(--sat, 0px) + 20px) 16px 100px' }}>
       <h2 style={{ fontSize: 20, fontWeight: 700, color: th.text, marginBottom: 4 }}>Automations</h2>
-      <p style={{ fontSize: 12.5, color: th.textSecondary, marginBottom: 20 }}>{activeCount} of {autos.length + 1} active</p>
+      <p style={{ fontSize: 12.5, color: th.textSecondary, marginBottom: 20 }}>{activeCount} of 1 active</p>
 
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
         {[
-          { label: 'Runs',   value: totalRuns,  color: accent },
-          { label: 'Active', value: activeCount, color: '#059669' },
-          { label: 'Hours',  value: '12.4',      color: '#D97706' },
+          { label: 'Runs',    value: scraperRuns,                         color: accent    },
+          { label: 'Active',  value: activeCount,                          color: '#059669' },
+          { label: 'Tasks',   value: scraperLog?.tasks_created ?? 0,       color: '#D97706' },
         ].map(s => (
           <div key={s.label} style={{ background: th.surface, border: `1px solid ${th.border}`, borderRadius: 14, padding: '14px 16px' }}>
             <p style={{ fontSize: 11, color: th.textMuted, fontWeight: 500, marginBottom: 4 }}>{s.label}</p>
@@ -803,28 +869,6 @@ function AutomationsMobileView({ accent, th }: { accent: string; th: ReturnType<
         )}
       </div>
 
-      {/* Static automations */}
-      {autos.map(auto => (
-        <div key={auto.id} style={{
-          background: th.surface, border: `1px solid ${th.border}`,
-          borderRadius: 16, padding: 16, marginBottom: 10,
-          opacity: auto.active ? 1 : 0.55, transition: 'opacity 0.2s',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-            <p style={{ fontSize: 14, fontWeight: 600, color: th.text, flex: 1, paddingRight: 10, margin: 0 }}>{auto.name}</p>
-            <Toggle val={auto.active} onChange={v => setAutos(prev => prev.map(a => a.id === auto.id ? { ...a, active: v } : a))} accent={accent} />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-            <span style={{ padding: '4px 10px', borderRadius: 7, fontSize: 12, fontWeight: 500, background: auto.triggerColor + '14', color: auto.triggerColor, border: `1px solid ${auto.triggerColor}28`, display: 'inline-block' }}>
-              When: {auto.trigger}
-            </span>
-            <span style={{ padding: '4px 10px', borderRadius: 7, fontSize: 12, fontWeight: 500, background: auto.actionColor + '14', color: auto.actionColor, border: `1px solid ${auto.actionColor}28`, display: 'inline-block' }}>
-              Then: {auto.action}
-            </span>
-          </div>
-          <p style={{ fontSize: 11, color: th.textMuted, marginTop: 8, marginBottom: 0 }}>{auto.runs} runs · Last: {auto.lastRun}</p>
-        </div>
-      ))}
     </div>
   );
 }
@@ -883,7 +927,7 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
   accent: string; th: ReturnType<typeof useTheme>['theme'];
   isDark: boolean; onToggleDark: () => void; onSetAccent: (c: string) => void;
 }) {
-  const { user } = useAuthStore();
+  const { user, clearAuth } = useAuthStore();
   const [notifs, setNotifs] = useState({ task_assigned: true, comment: true, deadline: true, mention: true, status_change: false });
 
   function Row({ label, sub, right, danger = false }: { label: string; sub?: string; right?: React.ReactNode; danger?: boolean }) {
@@ -974,7 +1018,16 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
         <Row label="Delete workspace" danger right={<span style={{ fontSize: 12, color: '#991B1B' }}>Delete</span>} />
       </Section>
 
-      <div style={{ textAlign: 'center', padding: '12px 0' }}>
+      <button onClick={clearAuth} style={{
+        width: '100%', padding: '15px', borderRadius: 14,
+        border: `1px solid #FECACA`, background: '#FEF2F2',
+        color: '#DC2626', fontSize: 15, fontWeight: 600,
+        cursor: 'pointer', fontFamily: 'inherit', marginBottom: 16,
+      }}>
+        Sign out
+      </button>
+
+      <div style={{ textAlign: 'center', padding: '4px 0 12px' }}>
         <p style={{ fontSize: 11.5, color: th.textMuted }}>Victory Task · PWA v1.0.0</p>
       </div>
     </div>
@@ -1044,7 +1097,6 @@ export function MobileApp() {
   const [selTask, setSelTask] = useState<Task | null>(null);
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
-  const [syncing, setSyncing] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
 
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects });
@@ -1062,10 +1114,6 @@ export function MobileApp() {
     enabled: !!resolvedProjectId,
   });
 
-  useEffect(() => {
-    const id = setInterval(() => { setSyncing(true); setTimeout(() => setSyncing(false), 1400); }, 22000);
-    return () => clearInterval(id);
-  }, []);
 
   const statusMutation = useMutation({
     mutationFn: ({ taskId, status }: { taskId: number; status: TaskStatus }) => changeStatus(taskId, status),
@@ -1083,7 +1131,6 @@ export function MobileApp() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks', resolvedProjectId] });
-      setSyncing(true); setTimeout(() => setSyncing(false), 1200);
     },
   });
 
@@ -1092,7 +1139,6 @@ export function MobileApp() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['tasks', resolvedProjectId] });
       setCreateOpen(false);
-      setSyncing(true); setTimeout(() => setSyncing(false), 800);
     },
   });
 
@@ -1108,8 +1154,39 @@ export function MobileApp() {
     }
   }
 
-  // Project switcher in settings (expose as top-level nav element if multiple projects)
-  void setActiveProjectId;
+  function handleDescriptionChange(taskId: number, desc: string) {
+    updateTask(taskId, { description: desc }).catch(() => {});
+    if (selTask?.id === taskId) {
+      setSelTask(prev => prev ? { ...prev, description: desc } : prev);
+    }
+    const key = ['tasks', resolvedProjectId] as const;
+    queryClient.setQueryData<Task[]>(key, old => 
+      (old ?? []).map(t => t.id === taskId ? { ...t, description: desc } : t)
+    );
+  }
+
+  function handlePriorityChange(taskId: number, urgency: string) {
+    updateTask(taskId, { urgency: urgency as Task['urgency'] }).catch(() => {});
+    if (selTask?.id === taskId) {
+      setSelTask(prev => prev ? { ...prev, urgency: urgency as Task['urgency'] } : prev);
+    }
+    const key = ['tasks', resolvedProjectId] as const;
+    queryClient.setQueryData<Task[]>(key, old => 
+      (old ?? []).map(t => t.id === taskId ? { ...t, urgency: urgency as Task['urgency'] } : t)
+    );
+  }
+
+  function handleDeadlineChange(taskId: number, deadline: string | null) {
+    updateTask(taskId, { deadline }).catch(() => {});
+    if (selTask?.id === taskId) {
+      setSelTask(prev => prev ? { ...prev, deadline } : prev);
+    }
+    const key = ['tasks', resolvedProjectId] as const;
+    queryClient.setQueryData<Task[]>(key, old => 
+      (old ?? []).map(t => t.id === taskId ? { ...t, deadline } : t)
+    );
+  }
+
 
   return (
     <>
@@ -1127,7 +1204,9 @@ export function MobileApp() {
             <BoardView
               tasks={tasks} onTaskClick={handleTaskClick}
               onCreateTask={() => setCreateOpen(true)}
-              syncing={syncing} accent={accent} th={th}
+              projects={projects} activeProjectId={resolvedProjectId}
+              onProjectChange={id => setActiveProjectId(id)}
+              accent={accent} th={th}
             />
           )}
           {view === 'automations' && <AutomationsMobileView accent={accent} th={th} />}
@@ -1148,6 +1227,9 @@ export function MobileApp() {
         task={selTask} open={sheetOpen}
         onClose={() => setSheetOpen(false)}
         onStatusChange={handleStatusChange}
+        onDescriptionChange={handleDescriptionChange}
+        onPriorityChange={handlePriorityChange}
+        onDeadlineChange={handleDeadlineChange}
         accent={accent} th={th}
       />
 

@@ -1,5 +1,5 @@
 import type { Theme } from '@/theme/theme';
-import { IcoBoard, IcoBolt, IcoChart, IcoUsers, IcoCog, IcoSync, IcoSidebarL } from '@/components/ui/Icons';
+import { IcoBoard, IcoBolt, IcoChart, IcoUsers, IcoCog, IcoSync, IcoSidebarL, IcoLogout } from '@/components/ui/Icons';
 import type { Project } from '@/types/domain';
 
 export type AppView = 'kanban' | 'automations' | 'analytics' | 'team' | 'settings';
@@ -15,6 +15,7 @@ interface SidebarProps {
   syncing: boolean;
   accent: string;
   theme: Theme;
+  onLogout: () => void;
 }
 
 const NAV: { id: AppView; label: string; Icon: React.FC<{ size?: number }> }[] = [
@@ -25,7 +26,7 @@ const NAV: { id: AppView; label: string; Icon: React.FC<{ size?: number }> }[] =
   { id: 'settings',    label: 'Settings',    Icon: IcoCog   },
 ];
 
-export function Sidebar({ view, setView, projects, activeProjectId, setActiveProjectId, collapsed, onToggleCollapse, syncing, accent, theme }: SidebarProps) {
+export function Sidebar({ view, setView, projects, activeProjectId, setActiveProjectId, collapsed, onToggleCollapse, syncing, accent, theme, onLogout }: SidebarProps) {
   const th = theme;
   const w  = collapsed ? 56 : 228;
 
@@ -166,8 +167,29 @@ export function Sidebar({ view, setView, projects, activeProjectId, setActivePro
         )}
       </nav>
 
-      {/* Sync status */}
-      <div style={{ padding: '10px 8px', borderTop: `1px solid ${th.border}`, flexShrink: 0 }}>
+      {/* Bottom: logout + sync */}
+      <div style={{ padding: '10px 8px', borderTop: `1px solid ${th.border}`, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        {/* Logout */}
+        <button
+          onClick={onLogout}
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '8px 10px', borderRadius: 8,
+            border: 'none', cursor: 'pointer', textAlign: 'left', width: '100%',
+            background: 'none', color: th.textSecondary,
+            fontWeight: 500, fontSize: 13.5,
+            transition: 'all 0.1s',
+            justifyContent: collapsed ? 'center' : 'flex-start',
+            whiteSpace: 'nowrap',
+          }}
+          onMouseEnter={e => { e.currentTarget.style.background = th.columnBg; e.currentTarget.style.color = '#EF4444'; }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = th.textSecondary; }}
+        >
+          <IcoLogout size={17} />
+          {!collapsed && 'Sign out'}
+        </button>
+
+        {/* Sync status */}
         <div style={{
           display: 'flex', alignItems: 'center', gap: 8,
           padding: '7px 10px', borderRadius: 7,

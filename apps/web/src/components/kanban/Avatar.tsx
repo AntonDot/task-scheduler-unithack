@@ -20,21 +20,36 @@ function avatarColor(user: AvatarUser): string {
   return colors[seed % colors.length] ?? colors[0] ?? '#6366F1';
 }
 
+export function getAvatarUrl(userId: number | undefined): string | null {
+  if (!userId) return null;
+  try { return localStorage.getItem(`vt_avatar_${userId}`); } catch { return null; }
+}
+
+export function setAvatarUrl(userId: number, dataUrl: string): void {
+  try { localStorage.setItem(`vt_avatar_${userId}`, dataUrl); } catch {}
+}
+
 export function Avatar({ user, size = 28, showOnline = false, online = false }: AvatarProps) {
   if (!user) return null;
-  const color = avatarColor(user);
-  const init  = initials(user.full_name);
-  const dotSize = Math.max(Math.round(size * 0.30), 8);
+  const color    = avatarColor(user);
+  const init     = initials(user.full_name);
+  const dotSize  = Math.max(Math.round(size * 0.30), 8);
+  const imgUrl   = getAvatarUrl(user.id);
+
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }} title={user.full_name}>
       <div style={{
         width: size, height: size, borderRadius: '50%',
-        background: color, display: 'flex',
-        alignItems: 'center', justifyContent: 'center',
+        background: imgUrl ? 'transparent' : color,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
         color: 'white', fontSize: Math.round(size * 0.36), fontWeight: 600,
         letterSpacing: '-0.02em', userSelect: 'none',
+        overflow: 'hidden',
       }}>
-        {init}
+        {imgUrl
+          ? <img src={imgUrl} alt={user.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+          : init
+        }
       </div>
       {showOnline && online && (
         <div style={{

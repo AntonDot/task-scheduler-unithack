@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.domain import ASSIGNEE_ALLOWED_TARGETS, VALID_STATUS_TRANSITIONS, ProjectRole, TaskStatus
+from app.domain import ProjectRole, TaskStatus
 from app.models import Task, UserProject
 from app.models.user import User
 from app.schemas import TaskCreate, TaskUpdate
@@ -69,14 +69,20 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
 
     co_ids_in_task = [u.id for u in task.co_assignees]
     is_co = user_project.user_id in co_ids_in_task
-    if user_project.role == ProjectRole.ASSIGNEE and task.assignee_id != user_project.user_id and not is_co:
+    is_assignee = task.assignee_id == user_project.user_id or is_co
+
+    if user_project.role == ProjectRole.ASSIGNEE and not is_assignee:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your task")
 
     update_data = data.model_dump(exclude_unset=True)
-    co_assignee_ids = update_data.pop("co_assignee_ids", None)
 
-    if user_project.role == ProjectRole.ASSIGNEE and "assignee_id" in update_data:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can reassign task")
+    # Assignees cannot reassign
+    if user_project.role == ProjectRole.ASSIGNEE:
+        for restricted in ["assignee_id", "co_assignee_ids", "urgency", "project_id"]:
+            if restricted in update_data:
+                raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Cannot update {restricted}")
+
+    co_assignee_ids = update_data.pop("co_assignee_ids", None)
 
     old_values = {field: getattr(task, field) for field in update_data}
     for field, value in update_data.items():
@@ -102,7 +108,9 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
 
 async def change_status(db: AsyncSession, task_id: int, new_status: TaskStatus, user_project: UserProject) -> Task:
     result = await db.execute(
-        select(Task).where(Task.id == task_id).options(selectinload(Task.project), selectinload(Task.assignee))
+        select(Task)
+        .where(Task.id == task_id)
+        .options(selectinload(Task.project), selectinload(Task.assignee), selectinload(Task.co_assignees))
     )
     task = result.scalar_one_or_none()
     if task is None:
@@ -111,19 +119,26 @@ async def change_status(db: AsyncSession, task_id: int, new_status: TaskStatus, 
     if task.project_id != user_project.project_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Task not in your project")
 
-    current = TaskStatus(task.status)
-    allowed = VALID_STATUS_TRANSITIONS.get(current, set())
+    co_ids_in_task = [u.id for u in task.co_assignees]
+    is_co = user_project.user_id in co_ids_in_task
+    is_assignee = task.assignee_id == user_project.user_id or is_co
+
+    if user_project.role == ProjectRole.ASSIGNEE:
+        if not is_assignee:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your task")
+        from app.domain import ASSIGNEE_ALLOWED_TARGETS
+
+        if new_status not in ASSIGNEE_ALLOWED_TARGETS:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot move to this status")
+
+    from app.domain import VALID_STATUS_TRANSITIONS
+
+    allowed = VALID_STATUS_TRANSITIONS.get(TaskStatus(task.status), set())
     if new_status not in allowed:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Cannot transition from {current} to {new_status}",
+            detail=f"Invalid transition from {task.status} to {new_status}",
         )
-
-    if user_project.role == ProjectRole.ASSIGNEE:
-        if task.assignee_id != user_project.user_id:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your task")
-        if new_status not in ASSIGNEE_ALLOWED_TARGETS:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Assignee cannot set this status")
 
     old_status = task.status
     task.status = new_status
@@ -146,7 +161,9 @@ async def approve_draft(db: AsyncSession, task_id: int, user_project: UserProjec
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can approve drafts")
 
     result = await db.execute(
-        select(Task).where(Task.id == task_id).options(selectinload(Task.project), selectinload(Task.assignee))
+        select(Task)
+        .where(Task.id == task_id)
+        .options(selectinload(Task.project), selectinload(Task.assignee), selectinload(Task.co_assignees))
     )
     task = result.scalar_one_or_none()
     if task is None:

@@ -2,13 +2,15 @@ import os
 import uuid
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 from fastapi import status as http_status
 from fastapi.responses import FileResponse
+from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import Attachment, Task, User, UserProject
@@ -135,12 +137,40 @@ async def list_attachments(
     return result.scalars().unique().all()
 
 
+async def _resolve_user_from_token_or_header(
+    request: Request,
+    token: str | None,
+    db: AsyncSession,
+) -> User:
+    raw = token
+    if not raw:
+        auth = request.headers.get("Authorization", "")
+        if auth.startswith("Bearer "):
+            raw = auth[7:]
+    if not raw:
+        raise HTTPException(status_code=http_status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    try:
+        payload = jwt.decode(raw, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
+        sub = payload.get("sub")
+        if sub is None:
+            raise HTTPException(status_code=http_status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
+    except JWTError as exc:
+        raise HTTPException(status_code=http_status.HTTP_401_UNAUTHORIZED, detail="Invalid token") from exc
+    result = await db.execute(select(User).where(User.id == int(sub)))
+    user = result.scalar_one_or_none()
+    if user is None or not user.is_active:
+        raise HTTPException(status_code=http_status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    return user
+
+
 @router.get("/api/v1/attachments/{attachment_id}/download")
 async def download_attachment(
     attachment_id: int,
-    current_user: User = Depends(get_current_user),
+    request: Request,
+    token: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ):
+    current_user = await _resolve_user_from_token_or_header(request, token, db)
     result = await db.execute(select(Attachment).where(Attachment.id == attachment_id))
     attachment = result.scalar_one_or_none()
     if attachment is None:

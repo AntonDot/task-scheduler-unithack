@@ -1,39 +1,31 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Theme } from '@/theme/theme';
 import { IcoChevronR } from '@/components/ui/Icons';
 import { runReviewScraper, type ReviewScrapeResult } from '@/api/automations';
 
-interface Automation {
-  id: string;
-  name: string;
-  trigger: string;
-  action: string;
-  active: boolean;
-  runs: number;
-  lastRun: string;
-  triggerColor: string;
-  actionColor: string;
-  real?: boolean;
-}
+const RUNS_KEY = 'vt_scraper_runs';
+const LOG_KEY  = 'vt_scraper_log';
 
-const STATIC_AUTOMATIONS: Automation[] = [
-  { id: 'a2', name: 'Overdue escalation',      trigger: 'Deadline is overdue',    action: 'Escalate urgency to Urgent',  active: true,  runs: 12, lastRun: '1d ago',  triggerColor: '#DC2626', actionColor: '#F97316' },
-  { id: 'a3', name: 'Auto-assign new tasks',   trigger: 'New task created',       action: 'Auto-assign to first available', active: false, runs: 8,  lastRun: '3d ago', triggerColor: '#4338CA', actionColor: '#6366F1' },
-  { id: 'a4', name: 'Review request trigger',  trigger: 'Task moves to In Review', action: 'Create review request',       active: true,  runs: 23, lastRun: '5h ago', triggerColor: '#D97706', actionColor: '#B45309' },
-  { id: 'a5', name: 'Assignment email alert',  trigger: 'Task assigned to user',  action: 'Send email notification',     active: true,  runs: 89, lastRun: '30m ago', triggerColor: '#6366F1', actionColor: '#2563EB' },
-];
+function loadRuns(): number {
+  try { return parseInt(localStorage.getItem(RUNS_KEY) ?? '0', 10) || 0; } catch { return 0; }
+}
+function loadLog(): ReviewScrapeResult | null {
+  try { const r = localStorage.getItem(LOG_KEY); return r ? JSON.parse(r) : null; } catch { return null; }
+}
 
 interface AutomationsViewProps { accent: string; theme: Theme; }
 
 export function AutomationsView({ accent, theme }: AutomationsViewProps) {
   const th = theme;
 
-  const [automations, setAutomations] = useState<Automation[]>(STATIC_AUTOMATIONS);
   const [scraperActive, setScraperActive] = useState(true);
-  const [scraperRuns, setScraperRuns]   = useState(0);
+  const [scraperRuns, setScraperRuns]   = useState<number>(loadRuns);
   const [scraperRunning, setScraperRunning] = useState(false);
-  const [scraperLog, setScraperLog]     = useState<ReviewScrapeResult | null>(null);
+  const [scraperLog, setScraperLog]     = useState<ReviewScrapeResult | null>(loadLog);
   const [showLog, setShowLog]           = useState(false);
+
+  useEffect(() => { localStorage.setItem(RUNS_KEY, String(scraperRuns)); }, [scraperRuns]);
+  useEffect(() => { if (scraperLog) localStorage.setItem(LOG_KEY, JSON.stringify(scraperLog)); }, [scraperLog]);
 
   async function handleRunScraper() {
     if (scraperRunning) return;
@@ -72,14 +64,10 @@ export function AutomationsView({ accent, theme }: AutomationsViewProps) {
     );
   }
 
-  const allRuns = scraperRuns + automations.reduce((s, a) => s + a.runs, 0);
-  const activeCount = (scraperActive ? 1 : 0) + automations.filter(a => a.active).length;
-  const totalCount = automations.length + 1;
-
   const stats = [
-    { label: 'Total runs',   value: allRuns,      color: accent    },
-    { label: 'Active rules', value: activeCount,   color: '#059669' },
-    { label: 'Saved hours',  value: '12.4h',       color: '#D97706' },
+    { label: 'Total runs',   value: scraperRuns,        color: accent    },
+    { label: 'Active rules', value: scraperActive ? 1 : 0, color: '#059669' },
+    { label: 'Tasks created', value: scraperLog?.tasks_created ?? 0, color: '#D97706' },
   ];
 
   return (
@@ -88,7 +76,7 @@ export function AutomationsView({ accent, theme }: AutomationsViewProps) {
         <div>
           <h2 style={{ fontSize: 20, fontWeight: 700, color: th.text, margin: 0 }}>Automations</h2>
           <p style={{ fontSize: 13, color: th.textSecondary, marginTop: 4 }}>
-            {activeCount} of {totalCount} rules active
+            {scraperActive ? 1 : 0} of 1 rules active
           </p>
         </div>
       </div>
@@ -183,34 +171,6 @@ export function AutomationsView({ accent, theme }: AutomationsViewProps) {
           )}
         </div>
 
-        {/* Static automations */}
-        {automations.map(auto => (
-          <div key={auto.id} style={{
-            background: th.surface, border: `1px solid ${th.border}`,
-            borderRadius: 14, padding: '16px 20px',
-            opacity: auto.active ? 1 : 0.55, transition: 'opacity 0.2s',
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-              <Toggle val={auto.active} onChange={v => setAutomations(prev => prev.map(a => a.id === auto.id ? { ...a, active: v } : a))} />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 13.5, fontWeight: 600, color: th.text, marginBottom: 5 }}>{auto.name}</p>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ padding: '3px 10px', borderRadius: 6, fontSize: 11.5, fontWeight: 500, background: auto.triggerColor + '14', color: auto.triggerColor, border: `1px solid ${auto.triggerColor}28` }}>
-                    When: {auto.trigger}
-                  </span>
-                  <IcoChevronR size={12} />
-                  <span style={{ padding: '3px 10px', borderRadius: 6, fontSize: 11.5, fontWeight: 500, background: auto.actionColor + '14', color: auto.actionColor, border: `1px solid ${auto.actionColor}28` }}>
-                    Then: {auto.action}
-                  </span>
-                </div>
-              </div>
-              <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                <p style={{ fontSize: 14, fontWeight: 700, color: th.text, margin: 0 }}>{auto.runs}</p>
-                <p style={{ fontSize: 11, color: th.textMuted, margin: 0 }}>runs · {auto.lastRun}</p>
-              </div>
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   );

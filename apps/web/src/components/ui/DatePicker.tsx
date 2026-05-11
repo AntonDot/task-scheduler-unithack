@@ -8,10 +8,18 @@ interface DatePickerProps {
   accent?: string;
   theme?: Theme;
   placeholder?: string;
+  readonly?: boolean;
 }
 
-export function DatePicker({ value, onChange, accent = '#6366F1', theme, placeholder = 'Set deadline' }: DatePickerProps) {
+export function DatePicker({ value, onChange, accent = '#6366F1', theme, placeholder = 'Set deadline', readonly }: DatePickerProps) {
   const [open, setOpen] = useState(false);
+  
+  function formatDate(d: Date) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  }
   const [viewDate, setViewDate] = useState<Date>(() => {
     const d = value ? new Date(value.includes('T') ? value : value + 'T00:00:00') : new Date();
     return new Date(d.getFullYear(), d.getMonth(), 1);
@@ -61,12 +69,12 @@ export function DatePicker({ value, onChange, accent = '#6366F1', theme, placeho
           border: `1px solid ${overdue ? '#FECACA' : bord}`,
           background: overdue ? '#FEF2F2' : surf,
           color: selDate ? (overdue ? '#991B1B' : txt) : txtM,
-          fontSize: 12.5, fontWeight: 500, cursor: 'pointer',
+          fontSize: 12.5, fontWeight: 500, cursor: readonly ? 'default' : 'pointer',
           fontFamily: 'inherit', transition: 'border-color 0.12s',
         }}
-        onClick={() => setOpen(o => !o)}
-        onMouseEnter={e => (e.currentTarget.style.borderColor = accent)}
-        onMouseLeave={e => (e.currentTarget.style.borderColor = overdue ? '#FECACA' : bord)}
+        onClick={() => !readonly && setOpen(o => !o)}
+        onMouseEnter={e => !readonly && (e.currentTarget.style.borderColor = accent)}
+        onMouseLeave={e => !readonly && (e.currentTarget.style.borderColor = overdue ? '#FECACA' : bord)}
       >
         <IcoCalendar size={13} />
         {displayStr}
@@ -112,7 +120,7 @@ export function DatePicker({ value, onChange, accent = '#6366F1', theme, placeho
               const isPast  = date < today;
               return (
                 <button key={day}
-                  onClick={() => { onChange(date.toISOString().substring(0, 10)); setOpen(false); }}
+                  onClick={() => { onChange(formatDate(date)); setOpen(false); }}
                   style={{
                     padding: '5px 2px', border: 'none', borderRadius: 7,
                     fontSize: 12.5, cursor: 'pointer', fontFamily: 'inherit',
@@ -134,7 +142,7 @@ export function DatePicker({ value, onChange, accent = '#6366F1', theme, placeho
 
           {/* Footer */}
           <div style={{ display: 'flex', gap: 6, marginTop: 10, borderTop: `1px solid ${bord}`, paddingTop: 10 }}>
-            <button onClick={() => { onChange(today.toISOString().substring(0, 10)); setOpen(false); }}
+            <button onClick={() => { onChange(formatDate(today)); setOpen(false); }}
               style={{ flex: 1, padding: '6px 8px', border: `1px solid ${bord}`, borderRadius: 7, background: 'none', cursor: 'pointer', fontSize: 11.5, fontWeight: 500, color: txt2, fontFamily: 'inherit' }}
               onMouseEnter={e => (e.currentTarget.style.background = col)}
               onMouseLeave={e => (e.currentTarget.style.background = 'none')}>

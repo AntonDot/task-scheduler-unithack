@@ -1,6 +1,9 @@
-import { useState, useRef, useCallback } from 'react';
+import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { Theme } from '@/theme/theme';
+import { improveText, type ImproveResponse } from '@/api/ai';
+
+type MentionState = { blockId: string; query: string; top: number; left: number; idx: number } | null;
 
 // ─── Block types ─────────────────────────────────────────────────────────────
 
@@ -68,13 +71,61 @@ interface BlockEditorProps {
   onChange: (text: string) => void;
   accent?: string;
   theme?: Theme;
+  readonly?: boolean;
+  onAiResult?: (result: ImproveResponse) => void;
+  members?: { id: number; full_name: string }[];
 }
 
-export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: BlockEditorProps) {
+function getNumberedPosition(blocks: Block[], currentIdx: number): number {
+  let n = 1;
+  for (let i = currentIdx - 1; i >= 0; i--) {
+    if (blocks[i]?.type === 'numbered') n++;
+    else break;
+  }
+  return n;
+}
+
+export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readonly, onAiResult, members }: BlockEditorProps) {
   const [blocks, setBlocks] = useState<Block[]>(() => textToBlocks(value));
   const [slashMenu, setSlashMenu] = useState<{ blockId: string; filter: string; y: number; x: number } | null>(null);
+  const [mentionState, setMentionState] = useState<MentionState>(null);
+
+  React.useEffect(() => {
+    const currentText = blocksToText(blocks);
+    if (value !== currentText) {
+      setBlocks(textToBlocks(value));
+    }
+  }, [value]);
+
   const [menuIdx, setMenuIdx] = useState(0);
-  const refs = useRef<Record<string, HTMLTextAreaElement | null>>({});
+  const [aiLoading, setAiLoading] = useState(false);
+  const refs = useRef<Record<string, any>>({});
+
+  async function handleAiImprove() {
+    const text = blocksToText(blocks).trim();
+    if (!text || aiLoading) return;
+    setAiLoading(true);
+    try {
+      const result = await improveText(text);
+      if (result.description) {
+        const next = textToBlocks(result.description);
+        setBlocks(next);
+        onChange(blocksToText(next));
+      }
+      onAiResult?.(result);
+    } catch {
+      // silently ignore — user sees no change
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (slashMenu) {
+      const el = document.getElementById(`slash-cmd-${menuIdx}`);
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+  }, [menuIdx, slashMenu]);
 
   const surf = theme?.surface || '#fff';
   const bord = theme?.border  || '#E5E7EB';
@@ -102,7 +153,7 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: Bloc
   }
 
   function autoGrow(el: HTMLTextAreaElement | null) {
-    if (!el) return;
+    if (!el || el.tagName !== 'TEXTAREA') return;
     el.style.height = 'auto';
     el.style.height = el.scrollHeight + 'px';
   }
@@ -133,7 +184,40 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: Bloc
     setTimeout(() => refs.current[blockId]?.focus(), 20);
   }
 
+  function insertMention(m: { id: number; full_name: string }, blockId: string) {
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+    const ta = refs.current[blockId] as HTMLTextAreaElement | null;
+    const pos = ta?.selectionStart ?? block.text.length;
+    const atPos = block.text.lastIndexOf('@', pos - 1);
+    const before = block.text.slice(0, atPos);
+    const after  = block.text.slice(pos);
+    const newText = before + `@${m.full_name} ` + after;
+    upd(blockId, { text: newText });
+    setMentionState(null);
+    setTimeout(() => {
+      const el = refs.current[blockId] as HTMLTextAreaElement | null;
+      if (el) {
+        el.focus();
+        const newPos = before.length + m.full_name.length + 2;
+        el.setSelectionRange(newPos, newPos);
+        autoGrow(el);
+      }
+    }, 20);
+  }
+
   function handleKeyDown(e: React.KeyboardEvent<HTMLTextAreaElement>, block: Block) {
+    if (readonly) return;
+    if (mentionState && members?.length) {
+      const filtered = members.filter(m => m.full_name.toLowerCase().includes(mentionState.query.toLowerCase())).slice(0, 5);
+      if (e.key === 'ArrowDown') { e.preventDefault(); setMentionState(s => s ? { ...s, idx: Math.min(s.idx + 1, filtered.length - 1) } : s); return; }
+      if (e.key === 'ArrowUp')   { e.preventDefault(); setMentionState(s => s ? { ...s, idx: Math.max(s.idx - 1, 0) } : s); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        const m = filtered[mentionState.idx];
+        if (m) { e.preventDefault(); insertMention(m, block.id); return; }
+      }
+      if (e.key === 'Escape') { setMentionState(null); return; }
+    }
     if (slashMenu && filteredCmds.length > 0) {
       if (e.key === 'ArrowDown') { e.preventDefault(); setMenuIdx(i => Math.min(i+1, filteredCmds.length-1)); return; }
       if (e.key === 'ArrowUp')   { e.preventDefault(); setMenuIdx(i => Math.max(i-1, 0)); return; }
@@ -142,21 +226,63 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: Bloc
     }
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      const continueType = ['bullet','numbered','todo'].includes(block.type) && block.text ? block.type as BlockType : 'paragraph';
-      insertAfter(block.id, continueType);
+      const ta = e.currentTarget;
+      const pos = ta.selectionStart ?? block.text.length;
+      const before = block.text.slice(0, pos);
+      const after  = block.text.slice(pos);
+      const continueType: BlockType =
+        ['bullet','numbered','todo'].includes(block.type) && block.text
+          ? block.type as BlockType
+          : 'paragraph';
+      const nb = makeBlock(continueType, after);
+      const idx2 = blocks.findIndex(b => b.id === block.id);
+      const next = [...blocks];
+      next[idx2] = { ...block, text: before };
+      next.splice(idx2 + 1, 0, nb);
+      commit(next);
+      setTimeout(() => {
+        const el = refs.current[nb.id];
+        if (el) { el.focus(); el.setSelectionRange(0, 0); autoGrow(el); }
+      }, 20);
       return;
     }
     if (e.key === 'Backspace' && !block.text) {
       e.preventDefault();
       if (block.type !== 'paragraph') { upd(block.id, { type: 'paragraph' }); return; }
+      
+      const idx = blocks.findIndex(b => b.id === block.id);
+      const prev = blocks[idx - 1];
+      if (prev && prev.type === 'divider') {
+        commit(blocks.filter(b => b.id !== prev.id));
+        return;
+      }
+      
       deleteBlock(block.id);
     }
   }
 
   function handleChange(e: React.ChangeEvent<HTMLTextAreaElement>, block: Block) {
+    if (readonly) return;
     const text = e.target.value;
     autoGrow(e.target);
     upd(block.id, { text });
+
+    // @mention detection
+    if (members?.length) {
+      const pos = e.target.selectionStart ?? text.length;
+      const atPos = text.lastIndexOf('@', pos - 1);
+      if (atPos >= 0 && (atPos === 0 || /[\s\n]/.test(text[atPos - 1] ?? ''))) {
+        const query = text.slice(atPos + 1, pos);
+        if (!query.includes(' ') && !query.includes('\n')) {
+          const rect = e.target.getBoundingClientRect();
+          setMentionState({ blockId: block.id, query, top: rect.bottom + 4, left: rect.left + 8, idx: 0 });
+          setSlashMenu(null);
+          return;
+        }
+      }
+      setMentionState(null);
+    }
+
     const si = text.lastIndexOf('/');
     if (si >= 0 && (si === 0 || text[si-1] === ' ') && !text.slice(si).includes(' ')) {
       const rect = e.target.getBoundingClientRect();
@@ -186,7 +312,24 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: Bloc
   function renderBlock(block: Block, idx: number) {
     if (block.type === 'divider') {
       return (
-        <div key={block.id} style={{ padding: '10px 0' }}>
+        <div 
+          key={block.id} 
+          tabIndex={readonly ? -1 : 0}
+          ref={el => { refs.current[block.id] = el; }}
+          onKeyDown={e => {
+            if (readonly) return;
+            if (e.key === 'Backspace' || e.key === 'Delete') {
+              e.preventDefault();
+              deleteBlock(block.id);
+            }
+          }}
+          style={{ 
+            padding: '10px 0', outline: 'none', cursor: readonly ? 'default' : 'pointer',
+            borderRadius: 4, transition: 'background 0.1s'
+          }}
+          onFocus={e => { if (!readonly) e.currentTarget.style.background = bord + '60'; }}
+          onBlur={e => { e.currentTarget.style.background = 'transparent'; }}
+        >
           <hr style={{ border: 'none', borderTop: `1.5px solid ${bord}`, margin: 0 }} />
         </div>
       );
@@ -205,16 +348,16 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: Bloc
     const prefix = block.type === 'bullet' ? (
       <span style={{ color: txtM, fontSize: 20, lineHeight: 1.5, flexShrink: 0, userSelect: 'none', marginTop: 1 }}>·</span>
     ) : block.type === 'numbered' ? (
-      <span style={{ color: txtM, fontSize: 13, lineHeight: 1.8, flexShrink: 0, minWidth: 18, userSelect: 'none' }}>{idx + 1}.</span>
+      <span style={{ color: txtM, fontSize: 13, lineHeight: 1.8, flexShrink: 0, minWidth: 18, userSelect: 'none' }}>{getNumberedPosition(blocks, idx)}.</span>
     ) : block.type === 'todo' ? (
       <div
-        onMouseDown={e => { e.preventDefault(); upd(block.id, { checked: !block.checked }); }}
+        onMouseDown={e => { if (!readonly) { e.preventDefault(); upd(block.id, { checked: !block.checked }); } }}
         style={{
           width: 16, height: 16, borderRadius: 4, flexShrink: 0, marginTop: 5,
           border: block.checked ? 'none' : `1.5px solid ${bord}`,
           background: block.checked ? accent : 'transparent',
           display: 'flex', alignItems: 'center', justifyContent: 'center',
-          cursor: 'pointer', transition: 'all 0.15s',
+          cursor: readonly ? 'default' : 'pointer', transition: 'all 0.15s',
         }}
       >
         {block.checked && (
@@ -231,10 +374,12 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: Bloc
         <textarea
           ref={el => { refs.current[block.id] = el; if (el) autoGrow(el); }}
           value={block.text}
-          placeholder={block.type === 'paragraph' ? "Type '/' for commands…" : ''}
+          placeholder={block.type === 'paragraph' && !readonly && idx === 0 ? "Type '/' for commands…" : ''}
           rows={1}
+          readOnly={readonly}
           onChange={e => handleChange(e, block)}
           onKeyDown={e => handleKeyDown(e, block)}
+          onBlur={() => setTimeout(() => setMentionState(null), 150)}
           style={getTextareaStyle(block.type, block.checked)}
         />
       </div>
@@ -243,22 +388,94 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: Bloc
 
   return (
     <div style={{ position: 'relative' }}>
+      {!readonly && (
+        <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 4 }}>
+          <button
+            onClick={handleAiImprove}
+            disabled={aiLoading}
+            title="Improve with AI"
+            style={{
+              display: 'inline-flex', alignItems: 'center', gap: 5,
+              padding: '4px 10px', borderRadius: 7, border: `1px solid ${accent}44`,
+              background: aiLoading ? accent + '12' : accent + '0e',
+              color: accent, fontSize: 11.5, fontWeight: 600,
+              cursor: aiLoading ? 'not-allowed' : 'pointer',
+              fontFamily: 'inherit', transition: 'background 0.12s',
+            }}
+            onMouseEnter={e => { if (!aiLoading) (e.currentTarget.style.background = accent + '22'); }}
+            onMouseLeave={e => { (e.currentTarget.style.background = aiLoading ? accent + '12' : accent + '0e'); }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill={accent} stroke="none">
+              <path d="M12 2l2.4 7.4H22l-6.2 4.5 2.4 7.4L12 17l-6.2 4.3 2.4-7.4L2 9.4h7.6z"/>
+            </svg>
+            {aiLoading ? 'Improving…' : 'AI Writer'}
+          </button>
+        </div>
+      )}
       <div
         style={{
           border: `1px solid ${bord}`, borderRadius: 10,
           padding: '12px 16px', background: surf,
           minHeight: 100, display: 'flex', flexDirection: 'column', gap: 2,
-          cursor: 'text',
+          cursor: readonly ? 'default' : 'text',
         }}
         onClick={e => {
-          if (e.target === e.currentTarget && blocks.length > 0) {
+          if (!readonly && e.target === e.currentTarget && blocks.length > 0) {
             const last = blocks[blocks.length - 1];
-            if (last) refs.current[last.id]?.focus();
+            if (last) {
+              if (last.type === 'divider') {
+                insertAfter(last.id, 'paragraph');
+              } else {
+                refs.current[last.id]?.focus();
+              }
+            }
           }
         }}
       >
         {blocks.map((block, idx) => renderBlock(block, idx))}
       </div>
+
+      {/* @mention dropdown */}
+      {mentionState && members?.length && (() => {
+        const filtered = members.filter(m =>
+          m.full_name.toLowerCase().includes(mentionState.query.toLowerCase())
+        ).slice(0, 5);
+        if (!filtered.length) return null;
+        return createPortal(
+          <div style={{
+            position: 'fixed',
+            top: Math.min(mentionState.top, window.innerHeight - 200),
+            left: Math.min(mentionState.left, window.innerWidth - 220),
+            width: 210, zIndex: 99999,
+            background: surf, border: `1px solid ${bord}`,
+            borderRadius: 10, boxShadow: '0 8px 30px rgba(0,0,0,0.14)',
+            overflow: 'hidden',
+          }}>
+            {filtered.map((m, i) => (
+              <div
+                key={m.id}
+                onMouseDown={e => { e.preventDefault(); insertMention(m, mentionState.blockId); }}
+                onMouseEnter={() => setMentionState(s => s ? { ...s, idx: i } : s)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 8,
+                  padding: '7px 10px', cursor: 'pointer',
+                  background: mentionState.idx === i ? accent + '18' : 'transparent',
+                }}
+              >
+                <span style={{
+                  width: 24, height: 24, borderRadius: '50%', background: accent + '22',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontSize: 11, fontWeight: 700, color: accent, flexShrink: 0,
+                }}>
+                  {m.full_name.charAt(0).toUpperCase()}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: txt }}>{m.full_name}</span>
+              </div>
+            ))}
+          </div>,
+          document.body,
+        );
+      })()}
 
       {/* Slash command menu — rendered via portal to escape transformed/overflow ancestors */}
       {slashMenu && filteredCmds.length > 0 && createPortal(
@@ -269,13 +486,14 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: Bloc
           width: 240, zIndex: 99999,
           background: surf, border: `1px solid ${bord}`,
           borderRadius: 12, boxShadow: '0 12px 40px rgba(0,0,0,0.18)',
-          overflow: 'hidden',
+          maxHeight: 320, display: 'flex', flexDirection: 'column',
         }}>
-          <div style={{ padding: '7px 12px 5px', fontSize: 10.5, fontWeight: 600, color: txtM, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+          <div style={{ padding: '7px 12px 5px', fontSize: 10.5, fontWeight: 600, color: txtM, letterSpacing: '0.07em', textTransform: 'uppercase', flexShrink: 0, borderBottom: `1px solid ${bord}40` }}>
             Block type
           </div>
-          {filteredCmds.map((cmd, i) => (
-            <div key={cmd.type}
+          <div style={{ overflowY: 'auto', flex: 1, paddingBottom: 6 }}>
+            {filteredCmds.map((cmd, i) => (
+              <div key={cmd.type} id={`slash-cmd-${i}`}
               onMouseDown={e => { e.preventDefault(); applyCmd(cmd, slashMenu.blockId); }}
               onMouseEnter={() => setMenuIdx(i)}
               style={{
@@ -300,6 +518,7 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme }: Bloc
               </div>
             </div>
           ))}
+          </div>
         </div>,
         document.body,
       )}

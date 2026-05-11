@@ -49,7 +49,8 @@ todo-чекбоксы (- [ ] задача), цитаты (> важное). Ми�
 - "deadline": дата ISO-8601 или null
 
 Пример ответа:
-{"title":"Исправить ошибку оплаты","description":"## Проблема\\n\\n> Пользователь не может оплатить заказ.\\n\\n## Шаги воспроизведения\\n\\n1. Перейти в корзину\\n2. Нажать «Оплатить»\\n\\n## Что нужно сделать\\n\\n- [ ] Воспроизвести баг\\n- [ ] Найти причину\\n- [ ] Задеплоить фикс","urgency":"HIGH","deadline":null}
+{"title":"Исправить ошибку оплаты","description":"## Проблема\\n\\n> Пользователь не может оплатить заказ.",
+"urgency":"HIGH","deadline":null}
 
 Отвечай только JSON без каких-либо пояснений.\
 """
@@ -130,9 +131,13 @@ async def parse_task(text: str) -> ParsedTask:
         title = " ".join(words[:8]) if len(words) > 3 else "Новая задача"
         if len(title) > 80:
             title = title[:77] + "..."
-        urgency = "URGENT" if any(w in text.lower() for w in ["срочно", "критично", "кошмар", "ужас", "не работает"]) \
-                  else "HIGH" if any(w in text.lower() for w in ["важно", "проблема", "баг", "ошибка"]) \
-                  else "MEDIUM"
+        urgency = (
+            "URGENT"
+            if any(w in text.lower() for w in ["срочно", "критично", "кошмар", "ужас", "не работает"])
+            else "HIGH"
+            if any(w in text.lower() for w in ["важно", "проблема", "баг", "ошибка"])
+            else "MEDIUM"
+        )
         description = (
             f"## Описание\n\n> {text[:200]}{'...' if len(text) > 200 else ''}\n\n"
             "## Что нужно сделать\n\n"

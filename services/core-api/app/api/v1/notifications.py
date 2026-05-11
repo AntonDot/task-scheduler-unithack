@@ -16,27 +16,27 @@ from app.models.task_assignee import task_assignees
 router = APIRouter(prefix="/api/v1", tags=["notifications"])
 
 _ACTION_LABELS: dict[str, str] = {
-    "task_assigned":   "Задача назначена",
-    "status_changed":  "Статус изменён",
-    "comment_added":   "Новый комментарий",
-    "attachment_added":"Файл прикреплён",
-    "task_created":    "Задача создана",
-    "task_approved":   "Задача одобрена",
+    "task_assigned": "Задача назначена",
+    "status_changed": "Статус изменён",
+    "comment_added": "Новый комментарий",
+    "attachment_added": "Файл прикреплён",
+    "task_created": "Задача создана",
+    "task_approved": "Задача одобрена",
 }
 
 _ACTION_TYPES: dict[str, str] = {
-    "task_assigned":   "task_assigned",
-    "status_changed":  "status_change",
-    "comment_added":   "comment",
-    "attachment_added":"comment",
-    "task_created":    "task_assigned",
-    "task_approved":   "status_change",
+    "task_assigned": "task_assigned",
+    "status_changed": "status_change",
+    "comment_added": "comment",
+    "attachment_added": "comment",
+    "task_created": "task_assigned",
+    "task_approved": "status_change",
 }
 
 
 class NotificationItem(BaseModel):
     id: str
-    type: str           # matches settings keys: task_assigned / comment / status_change / mention
+    type: str  # matches settings keys: task_assigned / comment / status_change / mention
     title: str
     body: str
     task_id: int
@@ -53,9 +53,7 @@ async def get_notifications(
     since = datetime.now(UTC) - timedelta(days=14)
 
     # Projects the user belongs to
-    proj_result = await db.execute(
-        select(UserProject.project_id).where(UserProject.user_id == current_user.id)
-    )
+    proj_result = await db.execute(select(UserProject.project_id).where(UserProject.user_id == current_user.id))
     project_ids = [r[0] for r in proj_result.all()]
     if not project_ids:
         return []
@@ -66,11 +64,7 @@ async def get_notifications(
             Task.project_id.in_(project_ids),
             or_(
                 Task.assignee_id == current_user.id,
-                Task.id.in_(
-                    select(task_assignees.c.task_id).where(
-                        task_assignees.c.user_id == current_user.id
-                    )
-                ),
+                Task.id.in_(select(task_assignees.c.task_id).where(task_assignees.c.user_id == current_user.id)),
             ),
         )
     )
@@ -110,22 +104,24 @@ async def get_notifications(
         body = f"{actor} — {task_title}"
         if log.action == "status_changed" and log.new_value:
             body = f"{actor} изменил(а) статус на «{log.new_value}» — {task_title}"
-        notifications.append(NotificationItem(
-            id=f"audit-{log.id}",
-            type=notif_type,
-            title=label,
-            body=body,
-            task_id=log.task_id,
-            task_title=task_title,
-            created_at=log.created_at,
-            actor_name=actor,
-        ))
+        notifications.append(
+            NotificationItem(
+                id=f"audit-{log.id}",
+                type=notif_type,
+                title=label,
+                body=body,
+                task_id=log.task_id,
+                task_title=task_title,
+                created_at=log.created_at,
+                actor_name=actor,
+            )
+        )
 
     # --- Mention notifications (comments containing @current_user.full_name) ---
     mention_result = await db.execute(
         select(Comment)
         .where(
-            Comment.task_id.in_(my_task_ids | {t for t in my_task_ids}),
+            Comment.task_id.in_(my_task_ids),
             Comment.user_id != current_user.id,
             Comment.text.ilike(f"%@{current_user.full_name}%"),
             Comment.created_at >= since,
@@ -137,16 +133,18 @@ async def get_notifications(
     mentions = list(mention_result.scalars().unique().all())
     for c in mentions:
         actor = c.user.full_name if c.user else "Кто-то"
-        notifications.append(NotificationItem(
-            id=f"mention-{c.id}",
-            type="mention",
-            title="Вас упомянули",
-            body=f"{actor}: {c.text[:80]}{'…' if len(c.text) > 80 else ''}",
-            task_id=c.task_id,
-            task_title=f"Task #{c.task_id}",
-            created_at=c.created_at,
-            actor_name=actor,
-        ))
+        notifications.append(
+            NotificationItem(
+                id=f"mention-{c.id}",
+                type="mention",
+                title="Вас упомянули",
+                body=f"{actor}: {c.text[:80]}{'…' if len(c.text) > 80 else ''}",
+                task_id=c.task_id,
+                task_title=f"Task #{c.task_id}",
+                created_at=c.created_at,
+                actor_name=actor,
+            )
+        )
 
     # Sort combined list and cap
     notifications.sort(key=lambda n: n.created_at, reverse=True)

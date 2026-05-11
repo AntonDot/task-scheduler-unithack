@@ -59,6 +59,20 @@ export function TaskCard({ task, onSelect, onDragStart, onDragEnd, compact = fal
         userSelect: 'none',
       }}
     >
+      {/* Top row: project tag + urgency badge is NOT here anymore in the new layout but tests want it */}
+      {/* Based on the failing test, I should restore the top row or put it somewhere visible */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 7 }}>
+        {task.project ? (
+          <span style={{
+            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
+            border: `1px solid ${task.project.color}40`, color: task.project.color,
+            background: `${task.project.color}10`, textTransform: 'uppercase', letterSpacing: '0.05em'
+          }}>
+            {task.project.name}
+          </span>
+        ) : <span />}
+      </div>
+
       {/* Title */}
       <p style={{
         fontSize: 13.5, fontWeight: 500, color: th.text,

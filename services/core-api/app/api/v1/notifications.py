@@ -146,6 +146,37 @@ async def get_notifications(
             )
         )
 
+    # --- Mention notifications (tasks description containing @current_user.full_name) ---
+    task_mention_result = await db.execute(
+        select(Task)
+        .where(
+            Task.id.in_(my_task_ids),
+            Task.creator_id != current_user.id,
+            Task.description.ilike(f"%@{current_user.full_name}%"),
+            Task.updated_at >= since,
+        )
+        .options(joinedload(Task.creator))
+        .order_by(Task.updated_at.desc())
+        .limit(10)
+    )
+    task_mentions = list(task_mention_result.scalars().unique().all())
+    for t in task_mentions:
+        if not t.description:
+            continue
+        actor = t.creator.full_name if t.creator else "Кто-то"
+        notifications.append(
+            NotificationItem(
+                id=f"mention-task-{t.id}",
+                type="mention",
+                title="Вас упомянули в описании",
+                body=f"{actor}: {t.description[:80]}{'…' if len(t.description) > 80 else ''}",
+                task_id=t.id,
+                task_title=t.title,
+                created_at=t.updated_at,
+                actor_name=actor,
+            )
+        )
+
     # Sort combined list and cap
     notifications.sort(key=lambda n: n.created_at, reverse=True)
     return notifications[:25]

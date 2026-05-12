@@ -530,7 +530,9 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
                 </span>
               </div>
             )}
-            <div style={{ position: 'relative', display: 'inline-block' }}>
+            <div style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => {
+              try { e.currentTarget.querySelector('input')?.showPicker(); } catch {}
+            }}>
               <input 
                 type="date"
                 value={task.deadline ? task.deadline.substring(0, 10) : ''}

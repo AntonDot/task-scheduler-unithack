@@ -29,4 +29,4 @@ VALID_STATUS_TRANSITIONS: dict[TaskStatus, set[TaskStatus]] = {
     TaskStatus.DONE: {TaskStatus.REVIEW, TaskStatus.IN_PROGRESS, TaskStatus.TODO},
 }
 
-ASSIGNEE_ALLOWED_TARGETS = {TaskStatus.IN_PROGRESS, TaskStatus.REVIEW, TaskStatus.TODO}
+ASSIGNEE_ALLOWED_TARGETS = {TaskStatus.IN_PROGRESS, TaskStatus.REVIEW, TaskStatus.TODO, TaskStatus.DONE}

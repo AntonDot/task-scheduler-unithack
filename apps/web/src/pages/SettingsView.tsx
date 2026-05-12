@@ -110,6 +110,17 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
     }
   }
 
+  async function handleColorChange(c: string) {
+    setAccentColor(c);
+    if (!user || !token) return;
+    try {
+      const updated = await updateProfile({ accent_color: c });
+      setAuth({ ...user, accent_color: updated.accent_color }, token);
+    } catch (e) {
+      console.error("Failed to save accent color", e);
+    }
+  }
+
   function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
       <div style={{ marginBottom: 42 }}>
@@ -182,7 +193,7 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
           right={
             <div style={{ display: 'flex', gap: 8 }}>
               {ACCENT_OPTIONS.map(c => (
-                <div key={c} onClick={() => setAccentColor(c)} style={{
+                <div key={c} onClick={() => handleColorChange(c)} style={{
                   width: 33, height: 33, borderRadius: '50%', background: c, cursor: 'pointer',
                   border: accentColor === c ? `3px solid ${th.text}` : '3px solid transparent',
                   transition: 'border 0.1s', boxSizing: 'border-box',

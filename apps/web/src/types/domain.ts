@@ -45,6 +45,7 @@ export interface User {
   full_name: string;
   email: string;
   is_active: boolean;
+  accent_color?: string;
 }
 
 export interface Project {

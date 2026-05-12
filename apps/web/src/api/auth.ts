@@ -25,6 +25,6 @@ export function logout(): void {
   localStorage.removeItem("token");
 }
 
-export function updateProfile(body: { full_name?: string; email?: string }): Promise<{ id: number; full_name: string; email: string; is_active: boolean }> {
+export function updateProfile(body: { full_name?: string; email?: string; accent_color?: string }): Promise<{ id: number; full_name: string; email: string; is_active: boolean; accent_color?: string }> {
   return api.patch('/auth/me', body);
 }

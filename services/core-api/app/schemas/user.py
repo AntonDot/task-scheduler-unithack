@@ -9,6 +9,7 @@ class UserRead(BaseModel):
     email: str
     is_active: bool
     created_at: datetime
+    accent_color: str | None = None
 
     model_config = {"from_attributes": True}
 

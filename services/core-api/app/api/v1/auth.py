@@ -35,7 +35,7 @@ class LoginMode(BaseModel):
 class ProfileUpdate(BaseModel):
     full_name: str | None = Field(default=None, max_length=255)
     email: str | None = Field(default=None, max_length=255)
-
+    accent_color: str | None = Field(default=None, max_length=7)
 
 @router.get("/mode", response_model=LoginMode)
 async def get_login_mode():
@@ -83,6 +83,8 @@ async def update_me(
         if result.scalar_one_or_none():
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Email already taken")
         current_user.email = body.email
+    if body.accent_color is not None:
+        current_user.accent_color = body.accent_color
     await db.commit()
     await db.refresh(current_user)
     return current_user

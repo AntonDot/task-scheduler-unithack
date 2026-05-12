@@ -131,8 +131,6 @@ export function DatePicker({ value, onChange, accent = '#6366F1', theme, placeho
                     outline: isToday && !isSel ? `2px solid ${accent}44` : 'none',
                     outlineOffset: -1,
                   }}
-                  onMouseEnter={e => { if (!isSel) e.currentTarget.style.background = accent + '1C'; }}
-                  onMouseLeave={e => { e.currentTarget.style.background = isSel ? accent : (isToday ? accent + '20' : 'transparent'); }}
                 >
                   {day}
                 </button>

@@ -394,19 +394,23 @@ function BoardView({ tasks, onTaskClick, onCreateTask, projects, activeProjectId
 
 // ─── Task Detail Sheet ────────────────────────────────────────────────────────
 
-function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, onPriorityChange, onDeadlineChange, accent, th }: {
+function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, onPriorityChange, onDeadlineChange, accent, th, members }: {
   task: Task | null; open: boolean; onClose: () => void;
   onStatusChange: (taskId: number, col: DesignColumn) => void;
   onDescriptionChange: (taskId: number, desc: string) => void;
   onPriorityChange: (taskId: number, urgency: string) => void;
   onDeadlineChange: (taskId: number, deadline: string | null) => void;
   accent: string; th: ReturnType<typeof useTheme>['theme'];
+  members?: Array<{ id: number; full_name: string }>;
 }) {
   const dragY = useRef(0);
   const [dragging, setDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
   const [commentText, setCommentText] = useState('');
   const [comments, setComments] = useState<Comment[]>([]);
+  const [mentionQuery, setMentionQuery] = useState<string | null>(null);
+  const [mentionIdx, setMentionIdx] = useState(0);
+  const commentInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!task) return;
@@ -601,6 +605,7 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
               value={task.description ?? ''}
               onChange={(text) => onDescriptionChange(task.id, text)}
               theme={th}
+              members={members}
             />
           </div>
 
@@ -638,22 +643,108 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
                 ))
               }
             </div>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input
-                value={commentText} onChange={e => setCommentText(e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && handleSendComment()}
-                placeholder="Add a comment…"
-                style={{
-                  flex: 1, padding: '10px 14px', borderRadius: 12,
-                  border: `1px solid ${th.border}`, background: th.inputBg,
-                  color: th.text, fontSize: 14, outline: 'none', fontFamily: 'inherit',
-                }}
-              />
-              <button onClick={handleSendComment} style={{
-                padding: '10px 16px', borderRadius: 12, border: 'none',
-                background: accent, color: 'white', fontSize: 14, fontWeight: 600,
-                cursor: 'pointer', fontFamily: 'inherit',
-              }}>Send</button>
+            <div style={{ position: 'relative' }}>
+              {mentionQuery !== null && members && (() => {
+                const filtered = members.filter(m =>
+                  m.full_name.toLowerCase().includes(mentionQuery.toLowerCase())
+                ).slice(0, 5);
+                if (!filtered.length) return null;
+                return (
+                  <div style={{
+                    position: 'absolute', bottom: '100%', left: 0,
+                    marginBottom: 8, background: th.surface,
+                    border: `1px solid ${th.border}`, borderRadius: 10,
+                    boxShadow: '0 4px 20px rgba(0,0,0,0.1)',
+                    width: '100%', zIndex: 10, overflow: 'hidden'
+                  }}>
+                    {filtered.map((m, i) => (
+                      <div
+                        key={m.id}
+                        onMouseDown={e => {
+                          e.preventDefault();
+                          const ta = commentInputRef.current;
+                          if (!ta) return;
+                          const pos = ta.selectionStart ?? commentText.length;
+                          const atPos = commentText.lastIndexOf('@', pos - 1);
+                          const before = commentText.slice(0, atPos);
+                          const after  = commentText.slice(pos);
+                          setCommentText(before + `@${m.full_name} ` + after);
+                          setMentionQuery(null);
+                          setTimeout(() => { ta.focus(); ta.setSelectionRange(before.length + m.full_name.length + 2, before.length + m.full_name.length + 2); }, 20);
+                        }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 8,
+                          padding: '8px 12px', cursor: 'pointer',
+                          background: i === mentionIdx ? accent + '14' : 'transparent',
+                        }}
+                        onTouchStart={() => setMentionIdx(i)}
+                      >
+                        <div style={{
+                          width: 22, height: 22, borderRadius: '50%',
+                          background: userColor(m.id), display: 'flex', alignItems: 'center',
+                          justifyContent: 'center', color: 'white', fontSize: 9, fontWeight: 700,
+                        }}>
+                          {getInitials(m.full_name)}
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 600, color: th.text }}>{m.full_name}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input
+                  ref={commentInputRef}
+                  value={commentText} 
+                  onChange={e => {
+                    const val = e.target.value;
+                    setCommentText(val);
+                    const pos = e.target.selectionStart ?? val.length;
+                    const atPos = val.lastIndexOf('@', pos - 1);
+                    if (atPos >= 0 && (atPos === 0 || val[atPos - 1] === ' ' || val[atPos - 1] === '\n')) {
+                      const query = val.slice(atPos + 1, pos);
+                      if (!query.includes(' ')) { setMentionQuery(query); setMentionIdx(0); return; }
+                    }
+                    setMentionQuery(null);
+                  }}
+                  onKeyDown={e => {
+                    if (mentionQuery !== null && members) {
+                      const filtered = members.filter(m => m.full_name.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 5);
+                      if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIdx(i => Math.min(i + 1, filtered.length - 1)); return; }
+                      if (e.key === 'ArrowUp')   { e.preventDefault(); setMentionIdx(i => Math.max(i - 1, 0)); return; }
+                      if (e.key === 'Enter' || e.key === 'Tab') {
+                        const m = filtered[mentionIdx];
+                        if (m) {
+                          e.preventDefault();
+                          const ta = commentInputRef.current;
+                          if (!ta) return;
+                          const pos = ta.selectionStart ?? commentText.length;
+                          const atPos = commentText.lastIndexOf('@', pos - 1);
+                          const before = commentText.slice(0, atPos);
+                          const after  = commentText.slice(pos);
+                          setCommentText(before + `@${m.full_name} ` + after);
+                          setMentionQuery(null);
+                          setTimeout(() => { ta.focus(); ta.setSelectionRange(before.length + m.full_name.length + 2, before.length + m.full_name.length + 2); }, 20);
+                          return;
+                        }
+                      }
+                      if (e.key === 'Escape') { setMentionQuery(null); return; }
+                    }
+                    if (e.key === 'Enter') handleSendComment();
+                  }}
+                  placeholder="Add a comment…"
+                  style={{
+                    flex: 1, padding: '10px 14px', borderRadius: 12,
+                    border: `1px solid ${th.border}`, background: th.inputBg,
+                    color: th.text, fontSize: 14, outline: 'none', fontFamily: 'inherit',
+                  }}
+                />
+                <button onClick={handleSendComment} style={{
+                  padding: '10px 16px', borderRadius: 12, border: 'none',
+                  background: accent, color: 'white', fontSize: 14, fontWeight: 600,
+                  cursor: 'pointer', fontFamily: 'inherit',
+                }}>Send</button>
+              </div>
             </div>
           </div>
         </div>
@@ -1233,6 +1324,7 @@ export function MobileApp() {
         onPriorityChange={handlePriorityChange}
         onDeadlineChange={handleDeadlineChange}
         accent={accent} th={th}
+        members={members}
       />
 
       <CreateSheet

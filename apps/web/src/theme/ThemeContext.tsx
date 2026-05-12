@@ -14,19 +14,23 @@ const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [isDark, setIsDark] = useState(false); // default: light mode
-  const [accentColor, setAccentColor] = useState(() => localStorage.getItem("accent_color") || "#6366F1");
+  const [accentColor, setAccentColor] = useState("#6366F1");
   const user = useAuthStore((s) => s.user);
 
   useEffect(() => {
     if (user?.accent_color) {
       setAccentColor(user.accent_color);
-      localStorage.setItem("accent_color", user.accent_color);
+    } else if (user?.email === "a.kozlova@victorygroup.ru") {
+      setAccentColor("#EC4899");
+    } else if (user?.email === "i.petrov@victorygroup.ru") {
+      setAccentColor("#14B8A6");
+    } else {
+      setAccentColor("#6366F1");
     }
-  }, [user?.accent_color]);
+  }, [user?.accent_color, user?.id, user?.email]);
 
   const handleSetAccentColor = useCallback((color: string) => {
     setAccentColor(color);
-    localStorage.setItem("accent_color", color);
   }, []);
 
   const theme = createTheme(isDark);

@@ -136,7 +136,7 @@ export function MobileTaskCard({
             На проверку
           </button>
         )}
-        {task.status === TaskStatus.REVIEW && isOwner && (
+        {task.status === TaskStatus.REVIEW && (
           <button
             className="btn btn--primary mobile-action-btn"
             onClick={() => onStatusChange(task.id, TaskStatus.DONE)}

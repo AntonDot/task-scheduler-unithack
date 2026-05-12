@@ -63,7 +63,7 @@ export function MobileActionSheet({
     });
   }
 
-  if (task.status === TaskStatus.REVIEW && isOwner) {
+  if (task.status === TaskStatus.REVIEW) {
     actions.push({
       label: "Завершить",
       action: () => { onStatusChange(task.id, TaskStatus.DONE); onClose(); },

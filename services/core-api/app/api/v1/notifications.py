@@ -121,7 +121,7 @@ async def get_notifications(
     mention_result = await db.execute(
         select(Comment)
         .where(
-            Comment.task_id.in_(my_task_ids),
+            Comment.task_id.in_(select(Task.id).where(Task.project_id.in_(project_ids))),
             Comment.user_id != current_user.id,
             Comment.text.ilike(f"%@{current_user.full_name}%"),
             Comment.created_at >= since,
@@ -150,8 +150,7 @@ async def get_notifications(
     task_mention_result = await db.execute(
         select(Task)
         .where(
-            Task.id.in_(my_task_ids),
-            Task.creator_id != current_user.id,
+            Task.project_id.in_(project_ids),
             Task.description.ilike(f"%@{current_user.full_name}%"),
             Task.updated_at >= since,
         )

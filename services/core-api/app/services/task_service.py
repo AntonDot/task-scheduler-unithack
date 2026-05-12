@@ -85,6 +85,11 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
     co_assignee_ids = update_data.pop("co_assignee_ids", None)
 
     old_values = {field: getattr(task, field) for field in update_data}
+    
+    # Check if assignee_id is changing
+    assignee_changed = "assignee_id" in update_data and update_data["assignee_id"] != getattr(task, "assignee_id")
+    co_assignee_changed = co_assignee_ids is not None
+
     for field, value in update_data.items():
         setattr(task, field, value)
 
@@ -95,14 +100,28 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
     await db.refresh(task)
     await db.refresh(task, attribute_names=["project", "assignee", "co_assignees"])
     new_values = {field: getattr(task, field) for field in update_data}
-    await log_action(
-        db,
-        task.id,
-        user_project.user_id,
-        "updated",
-        old_value=json.dumps(old_values, default=str),
-        new_value=json.dumps(new_values, default=str),
-    )
+    
+    if assignee_changed or co_assignee_changed:
+        await log_action(
+            db,
+            task.id,
+            user_project.user_id,
+            "task_assigned",
+            old_value=json.dumps({"assignee_id": old_values.get("assignee_id", getattr(task, "assignee_id", None))}, default=str),
+            new_value=json.dumps({"assignee_id": task.assignee_id}, default=str),
+        )
+    
+    # Only log 'updated' if there are other fields changed besides assignee_id
+    other_fields = {k: v for k, v in new_values.items() if k != "assignee_id"}
+    if other_fields:
+        await log_action(
+            db,
+            task.id,
+            user_project.user_id,
+            "updated",
+            old_value=json.dumps({k: v for k, v in old_values.items() if k != "assignee_id"}, default=str),
+            new_value=json.dumps(other_fields, default=str),
+        )
     return task
 
 

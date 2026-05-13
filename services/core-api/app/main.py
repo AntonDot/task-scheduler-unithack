@@ -9,6 +9,7 @@ from app.api.v1.automations import router as automations_router
 from app.api.v1.comments import router as comments_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.projects import router as projects_router
+from app.api.v1.push import router as push_router
 from app.api.v1.tasks import router as tasks_router
 from app.config import settings
 from app.websocket_manager import ws_manager
@@ -31,6 +32,7 @@ app.include_router(auth_router)
 app.include_router(automations_router)
 app.include_router(comments_router)
 app.include_router(projects_router)
+app.include_router(push_router)
 app.include_router(tasks_router)
 
 

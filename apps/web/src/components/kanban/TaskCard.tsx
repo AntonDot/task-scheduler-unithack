@@ -60,7 +60,6 @@ export function TaskCard({ task, onSelect, onDragStart, onDragEnd, compact = fal
       }}
     >
 
-
       {/* Title */}
       <p style={{
         fontSize: 13.5, fontWeight: 500, color: th.text,

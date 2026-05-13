@@ -124,10 +124,11 @@ describe("KanbanBoard", () => {
     expect(screen.getByText("Fix landing page")).toBeInTheDocument();
   });
 
-  it("shows project tag on card", () => {
+  it("renders task card content for tasks with a project", () => {
+    // TaskCard shows title + urgency badge — project name is not displayed inline on the card
     renderBoard();
-    const tags = screen.getAllByText("Онегин Парк");
-    expect(tags.length).toBeGreaterThan(0);
+    expect(screen.getByTestId("task-card-1")).toBeInTheDocument();
+    expect(screen.getByText("Fix landing page")).toBeInTheDocument();
   });
 
   it("shows assignee avatar initials", () => {

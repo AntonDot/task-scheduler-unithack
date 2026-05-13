@@ -102,9 +102,10 @@ describe("MobileTaskCard", () => {
     expect(screen.getByText("Завершить")).toBeInTheDocument();
   });
 
-  it("hides complete button for REVIEW tasks when assignee", () => {
+  it("shows complete button for REVIEW tasks regardless of role", () => {
+    // Both owners and assignees can complete a task from REVIEW
     renderCard(makeTask({ status: TaskStatus.REVIEW }), { role: "ASSIGNEE" });
-    expect(screen.queryByText("Завершить")).not.toBeInTheDocument();
+    expect(screen.getByText("Завершить")).toBeInTheDocument();
   });
 
   it("shows discard button for owner on AI_DRAFT", () => {

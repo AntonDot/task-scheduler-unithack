@@ -3,6 +3,7 @@ import type { Theme } from '@/theme/theme';
 import { Avatar, setAvatarUrl } from '@/components/kanban/Avatar';
 import { useAuthStore } from '@/store/authStore';
 import { updateProfile } from '@/api/auth';
+import { getPushStatus, getPushDiagnostics, enablePushNotifications, type PushStatus } from '@/api/push';
 
 interface SettingsViewProps {
   accent: string;
@@ -54,6 +55,92 @@ function Toggle({ val, onChange, accent }: { val: boolean; onChange: (v: boolean
   );
 }
 
+function PushRow({ accent, theme: th }: { accent: string; theme: Theme }) {
+  const [status, setStatus] = useState<PushStatus>('checking');
+  const [loading, setLoading] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const diag = getPushDiagnostics();
+
+  useEffect(() => {
+    getPushStatus().then(setStatus).catch(() => setStatus('unsupported'));
+  }, []);
+
+  const dot: Record<Exclude<PushStatus, 'checking'>, string> = {
+    'no-https': '#EF4444', unsupported: '#9CA3AF', 'needs-pwa': '#D97706',
+    denied: '#EF4444', subscribed: '#059669', unsubscribed: '#9CA3AF',
+  };
+
+  const labels: Record<Exclude<PushStatus, 'checking'>, string> = {
+    'no-https':   'App must be opened over HTTPS for push to work',
+    unsupported:  diag.ios
+      ? 'Requires iOS 16.4+ and must be opened from the Home Screen icon'
+      : 'Push notifications are not supported in this browser',
+    'needs-pwa':  'Open in Safari → Share → Add to Home Screen, then reopen the app',
+    denied:       'Notifications blocked — go to iOS Settings → Victory → Notifications',
+    subscribed:   'Push notifications are active',
+    unsubscribed: 'Click Enable to receive push notifications',
+  };
+
+  async function handleEnable() {
+    setLoading(true);
+    const next = await enablePushNotifications();
+    setStatus(next);
+    setLoading(false);
+  }
+
+  return (
+    <div style={{ padding: '18px 0', borderBottom: `1px solid ${th.border}` }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <p style={{ fontSize: 20, fontWeight: 500, color: th.text, margin: 0 }}>Push notifications</p>
+            {status !== 'checking' && (
+              <div style={{ width: 8, height: 8, borderRadius: '50%', background: dot[status] }} />
+            )}
+          </div>
+          <p style={{ fontSize: 15, color: th.textMuted, marginTop: 3 }}>
+            {status === 'checking' ? 'Checking…' : labels[status]}
+          </p>
+        </div>
+        {status === 'unsubscribed' && (
+          <button
+            onClick={handleEnable}
+            disabled={loading}
+            style={{
+              padding: '10px 22px', borderRadius: 12, border: 'none',
+              background: loading ? th.border : accent, color: loading ? th.textMuted : 'white',
+              fontSize: 18, fontWeight: 600, cursor: loading ? 'default' : 'pointer',
+              fontFamily: 'inherit', flexShrink: 0,
+            }}
+          >
+            {loading ? 'Enabling…' : 'Enable'}
+          </button>
+        )}
+      </div>
+      {/* Debug panel — tap to expand */}
+      {status !== 'checking' && status !== 'subscribed' && (
+        <div style={{ marginTop: 8 }}>
+          <button
+            onClick={() => setShowDebug(v => !v)}
+            style={{ fontSize: 13, color: th.textMuted, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+          >
+            {showDebug ? '▾ hide debug' : '▸ debug info'}
+          </button>
+          {showDebug && (
+            <pre style={{
+              marginTop: 6, padding: '10px 14px', borderRadius: 10,
+              background: th.surface, border: `1px solid ${th.border}`,
+              fontSize: 12, color: th.textMuted, lineHeight: 1.6, overflowX: 'auto',
+            }}>
+              {JSON.stringify(diag, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColor, setAccentColor }: SettingsViewProps) {
   const th = theme;
   const { user, setAuth, token } = useAuthStore();
@@ -71,10 +158,15 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
     const file = e.target.files?.[0];
     if (!file || !user) return;
     const reader = new FileReader();
-    reader.onload = () => {
+    reader.onload = async () => {
       const dataUrl = reader.result as string;
       setAvatarUrl(user.id, dataUrl);
       setAvatarKey(k => k + 1);
+      // Persist to server so avatar syncs across devices
+      try {
+        const updated = await updateProfile({ avatar_data: dataUrl });
+        if (token) setAuth({ ...user, avatar_data: updated.avatar_data }, token);
+      } catch {}
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -206,6 +298,7 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
 
       {/* Notifications */}
       <Section title="Notifications">
+        <PushRow accent={accent} theme={th} />
         {notifs.map((n, i) => (
           <Row key={n.id} label={n.label}
             right={<Toggle val={n.enabled} onChange={v => setNotifs(ns => ns.map((x, j) => j === i ? { ...x, enabled: v } : x))} accent={accent} />}

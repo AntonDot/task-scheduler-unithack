@@ -10,6 +10,7 @@ class UserRead(BaseModel):
     is_active: bool
     created_at: datetime
     accent_color: str | None = None
+    avatar_data: str | None = None
 
     model_config = {"from_attributes": True}
 

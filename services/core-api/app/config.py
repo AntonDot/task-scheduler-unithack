@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     ml_worker_url: str = "http://localhost:8001"
     ml_webhook_api_key: str = "dev-webhook-key"  # noqa: S105
     review_board_url: str = "http://localhost:8002"
+    # VAPID keys for Web Push — generate with: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.public_key, v.private_key)"
+    vapid_private_key: str = ""
+    vapid_public_key: str = ""
+    vapid_claims_email: str = "admin@victory.local"
 
     model_config = {"env_prefix": "CORE_", "env_file": ".env", "extra": "ignore"}
 

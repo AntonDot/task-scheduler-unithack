@@ -8,6 +8,9 @@ import { fetchTasks, changeStatus, createTask, updateTask } from '@/api/tasks';
 import { fetchProjectMembers } from '@/api/members';
 import { runReviewScraper, type ReviewScrapeResult } from '@/api/automations';
 import { fetchComments, addComment, type Comment } from '@/api/comments';
+import { fetchNotifications, type NotificationItem } from '@/api/notifications';
+import { getAvatarUrl } from '@/components/kanban/Avatar';
+import { getPushStatus, getPushDiagnostics, enablePushNotifications, type PushStatus } from '@/api/push';
 import type { Task, TaskStatus } from '@/types/domain';
 import {
   COLUMNS_DEF, getUrgencyMap, statusToColumn, columnToStatus,
@@ -78,8 +81,10 @@ function Toggle({ val, onChange, accent }: { val: boolean; onChange: (v: boolean
 
 // ─── Pull-to-refresh hook ─────────────────────────────────────────────────────
 
+const PTR_THRESHOLD = 100;
+
 function usePullToRefresh(onRefresh: () => void) {
-  const [pulling, setPulling] = useState(false);
+  const [pullDist, setPullDist] = useState(0);
   const startY = useRef(0);
   const el = useRef<HTMLDivElement>(null);
 
@@ -90,11 +95,12 @@ function usePullToRefresh(onRefresh: () => void) {
     function onTS(e: TouchEvent) { startY.current = e.touches[0]?.clientY ?? 0; }
     function onTM(e: TouchEvent) {
       if (n.scrollTop > 0) return;
-      setPulling((e.touches[0]?.clientY ?? 0) - startY.current > 60);
+      const dy = (e.touches[0]?.clientY ?? 0) - startY.current;
+      setPullDist(dy > 0 ? Math.min(dy, PTR_THRESHOLD * 1.4) : 0);
     }
     function onTE() {
-      if (pulling) onRefresh();
-      setPulling(false);
+      if (pullDist >= PTR_THRESHOLD) onRefresh();
+      setPullDist(0);
     }
     n.addEventListener('touchstart', onTS, { passive: true });
     n.addEventListener('touchmove', onTM, { passive: true });
@@ -104,9 +110,45 @@ function usePullToRefresh(onRefresh: () => void) {
       n.removeEventListener('touchmove', onTM);
       n.removeEventListener('touchend', onTE);
     };
-  }, [pulling, onRefresh]);
+  }, [pullDist, onRefresh]);
 
-  return { el, pulling };
+  const progress = Math.min(pullDist / PTR_THRESHOLD, 1);
+  return { el, progress, pulling: pullDist >= PTR_THRESHOLD };
+}
+
+// ─── Circular pull-to-refresh indicator ──────────────────────────────────────
+
+function PullIndicator({ progress, ready, accent }: { progress: number; ready: boolean; accent: string }) {
+  const size = 36;
+  const r = 14;
+  const circ = 2 * Math.PI * r;
+  const dash = circ * Math.min(progress, 1);
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '8px 0', background: 'transparent', flexShrink: 0,
+    }}>
+      <div style={{
+        width: size, height: size, borderRadius: '50%',
+        background: ready ? accent + '20' : 'transparent',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        transition: 'background 0.15s',
+      }}>
+        <svg width={size} height={size} style={{ transform: 'rotate(-90deg)', position: 'absolute' }}>
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={accent + '30'} strokeWidth={2} />
+          <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={accent} strokeWidth={2.5}
+            strokeDasharray={`${dash} ${circ - dash}`} strokeLinecap="round"
+            style={{ transition: ready ? 'none' : 'stroke-dasharray 0.05s' }} />
+        </svg>
+        {ready && (
+          <svg width={14} height={14} viewBox="0 0 24 24" fill="none" stroke={accent}
+            strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ position: 'absolute' }}>
+            <polyline points="20 6 9 17 4 12" />
+          </svg>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // ─── Mobile Task Card ─────────────────────────────────────────────────────────
@@ -148,21 +190,25 @@ function MobileCard({ task, onClick, accent, th }: {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <div style={{ display: 'flex', alignItems: 'center', marginRight: displayAssignees.length > 1 ? 2 : 0 }}>
-            {displayAssignees.map((u, i) => (
-              <div key={u.id} style={{
-                marginLeft: i > 0 ? -6 : 0,
-                position: 'relative',
-                zIndex: displayAssignees.length - i,
-                borderRadius: '50%',
-                boxShadow: `0 0 0 2px ${th.surface}`,
-                width: 24, height: 24,
-                background: userColor(u.id),
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: 'white', fontSize: 9, fontWeight: 700, flexShrink: 0,
-              }}>
-                {getInitials(u.full_name)}
-              </div>
-            ))}
+            {displayAssignees.map((u, i) => {
+              const av = getAvatarUrl(u.id);
+              return (
+                <div key={u.id} style={{
+                  marginLeft: i > 0 ? -6 : 0,
+                  position: 'relative',
+                  zIndex: displayAssignees.length - i,
+                  borderRadius: '50%',
+                  boxShadow: `0 0 0 2px ${th.surface}`,
+                  width: 24, height: 24,
+                  background: av ? 'transparent' : userColor(u.id),
+                  overflow: 'hidden',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: 'white', fontSize: 9, fontWeight: 700, flexShrink: 0,
+                }}>
+                  {av ? <img src={av} alt={u.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : getInitials(u.full_name)}
+                </div>
+              );
+            })}
           </div>
           {task.deadline && (
             <span style={{
@@ -193,11 +239,19 @@ function MobileCard({ task, onClick, accent, th }: {
 
 // ─── Board View ───────────────────────────────────────────────────────────────
 
-function BoardView({ tasks, onTaskClick, onCreateTask, projects, activeProjectId, onProjectChange, accent, th }: {
+const IcoBell = ({ s = 22 }) => (
+  <svg width={s} height={s} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0 }}>
+    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
+    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+  </svg>
+);
+
+function BoardView({ tasks, onTaskClick, onCreateTask, projects, activeProjectId, onProjectChange, accent, th, notifications, onBellOpen }: {
   tasks: Task[]; onTaskClick: (t: Task) => void; onCreateTask: () => void;
   projects: Array<{ id: number; name: string; color: string }>;
   activeProjectId: number | null; onProjectChange: (id: number) => void;
   accent: string; th: ReturnType<typeof useTheme>['theme'];
+  notifications: (NotificationItem & { read?: boolean })[]; onBellOpen: () => void;
 }) {
   const [colIdx, setColIdx] = useState(0);
   const [search, setSearch] = useState('');
@@ -216,8 +270,9 @@ function BoardView({ tasks, onTaskClick, onCreateTask, projects, activeProjectId
 
   const activeProject = projects.find(p => p.id === activeProjectId) ?? projects[0] ?? null;
 
+  const unreadCount = notifications.filter(n => !n.read).length;
   const handleRefresh = useCallback(() => {}, []);
-  const { el: ptrEl, pulling } = usePullToRefresh(handleRefresh);
+  const { el: ptrEl, progress: ptrProgress, pulling: ptrReady } = usePullToRefresh(handleRefresh);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', background: th.bg }}>
@@ -278,15 +333,35 @@ function BoardView({ tasks, onTaskClick, onCreateTask, projects, activeProjectId
             )}
           </div>
 
-          <button onClick={() => setSearchOpen(o => !o)} style={{
-            width: 36, height: 36, borderRadius: '50%',
-            background: searchOpen ? accent + '18' : th.columnBg,
-            border: 'none', cursor: 'pointer',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: searchOpen ? accent : th.textSecondary,
-          }}>
-            <IcoSearch s={17} />
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {/* Bell */}
+            <button onClick={onBellOpen} style={{
+              width: 36, height: 36, borderRadius: '50%',
+              background: unreadCount > 0 ? accent + '18' : th.columnBg,
+              border: 'none', cursor: 'pointer', position: 'relative',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: unreadCount > 0 ? accent : th.textSecondary,
+            }}>
+              <IcoBell s={17} />
+              {unreadCount > 0 && (
+                <div style={{
+                  position: 'absolute', top: 5, right: 5,
+                  width: 8, height: 8, borderRadius: '50%',
+                  background: '#EF4444', border: `1.5px solid ${th.surface}`,
+                }} />
+              )}
+            </button>
+            {/* Search */}
+            <button onClick={() => setSearchOpen(o => !o)} style={{
+              width: 36, height: 36, borderRadius: '50%',
+              background: searchOpen ? accent + '18' : th.columnBg,
+              border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: searchOpen ? accent : th.textSecondary,
+            }}>
+              <IcoSearch s={17} />
+            </button>
+          </div>
         </div>
 
         {searchOpen && (
@@ -305,8 +380,8 @@ function BoardView({ tasks, onTaskClick, onCreateTask, projects, activeProjectId
           </div>
         )}
 
-        {/* Column tabs */}
-        <div style={{ display: 'flex', overflowX: 'auto', marginLeft: -16, marginRight: -16, paddingLeft: 16 }}>
+        {/* Column tabs - scrollbar hidden via .mbl-tabs CSS class */}
+        <div className="mbl-tabs" style={{ display: 'flex', overflowX: 'auto', marginLeft: -16, marginRight: -16, paddingLeft: 16 }}>
           {COLUMNS_DEF.map((c, i) => {
             const count = tasks.filter(t => statusToColumn(t.status) === c.id).length;
             const active = i === colIdx;
@@ -340,11 +415,7 @@ function BoardView({ tasks, onTaskClick, onCreateTask, projects, activeProjectId
         </div>
       </div>
 
-      {pulling && (
-        <div style={{ textAlign: 'center', padding: '10px 0', fontSize: 12, color: accent, fontWeight: 600, background: th.bg, flexShrink: 0 }}>
-          ↓ Release to refresh
-        </div>
-      )}
+      {ptrProgress > 0 && <PullIndicator progress={ptrProgress} ready={ptrReady} accent={accent} />}
 
       <div ref={ptrEl} style={{ flex: 1, overflowY: 'auto', padding: '14px 16px 100px' }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
@@ -394,14 +465,15 @@ function BoardView({ tasks, onTaskClick, onCreateTask, projects, activeProjectId
 
 // ─── Task Detail Sheet ────────────────────────────────────────────────────────
 
-function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, onPriorityChange, onDeadlineChange, accent, th, members }: {
+function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, onPriorityChange, onDeadlineChange, onAssigneeToggle, accent, th, members }: {
   task: Task | null; open: boolean; onClose: () => void;
   onStatusChange: (taskId: number, col: DesignColumn) => void;
   onDescriptionChange: (taskId: number, desc: string) => void;
   onPriorityChange: (taskId: number, urgency: string) => void;
   onDeadlineChange: (taskId: number, deadline: string | null) => void;
+  onAssigneeToggle?: (taskId: number, memberId: number) => void;
   accent: string; th: ReturnType<typeof useTheme>['theme'];
-  members?: Array<{ id: number; full_name: string }>;
+  members?: Array<{ id: number; full_name: string; email?: string }>;
 }) {
   const dragY = useRef(0);
   const [dragging, setDragging] = useState(false);
@@ -411,6 +483,7 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIdx, setMentionIdx] = useState(0);
   const commentInputRef = useRef<HTMLInputElement>(null);
+  const [showAssigneePicker, setShowAssigneePicker] = useState(false);
 
   useEffect(() => {
     if (!task) return;
@@ -557,44 +630,96 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
             </div>
           </div>
 
-          {/* Assignee */}
-          {task.assignee && (
-            <div style={{ marginBottom: 20 }}>
-              <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
-                Assignee
+          {/* Assignees */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+                Assignees
               </p>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{
-                  width: 38, height: 38, borderRadius: '50%',
-                  background: userColor(task.assignee.id),
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  color: 'white', fontSize: 13, fontWeight: 700,
-                }}>
-                  {getInitials(task.assignee.full_name)}
-                </div>
-                <div>
-                  <p style={{ fontSize: 14, fontWeight: 600, color: th.text }}>{task.assignee.full_name}</p>
-                  <p style={{ fontSize: 12, color: th.textMuted }}>{task.assignee.email}</p>
-                </div>
-              </div>
-              {(task.co_assignees ?? []).length > 0 && (
-                <div style={{ display: 'flex', gap: 8, marginTop: 10, flexWrap: 'wrap' }}>
-                  {task.co_assignees!.map(u => (
-                    <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{
-                        width: 28, height: 28, borderRadius: '50%',
-                        background: userColor(u.id), display: 'flex', alignItems: 'center',
-                        justifyContent: 'center', color: 'white', fontSize: 10, fontWeight: 700,
-                      }}>
-                        {getInitials(u.full_name)}
-                      </div>
-                      <span style={{ fontSize: 12, color: th.textSecondary }}>{u.full_name}</span>
-                    </div>
-                  ))}
-                </div>
-              )}
+              <button
+                onClick={() => setShowAssigneePicker(p => !p)}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 4,
+                  background: 'none', border: `1px solid ${accent}44`,
+                  borderRadius: 8, padding: '3px 9px', cursor: 'pointer',
+                  color: accent, fontSize: 11.5, fontWeight: 600, fontFamily: 'inherit',
+                }}
+              >
+                <IcoPlus s={12} /> Add
+              </button>
             </div>
-          )}
+
+            {/* Assignee list */}
+            {[task.assignee, ...(task.co_assignees ?? [])].filter(Boolean).map(u => {
+              if (!u) return null;
+              const av = getAvatarUrl(u.id);
+              return (
+                <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+                  <div style={{
+                    width: 34, height: 34, borderRadius: '50%',
+                    background: av ? 'transparent' : userColor(u.id),
+                    overflow: 'hidden',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: 'white', fontSize: 12, fontWeight: 700, flexShrink: 0,
+                  }}>
+                    {av ? <img src={av} alt={u.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : getInitials(u.full_name)}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 13.5, fontWeight: 600, color: th.text }}>{u.full_name}</p>
+                    {'email' in u && u.email && <p style={{ fontSize: 11.5, color: th.textMuted }}>{(u as { email: string }).email}</p>}
+                  </div>
+                  <button
+                    onClick={() => onAssigneeToggle?.(task.id, u.id)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', color: th.textMuted, padding: 4 }}
+                  >
+                    <IcoX s={14} />
+                  </button>
+                </div>
+              );
+            })}
+
+            {/* Assignee picker dropdown */}
+            {showAssigneePicker && members && (
+              <div style={{
+                background: th.surface, border: `1px solid ${th.border}`,
+                borderRadius: 12, overflow: 'hidden',
+                boxShadow: '0 4px 20px rgba(0,0,0,0.12)', marginTop: 6,
+              }}>
+                {members.map(m => {
+                  const isAssigned = task.assignee?.id === m.id || (task.co_assignees ?? []).some(u => u.id === m.id);
+                  const av = getAvatarUrl(m.id);
+                  return (
+                    <div
+                      key={m.id}
+                      onClick={() => { onAssigneeToggle?.(task.id, m.id); setShowAssigneePicker(false); }}
+                      style={{
+                        display: 'flex', alignItems: 'center', gap: 10,
+                        padding: '11px 14px', cursor: 'pointer',
+                        background: isAssigned ? accent + '0e' : 'transparent',
+                        borderBottom: `1px solid ${th.border}`,
+                      }}
+                    >
+                      <div style={{
+                        width: 30, height: 30, borderRadius: '50%',
+                        background: av ? 'transparent' : userColor(m.id),
+                        overflow: 'hidden', flexShrink: 0,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'white', fontSize: 11, fontWeight: 700,
+                      }}>
+                        {av ? <img src={av} alt={m.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : getInitials(m.full_name)}
+                      </div>
+                      <span style={{ flex: 1, fontSize: 14, fontWeight: 500, color: th.text }}>{m.full_name}</span>
+                      {isAssigned && (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={accent} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           {/* Description */}
           <div style={{ marginBottom: 20 }}>
@@ -617,15 +742,21 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 16 }}>
               {comments.length === 0
                 ? <p style={{ fontSize: 13, color: th.textMuted, fontStyle: 'italic' }}>No comments yet</p>
-                : comments.map((c) => (
+                : comments.map((c) => {
+                    const cUid = c.user?.id ?? c.user_id;
+                    const cAv = getAvatarUrl(cUid);
+                    return (
                   <div key={c.id} style={{ display: 'flex', gap: 10 }}>
                     <div style={{
                       width: 30, height: 30, borderRadius: '50%',
-                      background: userColor(c.user?.id ?? c.user_id),
+                      background: cAv ? 'transparent' : userColor(cUid),
                       display: 'flex', alignItems: 'center', justifyContent: 'center',
                       color: 'white', fontSize: 10, fontWeight: 700, flexShrink: 0,
+                      overflow: 'hidden',
                     }}>
-                      {getInitials(c.user?.full_name ?? 'User')}
+                      {cAv
+                        ? <img src={cAv} alt={c.user?.full_name ?? 'User'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : getInitials(c.user?.full_name ?? 'User')}
                     </div>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 5 }}>
@@ -640,7 +771,8 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
                       }}>{c.text}</p>
                     </div>
                   </div>
-                ))
+                );
+                })
               }
             </div>
             <div style={{ position: 'relative' }}>
@@ -1016,6 +1148,104 @@ function TeamMobileView({ tasks, members, accent, th }: {
 
 // ─── Settings Mobile View ─────────────────────────────────────────────────────
 
+// ─── Push notification status row ────────────────────────────────────────────
+
+function PushNotifRow({ accent, th }: { accent: string; th: ReturnType<typeof useTheme>['theme'] }) {
+  const [status, setStatus] = useState<PushStatus>('checking');
+  const [loading, setLoading] = useState(false);
+  const [showDebug, setShowDebug] = useState(false);
+  const diag = getPushDiagnostics();
+
+  useEffect(() => {
+    getPushStatus().then(setStatus).catch(() => setStatus('unsupported'));
+  }, []);
+
+  const statusMeta: Record<Exclude<PushStatus, 'checking'>, { label: string; sub: string; btnLabel?: string; color: string }> = {
+    'no-https':   { label: 'No HTTPS', sub: 'App must be opened over HTTPS for push to work', color: '#EF4444' },
+    unsupported:  {
+      label: 'Not supported',
+      sub: diag.ios
+        ? 'Requires iOS 16.4+ — open the app from the Home Screen icon'
+        : 'Push notifications are not supported in this browser',
+      color: th.textMuted,
+    },
+    'needs-pwa':  { label: 'Add to Home Screen', sub: 'Tap Share → Add to Home Screen, then reopen the app', color: '#D97706' },
+    denied:       { label: 'Blocked', sub: 'Go to iOS Settings → Victory → Notifications → Allow', color: '#EF4444' },
+    subscribed:   { label: 'Enabled', sub: 'Push notifications are active ✓', color: '#059669' },
+    unsubscribed: { label: 'Disabled', sub: 'Tap Enable to receive push notifications', btnLabel: 'Enable', color: th.textMuted },
+  };
+
+  if (status === 'checking') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px' }}>
+        <p style={{ fontSize: 14, fontWeight: 500, color: th.text }}>Push notifications</p>
+        <div style={{ width: 16, height: 16, borderRadius: '50%', border: `2px solid ${accent}`, borderTopColor: 'transparent', animation: 'mbl-spin 0.8s linear infinite' }} />
+      </div>
+    );
+  }
+
+  const meta = statusMeta[status];
+
+  async function handleEnable() {
+    setLoading(true);
+    const next = await enablePushNotifications();
+    setStatus(next);
+    setLoading(false);
+  }
+
+  return (
+    <div style={{ padding: '14px 16px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ flex: 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <p style={{ fontSize: 14, fontWeight: 500, color: th.text, margin: 0 }}>Push notifications</p>
+            <div style={{ width: 7, height: 7, borderRadius: '50%', background: meta.color, flexShrink: 0 }} />
+          </div>
+          <p style={{ fontSize: 11.5, color: th.textMuted, margin: '2px 0 0', lineHeight: 1.4 }}>{meta.sub}</p>
+        </div>
+        {meta.btnLabel && (
+          <button
+            onClick={handleEnable}
+            disabled={loading}
+            style={{
+              padding: '7px 14px', borderRadius: 10, border: 'none',
+              background: loading ? th.columnBg : accent,
+              color: loading ? th.textMuted : 'white',
+              fontSize: 12.5, fontWeight: 600, cursor: loading ? 'default' : 'pointer',
+              fontFamily: 'inherit', flexShrink: 0,
+            }}
+          >
+            {loading ? '…' : meta.btnLabel}
+          </button>
+        )}
+      </div>
+      {/* Collapsible debug panel */}
+      {status !== 'subscribed' && (
+        <div style={{ marginTop: 6 }}>
+          <button
+            onClick={() => setShowDebug(v => !v)}
+            style={{ fontSize: 11, color: th.textMuted, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
+          >
+            {showDebug ? '▾ debug' : '▸ debug'}
+          </button>
+          {showDebug && (
+            <pre style={{
+              marginTop: 4, padding: '8px 10px', borderRadius: 8,
+              background: th.columnBg, border: `1px solid ${th.border}`,
+              fontSize: 10, color: th.textMuted, lineHeight: 1.5,
+              overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
+            }}>
+              {JSON.stringify(diag, null, 2)}
+            </pre>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Settings Mobile View ─────────────────────────────────────────────────────
+
 function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
   accent: string; th: ReturnType<typeof useTheme>['theme'];
   isDark: boolean; onToggleDark: () => void; onSetAccent: (c: string) => void;
@@ -1058,13 +1288,22 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
           borderRadius: 16, padding: 16, marginBottom: 24,
           display: 'flex', alignItems: 'center', gap: 14,
         }}>
-          <div style={{
-            width: 54, height: 54, borderRadius: '50%',
-            background: accent, display: 'flex', alignItems: 'center',
-            justifyContent: 'center', color: 'white', fontSize: 18, fontWeight: 700, flexShrink: 0,
-          }}>
-            {getInitials(user.full_name)}
-          </div>
+          {(() => {
+            const av = getAvatarUrl(user.id);
+            return (
+              <div style={{
+                width: 54, height: 54, borderRadius: '50%',
+                background: av ? 'transparent' : accent,
+                display: 'flex', alignItems: 'center',
+                justifyContent: 'center', color: 'white', fontSize: 18, fontWeight: 700, flexShrink: 0,
+                overflow: 'hidden',
+              }}>
+                {av
+                  ? <img src={av} alt={user.full_name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  : getInitials(user.full_name)}
+              </div>
+            );
+          })()}
           <div style={{ flex: 1 }}>
             <p style={{ fontSize: 16, fontWeight: 700, color: th.text }}>{user.full_name}</p>
             <p style={{ fontSize: 12.5, color: th.textSecondary }}>{user.email}</p>
@@ -1074,6 +1313,7 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
       )}
 
       <Section title="Notifications">
+        <PushNotifRow accent={accent} th={th} />
         {[
           { key: 'task_assigned', label: 'Task assigned to me' },
           { key: 'comment', label: 'New comment on my task' },
@@ -1124,6 +1364,104 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
         <p style={{ fontSize: 11.5, color: th.textMuted }}>Victory Task · PWA v1.0.0</p>
       </div>
     </div>
+  );
+}
+
+// ─── Notification sheet ───────────────────────────────────────────────────────
+
+function timeAgoMbl(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'только что';
+  if (m < 60) return `${m}м назад`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}ч назад`;
+  return `${Math.floor(h / 24)}д назад`;
+}
+
+function NotificationSheet({ open, onClose, notifications, onMarkAllRead, accent, th, onOpenTask }: {
+  open: boolean; onClose: () => void;
+  notifications: (NotificationItem & { read?: boolean })[];
+  onMarkAllRead: () => void;
+  accent: string; th: ReturnType<typeof useTheme>['theme'];
+  onOpenTask?: (id: number, section?: 'comments' | 'description') => void;
+}) {
+  return createPortal(
+    <>
+      <div onClick={onClose} style={{
+        position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.4)',
+        zIndex: 600, opacity: open ? 1 : 0, transition: 'opacity 0.25s',
+        pointerEvents: open ? 'auto' : 'none', backdropFilter: 'blur(2px)',
+      }} />
+      <div style={{
+        position: 'fixed', left: 0, right: 0, bottom: 0,
+        background: th.surface, borderRadius: '24px 24px 0 0',
+        zIndex: 610, maxHeight: '82dvh',
+        display: 'flex', flexDirection: 'column',
+        transform: open ? 'translateY(0)' : 'translateY(100%)',
+        transition: 'transform 0.3s cubic-bezier(0.4,0,0.2,1)',
+        paddingBottom: 'var(--sab, 0px)',
+        boxShadow: '0 -8px 40px rgba(0,0,0,0.18)',
+      }}>
+        {/* Header */}
+        <div style={{ padding: '14px 20px 12px', borderBottom: `1px solid ${th.border}`, flexShrink: 0 }}>
+          <div style={{ width: 40, height: 4, borderRadius: 2, background: th.border, margin: '0 auto 14px' }} />
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <h3 style={{ fontSize: 17, fontWeight: 700, color: th.text }}>Уведомления</h3>
+            <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+              <button onClick={onMarkAllRead} style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                fontSize: 12.5, fontWeight: 600, color: accent, fontFamily: 'inherit',
+              }}>Прочитать все</button>
+              <button onClick={onClose} style={{
+                width: 30, height: 30, borderRadius: '50%', background: th.columnBg,
+                border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', color: th.textMuted,
+              }}>
+                <IcoX s={15} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* List */}
+        <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 12 }}>
+          {notifications.length === 0 ? (
+            <div style={{ padding: '48px 20px', textAlign: 'center', color: th.textMuted, fontSize: 14 }}>
+              Нет уведомлений
+            </div>
+          ) : (
+            notifications.map(n => {
+              const unread = !n.read;
+              const section = (n.type === 'comment' || n.type === 'mention') ? 'comments' : undefined;
+              return (
+                <div
+                  key={n.id}
+                  onClick={() => { onClose(); onOpenTask?.(n.task_id, section); }}
+                  style={{
+                    display: 'flex', gap: 12, padding: '13px 20px',
+                    borderBottom: `1px solid ${th.border}`,
+                    background: unread ? accent + '08' : 'transparent',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <div style={{
+                    width: 7, height: 7, borderRadius: '50%', flexShrink: 0, marginTop: 7,
+                    background: unread ? accent : 'transparent',
+                  }} />
+                  <div style={{ flex: 1 }}>
+                    <p style={{ fontSize: 13.5, fontWeight: 600, color: th.text, marginBottom: 2 }}>{n.title}</p>
+                    <p style={{ fontSize: 12.5, color: th.textSecondary, lineHeight: 1.4, marginBottom: 3 }}>{n.body}</p>
+                    <p style={{ fontSize: 11, color: th.textMuted }}>{timeAgoMbl(n.created_at)}</p>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </>,
+    document.body,
   );
 }
 
@@ -1191,6 +1529,11 @@ export function MobileApp() {
   const [sheetOpen, setSheetOpen] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
+  const [bellOpen, setBellOpen] = useState(false);
+  const [readIds, setReadIds] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('vt_read_notifs') ?? '[]') as string[]); }
+    catch { return new Set<string>(); }
+  });
 
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects });
   const resolvedProjectId = activeProjectId ?? projects[0]?.id ?? null;
@@ -1207,6 +1550,21 @@ export function MobileApp() {
     enabled: !!resolvedProjectId,
   });
 
+  const { data: rawNotifs = [] } = useQuery({
+    queryKey: ['notifications'],
+    queryFn: fetchNotifications,
+    refetchInterval: 30_000,
+  });
+
+  // Persist read IDs to localStorage
+  useEffect(() => {
+    localStorage.setItem('vt_read_notifs', JSON.stringify([...readIds]));
+  }, [readIds]);
+
+  // Push registration is now user-initiated from Settings (not auto-called here)
+
+  // Enrich notifications with local read state
+  const notifications = rawNotifs.map(n => ({ ...n, read: readIds.has(n.id) }));
 
   const statusMutation = useMutation({
     mutationFn: ({ taskId, status }: { taskId: number; status: TaskStatus }) => changeStatus(taskId, status),
@@ -1275,11 +1633,52 @@ export function MobileApp() {
       setSelTask(prev => prev ? { ...prev, deadline } : prev);
     }
     const key = ['tasks', resolvedProjectId] as const;
-    queryClient.setQueryData<Task[]>(key, old => 
+    queryClient.setQueryData<Task[]>(key, old =>
       (old ?? []).map(t => t.id === taskId ? { ...t, deadline } : t)
     );
   }
 
+  async function handleAssigneeToggle(taskId: number, memberId: number) {
+    const task = tasks.find(t => t.id === taskId) ?? selTask;
+    if (!task) return;
+
+    const coIds = (task.co_assignees ?? []).map(u => u.id);
+    const isAssigned = task.assignee?.id === memberId || coIds.includes(memberId);
+
+    let newAssigneeId: number | null = task.assignee?.id ?? null;
+    let newCoIds: number[] = [...coIds];
+
+    if (isAssigned) {
+      // Remove the member
+      if (task.assignee?.id === memberId) {
+        newAssigneeId = newCoIds[0] ?? null;
+        newCoIds = newCoIds.slice(1);
+      } else {
+        newCoIds = newCoIds.filter(id => id !== memberId);
+      }
+    } else {
+      // Add the member
+      if (!newAssigneeId) {
+        newAssigneeId = memberId;
+      } else {
+        newCoIds = [...newCoIds, memberId];
+      }
+    }
+
+    try {
+      const updated = await updateTask(taskId, {
+        assignee_id: newAssigneeId,
+        co_assignee_ids: newCoIds,
+      });
+      const key = ['tasks', resolvedProjectId] as const;
+      queryClient.setQueryData<Task[]>(key, old =>
+        (old ?? []).map(t => t.id === taskId ? { ...t, ...updated } : t)
+      );
+      if (selTask?.id === taskId) {
+        setSelTask(prev => prev ? { ...prev, ...updated } : prev);
+      }
+    } catch {}
+  }
 
   return (
     <>
@@ -1300,6 +1699,8 @@ export function MobileApp() {
               projects={projects} activeProjectId={resolvedProjectId}
               onProjectChange={id => setActiveProjectId(id)}
               accent={accent} th={th}
+              notifications={notifications}
+              onBellOpen={() => setBellOpen(true)}
             />
           )}
           {view === 'automations' && <AutomationsMobileView accent={accent} th={th} />}
@@ -1323,6 +1724,7 @@ export function MobileApp() {
         onDescriptionChange={handleDescriptionChange}
         onPriorityChange={handlePriorityChange}
         onDeadlineChange={handleDeadlineChange}
+        onAssigneeToggle={handleAssigneeToggle}
         accent={accent} th={th}
         members={members}
       />
@@ -1331,6 +1733,26 @@ export function MobileApp() {
         open={createOpen} onClose={() => setCreateOpen(false)}
         onCreate={body => createMutation.mutate(body)}
         members={members} accent={accent} th={th}
+      />
+
+      <NotificationSheet
+        open={bellOpen}
+        onClose={() => setBellOpen(false)}
+        notifications={notifications}
+        onMarkAllRead={() => {
+          const allIds = new Set(rawNotifs.map(n => n.id));
+          setReadIds(allIds);
+        }}
+        accent={accent} th={th}
+        onOpenTask={(taskId, section) => {
+          setBellOpen(false);
+          const task = tasks.find(t => t.id === taskId);
+          if (task) { setSelTask(task); setSheetOpen(true); }
+          // Mark as read
+          const notif = rawNotifs.find(n => n.task_id === taskId);
+          if (notif) setReadIds(prev => new Set([...prev, notif.id]));
+          void section; // section scrolling not supported in mobile sheet yet
+        }}
       />
     </>
   );

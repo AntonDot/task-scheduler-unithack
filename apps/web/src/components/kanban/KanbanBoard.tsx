@@ -43,9 +43,30 @@ export function KanbanBoard({
     }
   }, [openTaskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const VALID: Record<string, string[]> = {
+    'AI_DRAFT':    ['TODO'],
+    'TODO':        ['IN_PROGRESS'],
+    'IN_PROGRESS': ['REVIEW', 'TODO'],
+    'REVIEW':      ['DONE', 'IN_PROGRESS'],
+    'DONE':        ['REVIEW', 'IN_PROGRESS', 'TODO'],
+  };
+
   function handleDrop(e: React.DragEvent, targetCol: DesignColumn) {
     const taskId = parseInt(e.dataTransfer.getData('taskId'), 10);
     if (!taskId) return;
+    // Validate transition before calling API to avoid flicker-and-revert
+    const task = tasks.find(t => t.id === taskId);
+    if (task) {
+      const newStatus = targetCol === 'backlog'     ? 'TODO'
+                      : targetCol === 'in-progress' ? 'IN_PROGRESS'
+                      : targetCol === 'review'      ? 'REVIEW'
+                      : targetCol === 'done'        ? 'DONE' : null;
+      const allowed = VALID[task.status] ?? [];
+      if (!newStatus || !allowed.includes(newStatus)) {
+        setDragOverCol(null);
+        return; // silently ignore invalid transition
+      }
+    }
     onStatusChange(taskId, targetCol);
     setDragOverCol(null);
   }

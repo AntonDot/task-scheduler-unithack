@@ -45,9 +45,18 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
   const [darkHover, setDarkHover] = useState(false);
   const [bellOpen,  setBellOpen]  = useState(false);
   const [allNotifs,   setAllNotifs]   = useState<NotificationItem[]>([]);
-  const [readIds,     setReadIds]     = useState<Set<string>>(new Set());
+  const NOTIF_READ_KEY = 'vt_read_notifs';
+  const [readIds,     setReadIds]     = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(NOTIF_READ_KEY) ?? '[]') as string[]); }
+    catch { return new Set<string>(); }
+  });
   const bellRef = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
+
+  // Persist read IDs to localStorage
+  useEffect(() => {
+    localStorage.setItem(NOTIF_READ_KEY, JSON.stringify([...readIds]));
+  }, [readIds]);
 
   // Fetch real notifications
   useEffect(() => {

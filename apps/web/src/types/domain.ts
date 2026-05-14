@@ -46,6 +46,7 @@ export interface User {
   email: string;
   is_active: boolean;
   accent_color?: string;
+  is_dark?: boolean;
   avatar_data?: string | null;
 }
 

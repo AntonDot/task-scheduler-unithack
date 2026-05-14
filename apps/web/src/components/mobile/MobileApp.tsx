@@ -8,6 +8,7 @@ import { fetchTasks, changeStatus, createTask, updateTask } from '@/api/tasks';
 import { fetchProjectMembers } from '@/api/members';
 import { runReviewScraper, type ReviewScrapeResult } from '@/api/automations';
 import { fetchComments, addComment, type Comment } from '@/api/comments';
+import { fetchAttachments, uploadAttachment, deleteAttachment, getDownloadUrl, type Attachment } from '@/api/attachments';
 import { fetchNotifications, type NotificationItem } from '@/api/notifications';
 import { getAvatarUrl } from '@/components/kanban/Avatar';
 import { getPushStatus, getPushDiagnostics, enablePushNotifications, type PushStatus } from '@/api/push';
@@ -484,10 +485,14 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
   const [mentionIdx, setMentionIdx] = useState(0);
   const commentInputRef = useRef<HTMLInputElement>(null);
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!task) return;
     fetchComments(task.id).then(setComments).catch(() => {});
+    fetchAttachments(task.id).then(setAttachments).catch(() => {});
   }, [task?.id]);
 
   if (!task) return null;
@@ -519,6 +524,27 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
     try {
       const c = await addComment(taskId, text);
       setComments(prev => [...prev, c]);
+    } catch {}
+  }
+
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !task) return;
+    setUploadingFile(true);
+    try {
+      const att = await uploadAttachment(task.id, file);
+      setAttachments(prev => [...prev, att]);
+    } finally {
+      setUploadingFile(false);
+      e.target.value = '';
+    }
+  }
+
+  async function handleDeleteAttachment(id: number) {
+    if (!confirm('Delete this file?')) return;
+    try {
+      await deleteAttachment(id);
+      setAttachments(prev => prev.filter(a => a.id !== id));
     } catch {}
   }
 
@@ -732,6 +758,85 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
               theme={th}
               members={members}
             />
+          </div>
+
+          {/* Attachments */}
+          <div style={{ marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
+                Вложения {attachments.length > 0 && `(${attachments.length})`}
+              </p>
+              <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploadingFile}
+                style={{
+                  padding: '4px 12px', borderRadius: 6, border: `1px solid ${accent}44`,
+                  background: 'none', color: accent, fontSize: 12, fontWeight: 600,
+                  cursor: uploadingFile ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
+                }}
+              >
+                {uploadingFile ? 'Загрузка…' : '+ Файл'}
+              </button>
+            </div>
+            {attachments.length > 0 ? (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {attachments.map(att => {
+                  const isImg = att.content_type.startsWith('image/');
+                  const sizeKb = Math.round(att.size_bytes / 1024);
+                  return (
+                    <div key={att.id} style={{
+                      display: 'flex', alignItems: 'center', gap: 10,
+                      padding: '10px', borderRadius: 10,
+                      border: `1px solid ${th.border}`, background: th.columnBg,
+                    }}>
+                      <div style={{
+                        width: 36, height: 36, borderRadius: 8, flexShrink: 0, overflow: 'hidden',
+                        background: th.surface, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 12, fontWeight: 700, color: th.textMuted, border: `1px solid ${th.border}`
+                      }}>
+                        {isImg
+                          ? <img src={getDownloadUrl(att.id) + `?token=${localStorage.getItem('token') ?? ''}`}
+                              alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : att.filename.split('.').pop()?.toUpperCase().slice(0, 3) ?? 'FILE'
+                        }
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <p style={{ fontSize: 13.5, fontWeight: 600, color: th.text, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {att.filename}
+                        </p>
+                        <p style={{ fontSize: 12, color: th.textMuted, margin: 0 }}>
+                          {sizeKb < 1024 ? `${sizeKb} KB` : `${(sizeKb / 1024).toFixed(1)} MB`}
+                        </p>
+                      </div>
+                      <a
+                        href={`${getDownloadUrl(att.id)}?token=${localStorage.getItem('token') ?? ''}`}
+                        download={att.filename}
+                        style={{ color: accent, fontSize: 13, fontWeight: 600, textDecoration: 'none', padding: '4px 8px' }}
+                      >
+                        ↓
+                      </a>
+                      <button onClick={() => handleDeleteAttachment(att.id)} style={{
+                        background: 'none', border: 'none', cursor: 'pointer',
+                        color: th.textMuted, padding: 4, display: 'flex',
+                      }}>
+                        <IcoX s={16} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  padding: '16px', borderRadius: 10, border: `1.5px dashed ${th.border}`,
+                  textAlign: 'center', cursor: 'pointer', color: th.textMuted, fontSize: 13,
+                }}
+              >
+                Нажмите для загрузки файла
+              </div>
+            )}
           </div>
 
           {/* Comments */}

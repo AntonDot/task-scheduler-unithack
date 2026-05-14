@@ -35,6 +35,8 @@ interface HeaderProps {
   onOpenTask?: (taskId: number, section?: 'comments' | 'description') => void;
 }
 
+import { useAuthStore } from '@/store/authStore';
+
 export function Header({ view, search, setSearch, onAddTask, accent, theme, darkMode, onToggleDark, members, onOpenTask }: HeaderProps) {
   const th = theme;
   const titles: Record<AppView, string> = {
@@ -42,10 +44,11 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
     team: 'Team', settings: 'Settings',
   };
 
+  const { user } = useAuthStore();
   const [darkHover, setDarkHover] = useState(false);
   const [bellOpen,  setBellOpen]  = useState(false);
   const [allNotifs,   setAllNotifs]   = useState<NotificationItem[]>([]);
-  const NOTIF_READ_KEY = 'vt_read_notifs';
+  const NOTIF_READ_KEY = `vt_read_notifs_${user?.id || 'default'}`;
   const [readIds,     setReadIds]     = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem(NOTIF_READ_KEY) ?? '[]') as string[]); }
     catch { return new Set<string>(); }
@@ -53,10 +56,16 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
   const bellRef = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
+  // Re-initialize when user changes
+  useEffect(() => {
+    try { setReadIds(new Set(JSON.parse(localStorage.getItem(NOTIF_READ_KEY) ?? '[]') as string[])); }
+    catch { setReadIds(new Set()); }
+  }, [NOTIF_READ_KEY]);
+
   // Persist read IDs to localStorage
   useEffect(() => {
     localStorage.setItem(NOTIF_READ_KEY, JSON.stringify([...readIds]));
-  }, [readIds]);
+  }, [readIds, NOTIF_READ_KEY]);
 
   // Fetch real notifications
   useEffect(() => {
@@ -167,7 +176,7 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
       <div style={{ position: 'relative' }}>
         <button
           ref={bellRef}
-          onClick={() => { setBellOpen(o => !o); setReadIds(new Set(notifs.map(n => n.id))); }}
+          onClick={() => { setBellOpen(o => !o); }}
           style={{ ...iconBtn(bellOpen), position: 'relative' }}
         >
           <IcoBell size={18} />
@@ -189,13 +198,13 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
             boxShadow: '0 12px 40px rgba(0,0,0,0.14)',
             zIndex: 200, overflow: 'hidden', maxHeight: 440, display: 'flex', flexDirection: 'column',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px 10px', borderBottom: `1px solid ${th.border}`, flexShrink: 0 }}>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: th.text }}>Уведомления</span>
-              <button onClick={() => setReadIds(new Set(notifs.map(n => n.id)))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, color: accent, fontWeight: 600, fontFamily: 'inherit' }}>
-                Прочитать все
-              </button>
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${th.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: th.text }}>Уведомления</h4>
+              <button onClick={() => setReadIds(new Set(notifs.map(n => n.id)))} style={{
+                background: 'none', border: 'none', color: accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0
+              }}>Прочитать все</button>
             </div>
-            <div style={{ overflowY: 'auto', flex: 1 }}>
+            <div style={{ maxHeight: 380, overflowY: 'auto' }}>
               {notifs.length === 0 ? (
                 <div style={{ padding: '32px 16px', textAlign: 'center', color: th.textMuted, fontSize: 13 }}>
                   Нет уведомлений

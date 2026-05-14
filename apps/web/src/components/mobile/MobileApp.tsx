@@ -487,6 +487,7 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [fileDragOver, setFileDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -527,8 +528,8 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
     } catch {}
   }
 
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement> | File) {
+    const file = e instanceof File ? e : e.target.files?.[0];
     if (!file || !task) return;
     setUploadingFile(true);
     try {
@@ -536,8 +537,32 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
       setAttachments(prev => [...prev, att]);
     } finally {
       setUploadingFile(false);
-      e.target.value = '';
+      if (!(e instanceof File)) e.target.value = '';
     }
+  }
+
+  function handleFileDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileDragOver(false);
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) {
+      handleFileUpload(droppedFile);
+    }
+  }
+
+  function handleFileDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.types.includes('Files')) {
+      setFileDragOver(true);
+    }
+  }
+
+  function handleFileDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileDragOver(false);
   }
 
   async function handleDeleteAttachment(id: number) {
@@ -761,7 +786,11 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
           </div>
 
           {/* Attachments */}
-          <div style={{ marginBottom: 20 }}>
+          <div style={{ marginBottom: 20 }}
+            onDrop={handleFileDrop}
+            onDragOver={handleFileDragOver}
+            onDragLeave={handleFileDragLeave}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
                 Вложения {attachments.length > 0 && `(${attachments.length})`}
@@ -780,7 +809,17 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
               </button>
             </div>
             {attachments.length > 0 ? (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative' }}>
+                {fileDragOver && (
+                  <div style={{
+                    position: 'absolute', inset: 0, zIndex: 10,
+                    background: th.columnBg, opacity: 0.9, borderRadius: 10,
+                    border: `2px dashed ${accent}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: accent, fontWeight: 600, fontSize: 13, pointerEvents: 'none'
+                  }}>
+                    Отпустите для загрузки
+                  </div>
+                )}
                 {attachments.map(att => {
                   const isImg = att.content_type.startsWith('image/');
                   const sizeKb = Math.round(att.size_bytes / 1024);
@@ -830,11 +869,13 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
               <div
                 onClick={() => fileInputRef.current?.click()}
                 style={{
-                  padding: '16px', borderRadius: 10, border: `1.5px dashed ${th.border}`,
-                  textAlign: 'center', cursor: 'pointer', color: th.textMuted, fontSize: 13,
+                  padding: '16px', borderRadius: 10, border: `1.5px dashed ${fileDragOver ? accent : th.border}`,
+                  background: fileDragOver ? accent + '11' : 'transparent',
+                  textAlign: 'center', cursor: 'pointer', color: fileDragOver ? accent : th.textMuted, fontSize: 13,
+                  transition: 'all 0.2s',
                 }}
               >
-                Нажмите для загрузки файла
+                {fileDragOver ? 'Отпустите файл здесь' : 'Нажмите для загрузки файла'}
               </div>
             )}
           </div>
@@ -1484,12 +1525,13 @@ function timeAgoMbl(iso: string): string {
   return `${Math.floor(h / 24)}д назад`;
 }
 
-function NotificationSheet({ open, onClose, notifications, onMarkAllRead, accent, th, onOpenTask }: {
+function NotificationSheet({ notifications, open, onClose, onMarkAllRead, onMarkRead, onOpenTask, accent, th }: {
+  notifications: Array<NotificationItem & { read: boolean }>;
   open: boolean; onClose: () => void;
-  notifications: (NotificationItem & { read?: boolean })[];
   onMarkAllRead: () => void;
+  onMarkRead?: (id: string) => void;
+  onOpenTask?: (taskId: number, section?: 'comments' | 'description') => void;
   accent: string; th: ReturnType<typeof useTheme>['theme'];
-  onOpenTask?: (id: number, section?: 'comments' | 'description') => void;
 }) {
   return createPortal(
     <>
@@ -1542,7 +1584,7 @@ function NotificationSheet({ open, onClose, notifications, onMarkAllRead, accent
               return (
                 <div
                   key={n.id}
-                  onClick={() => { onClose(); onOpenTask?.(n.task_id, section); }}
+                  onClick={() => { onMarkRead?.(n.id); onClose(); onOpenTask?.(n.task_id, section); }}
                   style={{
                     display: 'flex', gap: 12, padding: '13px 20px',
                     borderBottom: `1px solid ${th.border}`,
@@ -1635,10 +1677,18 @@ export function MobileApp() {
   const [createOpen, setCreateOpen] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
   const [bellOpen, setBellOpen] = useState(false);
+  const { user } = useAuthStore();
+  const NOTIF_READ_KEY = `vt_read_notifs_${user?.id || 'default'}`;
   const [readIds, setReadIds] = useState<Set<string>>(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('vt_read_notifs') ?? '[]') as string[]); }
+    try { return new Set(JSON.parse(localStorage.getItem(NOTIF_READ_KEY) ?? '[]') as string[]); }
     catch { return new Set<string>(); }
   });
+
+  // Re-initialize when user changes
+  useEffect(() => {
+    try { setReadIds(new Set(JSON.parse(localStorage.getItem(NOTIF_READ_KEY) ?? '[]') as string[])); }
+    catch { setReadIds(new Set()); }
+  }, [NOTIF_READ_KEY]);
 
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects });
   const resolvedProjectId = activeProjectId ?? projects[0]?.id ?? null;
@@ -1663,8 +1713,8 @@ export function MobileApp() {
 
   // Persist read IDs to localStorage
   useEffect(() => {
-    localStorage.setItem('vt_read_notifs', JSON.stringify([...readIds]));
-  }, [readIds]);
+    localStorage.setItem(NOTIF_READ_KEY, JSON.stringify([...readIds]));
+  }, [readIds, NOTIF_READ_KEY]);
 
   // Push registration is now user-initiated from Settings (not auto-called here)
 
@@ -1848,6 +1898,7 @@ export function MobileApp() {
           const allIds = new Set(rawNotifs.map(n => n.id));
           setReadIds(allIds);
         }}
+        onMarkRead={(id) => setReadIds(prev => new Set([...prev, id]))}
         accent={accent} th={th}
         onOpenTask={(taskId, section) => {
           setBellOpen(false);

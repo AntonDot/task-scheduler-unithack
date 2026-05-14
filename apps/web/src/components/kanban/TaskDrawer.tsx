@@ -59,6 +59,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   // Attachment state
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [fileDragOver, setFileDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Mention state
@@ -130,16 +131,40 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
     setLocalTask(prev => prev ? { ...prev, description: text } : prev);
   }
 
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement> | File) {
+    const file = e instanceof File ? e : e.target.files?.[0];
     if (!file || !display) return;
-    e.target.value = '';
+    if (!(e instanceof File)) e.target.value = '';
     setUploadingFile(true);
     try {
       const att = await uploadAttachment(display.id, file);
       setAttachments(prev => [...prev, att]);
     } catch {}
     finally { setUploadingFile(false); }
+  }
+
+  function handleFileDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileDragOver(false);
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) {
+      handleFileUpload(droppedFile);
+    }
+  }
+
+  function handleFileDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.dataTransfer.types.includes('Files')) {
+      setFileDragOver(true);
+    }
+  }
+
+  function handleFileDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileDragOver(false);
   }
 
   async function handleDeleteAttachment(attId: number) {
@@ -401,7 +426,11 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
           </div>
 
           {/* Attachments */}
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 24 }}
+            onDrop={readonly ? undefined : handleFileDrop}
+            onDragOver={readonly ? undefined : handleFileDragOver}
+            onDragLeave={readonly ? undefined : handleFileDragLeave}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
                 Attachments {attachments.length > 0 && `(${attachments.length})`}
@@ -424,7 +453,17 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
               )}
             </div>
             {attachments.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, position: 'relative' }}>
+                {fileDragOver && !readonly && (
+                  <div style={{
+                    position: 'absolute', inset: 0, zIndex: 10,
+                    background: th.columnBg, opacity: 0.9, borderRadius: 9,
+                    border: `2px dashed ${acc}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: acc, fontWeight: 600, fontSize: 13, pointerEvents: 'none'
+                  }}>
+                    Drop to attach file
+                  </div>
+                )}
                 {attachments.map(att => {
                   const isImg = att.content_type.startsWith('image/');
                   const sizeKb = Math.round(att.size_bytes / 1024);
@@ -477,11 +516,13 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
               <div
                 onClick={() => fileInputRef.current?.click()}
                 style={{
-                  padding: '14px', borderRadius: 9, border: `1.5px dashed ${th.border}`,
-                  textAlign: 'center', cursor: 'pointer', color: th.textMuted, fontSize: 12.5,
+                  padding: '14px', borderRadius: 9, border: `1.5px dashed ${fileDragOver ? acc : th.border}`,
+                  background: fileDragOver ? acc + '11' : 'transparent',
+                  textAlign: 'center', cursor: 'pointer', color: fileDragOver ? acc : th.textMuted, fontSize: 12.5,
+                  transition: 'all 0.2s',
                 }}
               >
-                Drop files or click "+ Attach"
+                {fileDragOver ? 'Drop file here' : 'Drop files or click "+ Attach"'}
               </div>
             )}
           </div>

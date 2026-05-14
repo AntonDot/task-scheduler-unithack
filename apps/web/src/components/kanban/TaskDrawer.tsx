@@ -132,9 +132,10 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement> | File) {
-    const file = e instanceof File ? e : e.target.files?.[0];
+    const isEvent = 'target' in e;
+    const file = isEvent ? (e as React.ChangeEvent<HTMLInputElement>).target.files?.[0] : (e as File);
     if (!file || !display) return;
-    if (!(e instanceof File)) e.target.value = '';
+    if (isEvent) (e as React.ChangeEvent<HTMLInputElement>).target.value = '';
     setUploadingFile(true);
     try {
       const att = await uploadAttachment(display.id, file);
@@ -156,9 +157,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   function handleFileDragOver(e: React.DragEvent) {
     e.preventDefault();
     e.stopPropagation();
-    if (e.dataTransfer.types.includes('Files')) {
-      setFileDragOver(true);
-    }
+    setFileDragOver(true);
   }
 
   function handleFileDragLeave(e: React.DragEvent) {
@@ -249,7 +248,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   const timeline: ActivityItem[] = [
     ...comments.map(c => ({ kind: 'comment' as const, ts: new Date(c.created_at).getTime(), data: c })),
     ...auditLogs
-      .filter(l => l.action !== 'comment_added' && l.action !== 'attachment_added')
+      .filter(l => l.action !== 'comment_added')
       .map(l => ({ kind: 'log' as const, ts: new Date(l.created_at).getTime(), data: l })),
   ].sort((a, b) => a.ts - b.ts);
 
@@ -264,6 +263,8 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
       updated: 'обновил задачу',
       status_changed: 'изменил статус',
       deleted: 'удалил задачу',
+      attachment_added: 'прикрепил файл',
+      attachment_removed: 'удалил файл',
     };
     return map[action] ?? action;
   }
@@ -568,13 +569,15 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
                         background: th.columnBg, display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 11,
                       }}>
-                        {l.action === 'status_changed' ? '↔' : l.action === 'created' ? '✦' : '✎'}
+                        {l.action === 'status_changed' ? '↔' : l.action === 'created' ? '✦' : l.action.startsWith('attachment') ? '📎' : '✎'}
                       </div>
                       <span style={{ fontSize: 11.5, color: th.textSecondary }}>
                         <strong>{l.user?.full_name ?? 'System'}</strong> {actionLabel(l.action)}
                         {l.action === 'status_changed' && l.new_value && (() => {
                           try { const v = JSON.parse(l.new_value); return ` → ${v.status}`; } catch { return ''; }
                         })()}
+                        {l.action === 'attachment_added' && l.new_value && ` «${l.new_value}»`}
+                        {l.action === 'attachment_removed' && l.old_value && ` «${l.old_value}»`}
                       </span>
                       <span style={{ fontSize: 10.5, color: th.textMuted, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{fmtTime(l.created_at)}</span>
                     </div>

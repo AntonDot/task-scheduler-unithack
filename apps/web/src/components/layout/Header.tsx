@@ -83,7 +83,7 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
   const notifs = allNotifs.filter(n => {
     const enabled = prefs[n.type] ?? defaultEnabled[n.type] ?? true;
     return enabled;
-  });
+  }).slice(0, 20);
 
   // Close dropdown on outside click
   useEffect(() => {

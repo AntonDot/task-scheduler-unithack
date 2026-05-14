@@ -529,7 +529,8 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement> | File) {
-    const file = e instanceof File ? e : e.target.files?.[0];
+    const isEvent = 'target' in e;
+    const file = isEvent ? (e as React.ChangeEvent<HTMLInputElement>).target.files?.[0] : (e as File);
     if (!file || !task) return;
     setUploadingFile(true);
     try {
@@ -537,7 +538,7 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
       setAttachments(prev => [...prev, att]);
     } finally {
       setUploadingFile(false);
-      if (!(e instanceof File)) e.target.value = '';
+      if (isEvent) (e as React.ChangeEvent<HTMLInputElement>).target.value = '';
     }
   }
 
@@ -554,9 +555,7 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
   function handleFileDragOver(e: React.DragEvent) {
     e.preventDefault();
     e.stopPropagation();
-    if (e.dataTransfer.types.includes('Files')) {
-      setFileDragOver(true);
-    }
+    setFileDragOver(true);
   }
 
   function handleFileDragLeave(e: React.DragEvent) {
@@ -1719,7 +1718,7 @@ export function MobileApp() {
   // Push registration is now user-initiated from Settings (not auto-called here)
 
   // Enrich notifications with local read state
-  const notifications = rawNotifs.map(n => ({ ...n, read: readIds.has(n.id) }));
+  const notifications = rawNotifs.map(n => ({ ...n, read: readIds.has(n.id) })).slice(0, 20);
 
   const statusMutation = useMutation({
     mutationFn: ({ taskId, status }: { taskId: number; status: TaskStatus }) => changeStatus(taskId, status),

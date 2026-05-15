@@ -40,7 +40,7 @@ export function KanbanPage() {
 
 function DesktopKanbanPage() {
   const { theme, isDark, toggleTheme, accentColor, setAccentColor } = useTheme();
-  const { user, clearAuth } = useAuthStore();
+  const { user, clearAuth, projectRoles } = useAuthStore();
   const queryClient = useQueryClient();
   const { toasts, removeToast } = useToast();
 
@@ -149,6 +149,7 @@ function DesktopKanbanPage() {
   if (!user) return null;
 
   const activeProject = projects.find(p => p.id === resolvedProjectId) ?? null;
+  const isOwner = resolvedProjectId ? projectRoles[resolvedProjectId] === 'OWNER' : false;
 
   return (
     <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', background: theme.bg, fontFamily: "'Inter', -apple-system, sans-serif", color: theme.text }}>
@@ -175,7 +176,7 @@ function DesktopKanbanPage() {
             setView('kanban');
             setNotifTarget({ taskId, section });
           }}
-          onManageColumns={resolvedProjectId ? () => setShowColumnsManager(true) : undefined}
+          onManageColumns={isOwner && resolvedProjectId ? () => setShowColumnsManager(true) : undefined}
         />
 
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: theme.bg }}>

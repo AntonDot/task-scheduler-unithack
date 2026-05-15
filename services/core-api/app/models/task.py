@@ -11,6 +11,7 @@ from app.models.task_assignee import task_assignees
 
 if TYPE_CHECKING:
     from app.models.attachment import Attachment
+    from app.models.board_column import BoardColumn
     from app.models.comment import Comment
     from app.models.project import Project
     from app.models.user import User
@@ -25,7 +26,7 @@ class Task(Base):
     assignee_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     title: Mapped[str] = mapped_column(String(500))
     description: Mapped[str | None] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(20), index=True, default="AI_DRAFT")
+    column_id: Mapped[int] = mapped_column(ForeignKey("board_columns.id", ondelete="RESTRICT"), index=True)
     urgency: Mapped[str] = mapped_column(String(10), default="MEDIUM")
     deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
@@ -34,6 +35,7 @@ class Task(Base):
     )
 
     project: Mapped[Project] = relationship(back_populates="tasks")
+    column: Mapped[BoardColumn] = relationship(back_populates="tasks")
     creator: Mapped[User] = relationship(back_populates="created_tasks", foreign_keys=[creator_id])
     assignee: Mapped[User | None] = relationship(back_populates="assigned_tasks", foreign_keys=[assignee_id])
     co_assignees: Mapped[list[User]] = relationship("User", secondary=task_assignees, lazy="select")

@@ -8,8 +8,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from app.config import settings
-from app.domain import ProjectRole, TaskStatus, Urgency
-from app.models import Base, Project, Task, User, UserProject
+from app.domain import ProjectRole, Urgency
+from app.models import Base, BoardColumn, Project, Task, User, UserProject
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -36,46 +36,60 @@ PROJECTS = [
     {"name": "ЖК Берег", "slug": "zhk-bereg", "color": "#2ed573"},
 ]
 
+# Default columns created for every project
+DEFAULT_COLUMNS = [
+    {"name": "Backlog",     "color": "#9CA3AF", "order": 0},
+    {"name": "In Progress", "color": "#6366F1", "order": 1},
+    {"name": "Review",      "color": "#D97706", "order": 2},
+    {"name": "Done",        "color": "#059669", "order": 3},
+]
+
+# Column order indexes for task placement
+COL_BACKLOG     = 0
+COL_IN_PROGRESS = 1
+COL_REVIEW      = 2
+COL_DONE        = 3
+
 now = datetime.now(tz=UTC)
 
 
-def _tasks(project_id: int, creator_id: int, assignee_id: int) -> list[dict]:
+def _tasks(project_id: int, creator_id: int, assignee_id: int, cols: list[BoardColumn]) -> list[dict]:
     return [
         {
             "project_id": project_id,
             "creator_id": creator_id,
             "assignee_id": assignee_id,
+            "column_id": cols[COL_BACKLOG].id,
             "title": "Просадка лидов из Директа (клиент Онегин)",
             "description": "CTR упал на 30% за последние 3 дня. Проверить ставки, минус-слова и посадочные.",
-            "status": TaskStatus.TODO,
             "urgency": Urgency.URGENT,
             "deadline": now + timedelta(hours=2),
         },
         {
             "project_id": project_id,
             "creator_id": creator_id,
+            "assignee_id": assignee_id,
+            "column_id": cols[COL_IN_PROGRESS].id,
             "title": "Негативный отзыв на Яндекс Картах — 1 звезда",
             "description": "Клиент жалуется на долгую доставку. Нужно оперативно отработать негатив.",
-            "status": TaskStatus.IN_PROGRESS,
             "urgency": Urgency.HIGH,
-            "assignee_id": assignee_id,
             "deadline": now + timedelta(hours=1),
         },
         {
             "project_id": project_id,
             "creator_id": creator_id,
+            "column_id": cols[COL_BACKLOG].id,
             "title": "Отрисовать баннеры для VK",
             "description": "3 варианта: акция, имиджевый, ретаргетинг. Размеры: 1080x607.",
-            "status": TaskStatus.AI_DRAFT,
             "urgency": Urgency.MEDIUM,
         },
         {
             "project_id": project_id,
             "creator_id": creator_id,
             "assignee_id": assignee_id,
+            "column_id": cols[COL_REVIEW].id,
             "title": "Согласовать SEO-ядро для лендинга ЖК Берег",
             "description": "Собрано 450 ключей. Кластеризация готова, ждёт аппрув менеджера.",
-            "status": TaskStatus.REVIEW,
             "urgency": Urgency.LOW,
             "deadline": now + timedelta(days=3),
         },
@@ -115,7 +129,14 @@ async def seed():
         session.add_all(links)
         await session.flush()
 
-        tasks = _tasks(proj1.id, manager.id, specialist1.id) + _tasks(proj2.id, manager.id, specialist2.id)
+        # Create default columns for each project
+        cols1 = [BoardColumn(project_id=proj1.id, **c) for c in DEFAULT_COLUMNS]
+        cols2 = [BoardColumn(project_id=proj2.id, **c) for c in DEFAULT_COLUMNS]
+        session.add_all(cols1 + cols2)
+        await session.flush()
+
+        tasks = _tasks(proj1.id, manager.id, specialist1.id, cols1) + \
+                _tasks(proj2.id, manager.id, specialist2.id, cols2)
         session.add_all([Task(**t) for t in tasks])
 
         await session.commit()

@@ -24,7 +24,7 @@ export function TaskCard({ task, onSelect, onDragStart, onDragEnd, compact = fal
   const urgMap = getUrgencyMap(th.dark);
   const urgency = urgMap[urgKey] ?? DEFAULT_URGENCY;
 
-  const overdue = isOverdue(task.deadline, undefined);
+  const overdue = isOverdue(task.deadline, false);
   const deadlineStr = formatDeadline(task.deadline);
 
 

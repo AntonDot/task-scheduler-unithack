@@ -1,28 +1,10 @@
-export const TaskStatus = {
-  AI_DRAFT: "AI_DRAFT",
-  TODO: "TODO",
-  IN_PROGRESS: "IN_PROGRESS",
-  REVIEW: "REVIEW",
-  DONE: "DONE",
-} as const;
-
-export type TaskStatus = (typeof TaskStatus)[keyof typeof TaskStatus];
-
-export const KANBAN_COLUMNS: TaskStatus[] = [
-  TaskStatus.AI_DRAFT,
-  TaskStatus.TODO,
-  TaskStatus.IN_PROGRESS,
-  TaskStatus.REVIEW,
-  TaskStatus.DONE,
-];
-
-export const COLUMN_LABELS: Record<TaskStatus, string> = {
-  [TaskStatus.AI_DRAFT]: "AI Черновики",
-  [TaskStatus.TODO]: "К выполнению",
-  [TaskStatus.IN_PROGRESS]: "В работе",
-  [TaskStatus.REVIEW]: "Ревью",
-  [TaskStatus.DONE]: "Готово",
-};
+export interface BoardColumn {
+  id: number;
+  project_id: number;
+  name: string;
+  color: string;
+  order: number;
+}
 
 export const ProjectRole = {
   OWNER: "OWNER",
@@ -64,7 +46,7 @@ export interface Task {
   assignee_id: number | null;
   title: string;
   description: string | null;
-  status: TaskStatus;
+  column_id: number;
   urgency: Urgency;
   deadline: string | null;
   created_at: string;

@@ -1,29 +1,30 @@
 import { useState, useEffect } from 'react';
-import type { Theme, DesignColumn } from '@/theme/theme';
-import { getUrgencyMap, COLUMNS_DEF, columnToStatus } from '@/theme/theme';
+import type { Theme } from '@/theme/theme';
+import { getUrgencyMap } from '@/theme/theme';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { IcoX } from '@/components/ui/Icons';
-import type { Project } from '@/types/domain';
+import type { Project, BoardColumn } from '@/types/domain';
 import type { ProjectMember } from '@/api/members';
 
 interface CreateTaskModalProps {
   open: boolean;
   onClose: () => void;
-  onCreate: (body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string; status?: string }) => void;
+  onCreate: (body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string; column_id?: number }) => void;
   loading?: boolean;
   members: ProjectMember[];
+  columns: BoardColumn[];
   project?: Project | null;
   accentColor?: string;
   theme: Theme;
-  initialColumn?: DesignColumn;
+  initialColumn?: number | null;
 }
 
-export function CreateTaskModal({ open, onClose, onCreate, loading, members, accentColor = '#6366F1', theme, initialColumn }: CreateTaskModalProps) {
-  const [form, setForm] = useState({ title: '', urgency: 'medium', assignee_id: '' as number | '', deadline: '', column: (initialColumn ?? 'backlog') as DesignColumn });
+export function CreateTaskModal({ open, onClose, onCreate, loading, members, columns, accentColor = '#6366F1', theme, initialColumn }: CreateTaskModalProps) {
+  const [form, setForm] = useState({ title: '', urgency: 'medium', assignee_id: '' as number | '', deadline: '', column_id: initialColumn ?? (columns[0]?.id || '') });
 
   useEffect(() => {
-    if (open) setForm(f => ({ ...f, column: initialColumn ?? 'backlog' }));
-  }, [open, initialColumn]);
+    if (open) setForm(f => ({ ...f, column_id: initialColumn ?? (columns[0]?.id || '') }));
+  }, [open, initialColumn, columns]);
   const th  = theme;
   const acc = accentColor;
 
@@ -40,9 +41,9 @@ export function CreateTaskModal({ open, onClose, onCreate, loading, members, acc
       urgency: form.urgency.toUpperCase(),
       assignee_id: form.assignee_id !== '' ? Number(form.assignee_id) : undefined,
       deadline: form.deadline || undefined,
-      status: columnToStatus(form.column),
+      column_id: form.column_id !== '' ? Number(form.column_id) : undefined,
     });
-    setForm({ title: '', urgency: 'medium', assignee_id: '', deadline: '', column: 'backlog' });
+    setForm({ title: '', urgency: 'medium', assignee_id: '', deadline: '', column_id: columns[0]?.id || '' });
   }
 
   return (
@@ -83,8 +84,8 @@ export function CreateTaskModal({ open, onClose, onCreate, loading, members, acc
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
             <div>
               <label style={{ fontSize: 11.5, fontWeight: 600, color: th.textSecondary, display: 'block', marginBottom: 5 }}>Column</label>
-              <select value={form.column} onChange={e => setForm({ ...form, column: e.target.value as DesignColumn })} style={sel}>
-                {COLUMNS_DEF.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              <select value={form.column_id} onChange={e => setForm({ ...form, column_id: e.target.value ? Number(e.target.value) : '' })} style={sel}>
+                {columns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
               </select>
             </div>
             <div>

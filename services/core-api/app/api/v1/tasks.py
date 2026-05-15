@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user, require_project_access
 from app.models import Task, User, UserProject
-from app.schemas import StatusUpdate, TaskCreate, TaskRead, TaskUpdate
+from app.schemas import ColumnUpdate, TaskCreate, TaskRead, TaskUpdate
 from app.services import task_service
 from app.websocket_manager import ws_manager
 
@@ -88,32 +88,18 @@ async def update_task(
     return data
 
 
-@router.patch("/api/v1/tasks/{task_id}/status", response_model=TaskRead)
-async def change_status(
+@router.patch("/api/v1/tasks/{task_id}/column", response_model=TaskRead)
+async def change_column(
     task_id: int,
-    body: StatusUpdate,
+    body: ColumnUpdate,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     _, access = await _get_task_access(task_id, current_user, db)
-    task = await task_service.change_status(db, task_id, body.status, access)
+    task = await task_service.change_column(db, task_id, body.column_id, access)
     data = TaskRead.model_validate(task).model_dump(mode="json")
     await db.commit()
-    await ws_manager.broadcast(task.project_id, "task_status_changed", data)
-    return data
-
-
-@router.post("/api/v1/tasks/{task_id}/approve", response_model=TaskRead)
-async def approve_draft(
-    task_id: int,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    _, access = await _get_task_access(task_id, current_user, db)
-    task = await task_service.approve_draft(db, task_id, access)
-    data = TaskRead.model_validate(task).model_dump(mode="json")
-    await db.commit()
-    await ws_manager.broadcast(task.project_id, "task_approved", data)
+    await ws_manager.broadcast(task.project_id, "task_column_changed", data)
     return data
 
 

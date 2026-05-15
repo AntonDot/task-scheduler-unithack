@@ -10,8 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_project_access, verify_service_token
-from app.domain import ProjectRole, TaskStatus
-from app.models import Project, Task, User, UserProject
+from app.domain import ProjectRole
+from app.models import Project, Task, User, UserProject, BoardColumn
 from app.schemas import ProjectMemberRead, ProjectWithRole, TaskCreate, TaskRead, UserRead
 from app.schemas.analytics import AssigneeLoad, ProjectAnalytics
 from app.services import task_service
@@ -111,9 +111,18 @@ async def get_project_analytics(
     total_result = await db.execute(select(func.count(Task.id)).where(Task.project_id == project_id))
     total_tasks = total_result.scalar() or 0
 
-    # By status
+    # Get all columns for the project ordered by order
+    col_result = await db.execute(select(BoardColumn).where(BoardColumn.project_id == project_id).order_by(BoardColumn.order))
+    columns = col_result.scalars().all()
+    first_col_id = columns[0].id if columns else -1
+    last_col_id = columns[-1].id if columns else -1
+
+    # By status (column name)
     status_result = await db.execute(
-        select(Task.status, func.count(Task.id)).where(Task.project_id == project_id).group_by(Task.status)
+        select(BoardColumn.name, func.count(Task.id))
+        .join(Task, Task.column_id == BoardColumn.id, isouter=True)
+        .where(BoardColumn.project_id == project_id)
+        .group_by(BoardColumn.id)
     )
     by_status = dict(status_result.all())
 
@@ -123,23 +132,23 @@ async def get_project_analytics(
     )
     by_urgency = dict(urgency_result.all())
 
-    # Overdue count: tasks with deadline in the past and not DONE
+    # Overdue count: tasks with deadline in the past and not in the last column
     now = datetime.now(UTC)
     overdue_result = await db.execute(
         select(func.count(Task.id)).where(
             Task.project_id == project_id,
             Task.deadline < now,
-            Task.status != TaskStatus.DONE,
+            Task.column_id != last_col_id,
             Task.deadline.isnot(None),
         )
     )
     overdue_count = overdue_result.scalar() or 0
 
-    # Average completion hours (for DONE tasks that have created_at and updated_at)
+    # Average completion hours (for tasks in the last column that have created_at and updated_at)
     done_result = await db.execute(
         select(Task.created_at, Task.updated_at).where(
             Task.project_id == project_id,
-            Task.status == TaskStatus.DONE,
+            Task.column_id == last_col_id,
         )
     )
     done_rows = done_result.all()
@@ -161,7 +170,7 @@ async def get_project_analytics(
             Task.assignee_id,
             User.full_name,
             func.count(Task.id).label("task_count"),
-            func.sum(case((Task.status == TaskStatus.IN_PROGRESS, 1), else_=0)).label("in_progress"),
+            func.sum(case((Task.column_id.notin_([first_col_id, last_col_id]), 1), else_=0)).label("in_progress"),
         )
         .join(User, User.id == Task.assignee_id)
         .where(Task.project_id == project_id, Task.assignee_id.isnot(None))
@@ -200,7 +209,7 @@ async def export_project_tasks(
     from sqlalchemy.orm import selectinload
 
     result = await db.execute(
-        select(Task).where(Task.project_id == project_id).options(selectinload(Task.assignee)).order_by(Task.id)
+        select(Task).where(Task.project_id == project_id).options(selectinload(Task.assignee), selectinload(Task.column)).order_by(Task.id)
     )
     tasks = result.scalars().all()
 
@@ -213,7 +222,7 @@ async def export_project_tasks(
             [
                 t.id,
                 t.title,
-                t.status,
+                t.column.name if t.column else "",
                 t.urgency,
                 assignee_name,
                 str(t.deadline) if t.deadline else "",

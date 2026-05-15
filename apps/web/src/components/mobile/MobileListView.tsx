@@ -1,67 +1,64 @@
 import { useMemo, useState } from "react";
-import type { Task, ProjectRole, TaskStatus } from "@/types/domain";
-import { KANBAN_COLUMNS, COLUMN_LABELS } from "@/types/domain";
+import type { Task, ProjectRole, BoardColumn } from "@/types/domain";
 import { MobileTaskCard } from "./MobileTaskCard";
 import { MobileActionSheet } from "./MobileActionSheet";
 import type { ProjectMember } from "@/api/members";
 
 interface MobileListViewProps {
   tasks: Task[];
+  columns: BoardColumn[];
   role: ProjectRole | undefined;
   members: ProjectMember[];
   onApprove: (taskId: number) => void;
   onDelete: (taskId: number) => void;
-  onStatusChange: (taskId: number, status: TaskStatus) => void;
+  onColumnChange?: (taskId: number, columnId: number) => void;
   onAssigneeChange: (taskId: number, assigneeId: number | null) => void;
 }
 
 export function MobileListView({
   tasks,
+  columns,
   role,
   members,
   onApprove,
   onDelete,
-  onStatusChange,
   onAssigneeChange,
 }: MobileListViewProps) {
-  const [activeTab, setActiveTab] = useState<TaskStatus>(KANBAN_COLUMNS[0]!);
+  const [activeColId, setActiveColId] = useState<number | null>(columns[0]?.id ?? null);
   const [actionSheetTask, setActionSheetTask] = useState<Task | null>(null);
 
-  const grouped = useMemo(() => {
-    const map: Record<string, Task[]> = {};
-    for (const col of KANBAN_COLUMNS) map[col] = [];
-    for (const task of tasks) (map[task.status] ??= []).push(task);
-    return map;
-  }, [tasks]);
-
-  const activeTasks = grouped[activeTab] ?? [];
+  const colTasks = useMemo(() => {
+    if (activeColId === null) return tasks;
+    return tasks.filter(t => t.column_id === activeColId);
+  }, [tasks, activeColId]);
 
   return (
     <div className="mobile-list" data-testid="mobile-list-view">
       <div className="mobile-tabs">
-        {KANBAN_COLUMNS.map((status) => (
+        {columns.map((col) => (
           <button
-            key={status}
-            className={`mobile-tab ${activeTab === status ? "active" : ""}`}
-            onClick={() => setActiveTab(status as TaskStatus)}
+            key={col.id}
+            className={`mobile-tab ${activeColId === col.id ? "active" : ""}`}
+            onClick={() => setActiveColId(col.id)}
           >
-            {COLUMN_LABELS[status]}
-            <span className="mobile-tab__count">{grouped[status]?.length ?? 0}</span>
+            {col.name}
+            <span className="mobile-tab__count">
+              {tasks.filter(t => t.column_id === col.id).length}
+            </span>
           </button>
         ))}
       </div>
       <div className="mobile-cards">
-        {activeTasks.length === 0 ? (
+        {colTasks.length === 0 ? (
           <p className="text-muted mobile-empty">Нет задач</p>
         ) : (
-          activeTasks.map((task) => (
+          colTasks.map((task) => (
             <MobileTaskCard
               key={task.id}
               task={task}
               role={role}
               onApprove={onApprove}
               onDelete={onDelete}
-              onStatusChange={onStatusChange}
               onLongPress={() => setActionSheetTask(task)}
             />
           ))
@@ -75,7 +72,6 @@ export function MobileListView({
           onClose={() => setActionSheetTask(null)}
           onApprove={onApprove}
           onDelete={onDelete}
-          onStatusChange={onStatusChange}
           onAssigneeChange={onAssigneeChange}
         />
       )}

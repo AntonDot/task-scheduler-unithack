@@ -5,7 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.domain import ProjectRole, TaskStatus
+from app.domain import ProjectRole
 from app.models import Task, UserProject
 from app.models.user import User
 from app.schemas import TaskCreate, TaskUpdate
@@ -39,13 +39,21 @@ async def _set_co_assignees(db: AsyncSession, task: Task, ids: list[int]) -> Non
 
 
 async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: TaskCreate) -> Task:
+    column_id = data.column_id
+    if column_id is None:
+        from app.models.board_column import BoardColumn
+        col_result = await db.execute(select(BoardColumn.id).where(BoardColumn.project_id == project_id).order_by(BoardColumn.order).limit(1))
+        column_id = col_result.scalar_one_or_none()
+        if column_id is None:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Project has no columns")
+
     task = Task(
         project_id=project_id,
         creator_id=creator_id,
         assignee_id=data.assignee_id,
         title=data.title,
         description=data.description,
-        status=data.status,
+        column_id=column_id,
         urgency=data.urgency,
         deadline=data.deadline,
     )
@@ -138,7 +146,7 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
     return task
 
 
-async def change_status(db: AsyncSession, task_id: int, new_status: TaskStatus, user_project: UserProject) -> Task:
+async def change_column(db: AsyncSession, task_id: int, new_column_id: int, user_project: UserProject) -> Task:
     result = await db.execute(
         select(Task)
         .where(Task.id == task_id)
@@ -158,22 +166,9 @@ async def change_status(db: AsyncSession, task_id: int, new_status: TaskStatus, 
     if user_project.role == ProjectRole.ASSIGNEE:
         if not is_assignee:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your task")
-        from app.domain import ASSIGNEE_ALLOWED_TARGETS
 
-        if new_status not in ASSIGNEE_ALLOWED_TARGETS:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot move to this status")
-
-    from app.domain import VALID_STATUS_TRANSITIONS
-
-    allowed = VALID_STATUS_TRANSITIONS.get(TaskStatus(task.status), set())
-    if new_status not in allowed:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"Invalid transition from {task.status} to {new_status}",
-        )
-
-    old_status = task.status
-    task.status = new_status
+    old_column_id = task.column_id
+    task.column_id = new_column_id
     await db.flush()
     await db.refresh(task)
     await db.refresh(task, attribute_names=["project", "assignee", "co_assignees"])
@@ -181,73 +176,14 @@ async def change_status(db: AsyncSession, task_id: int, new_status: TaskStatus, 
         db,
         task.id,
         user_project.user_id,
-        "status_changed",
-        old_value=json.dumps({"status": old_status}),
-        new_value=json.dumps({"status": str(new_status)}),
+        "column_changed",
+        old_value=json.dumps({"column_id": old_column_id}),
+        new_value=json.dumps({"column_id": new_column_id}),
     )
     return task
 
 
-async def approve_draft(db: AsyncSession, task_id: int, user_project: UserProject) -> Task:
-    if user_project.role != ProjectRole.OWNER:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can approve drafts")
 
-    result = await db.execute(
-        select(Task)
-        .where(Task.id == task_id)
-        .options(selectinload(Task.project), selectinload(Task.assignee), selectinload(Task.co_assignees))
-    )
-    task = result.scalar_one_or_none()
-    if task is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-
-    if task.project_id != user_project.project_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Task not in your project")
-
-    if TaskStatus(task.status) != TaskStatus.AI_DRAFT:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Only AI_DRAFT tasks can be approved",
-        )
-
-    old_status = task.status
-    task.status = TaskStatus.TODO
-    await db.flush()
-    await db.refresh(task)
-    await db.refresh(task, attribute_names=["project", "assignee", "co_assignees"])
-    await log_action(
-        db,
-        task.id,
-        user_project.user_id,
-        "status_changed",
-        old_value=json.dumps({"status": old_status}),
-        new_value=json.dumps({"status": str(TaskStatus.TODO)}),
-    )
-    return task
-
-
-async def discard_draft(db: AsyncSession, task_id: int, user_project: UserProject) -> tuple[int, int]:
-    if user_project.role != ProjectRole.OWNER:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can discard drafts")
-
-    task = await get_task(db, task_id)
-    if task is None:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
-
-    if task.project_id != user_project.project_id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Task not in your project")
-
-    if TaskStatus(task.status) != TaskStatus.AI_DRAFT:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Only AI_DRAFT tasks can be discarded",
-        )
-
-    project_id = task.project_id
-    deleted_task_id = task.id
-    await db.delete(task)
-    await db.flush()
-    return project_id, deleted_task_id
 
 
 async def delete_task(db: AsyncSession, task_id: int, user_project: UserProject) -> tuple[int, int]:

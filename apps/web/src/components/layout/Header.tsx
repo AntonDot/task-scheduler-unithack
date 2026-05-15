@@ -33,11 +33,12 @@ interface HeaderProps {
   onToggleDark: () => void;
   members: ProjectMember[];
   onOpenTask?: (taskId: number, section?: 'comments' | 'description') => void;
+  onManageColumns?: () => void;
 }
 
 import { useAuthStore } from '@/store/authStore';
 
-export function Header({ view, search, setSearch, onAddTask, accent, theme, darkMode, onToggleDark, members, onOpenTask }: HeaderProps) {
+export function Header({ view, search, setSearch, onAddTask, accent, theme, darkMode, onToggleDark, members, onOpenTask, onManageColumns }: HeaderProps) {
   const th = theme;
   const titles: Record<AppView, string> = {
     kanban: 'Board', automations: 'Automations', analytics: 'Analytics',
@@ -248,6 +249,23 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
           </div>
         )}
       </div>
+
+      {/* Manage Columns */}
+      {view === 'kanban' && onManageColumns && (
+        <button onClick={onManageColumns} style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '8px 12px', borderRadius: 9,
+          background: 'transparent', color: th.textSecondary, border: `1px solid ${th.border}`,
+          cursor: 'pointer', fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap',
+          transition: 'background 0.12s',
+          fontFamily: 'inherit',
+        }}
+          onMouseEnter={e => (e.currentTarget.style.background = th.columnBg)}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        >
+          Columns
+        </button>
+      )}
 
       {/* New task */}
       <button onClick={onAddTask} style={{

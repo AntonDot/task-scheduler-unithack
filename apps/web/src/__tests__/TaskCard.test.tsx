@@ -1,9 +1,9 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { TaskCard } from "@/components/kanban/TaskCard";
 import { ThemeProvider } from "@/theme/ThemeContext";
 import type { Task } from "@/types/domain";
-import { TaskStatus } from "@/types/domain";
+import { fireEvent } from "@testing-library/react";
 
 function makeTask(overrides: Partial<Task> = {}): Task {
   return {
@@ -13,7 +13,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     assignee_id: 2,
     title: "Fix landing page",
     description: "Broken layout",
-    status: TaskStatus.TODO,
+    column_id: 1,
     urgency: "HIGH",
     deadline: "2025-06-01T00:00:00",
     created_at: "2025-05-01T00:00:00",
@@ -59,7 +59,6 @@ describe("TaskCard", () => {
   });
 
   it("renders correctly when project is present", () => {
-    // TaskCard doesn't display the project name inline — it shows urgency + assignee + deadline
     renderTaskCard(makeTask());
     expect(screen.getByText("Fix landing page")).toBeInTheDocument();
     expect(screen.getByText("High")).toBeInTheDocument();
@@ -96,7 +95,6 @@ describe("TaskCard", () => {
   it("has urgency stripe via borderLeft style", () => {
     renderTaskCard(makeTask({ urgency: "URGENT" }));
     const card = screen.getByTestId("task-card-1");
-    // Browser normalizes hex to rgb in computed styles
     expect(card.style.borderLeft).toContain("rgb(239, 68, 68)");
   });
 });

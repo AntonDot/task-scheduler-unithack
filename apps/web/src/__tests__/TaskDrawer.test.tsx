@@ -2,9 +2,8 @@ import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { TaskDrawer } from "@/components/kanban/TaskDrawer";
 import { ThemeProvider } from "@/theme/ThemeContext";
-import { TaskStatus } from "@/types/domain";
 import { createTheme } from "@/theme/theme";
-import type { Task } from "@/types/domain";
+import type { Task, BoardColumn } from "@/types/domain";
 
 // Mock BlockEditor to avoid initialization issues in tests
 vi.mock("@/components/editor/BlockEditor", () => ({
@@ -27,10 +26,17 @@ vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
 
 const lightTheme = createTheme(false);
 
+const MOCK_COLUMNS: BoardColumn[] = [
+  { id: 1, project_id: 1, name: "Backlog",     color: "#9CA3AF", order: 0 },
+  { id: 2, project_id: 1, name: "In Progress", color: "#6366F1", order: 1 },
+  { id: 3, project_id: 1, name: "In Review",   color: "#D97706", order: 2 },
+  { id: 4, project_id: 1, name: "Done",        color: "#059669", order: 3 },
+];
+
 const BASE_TASK: Task = {
   id: 10, project_id: 1, creator_id: 1, assignee_id: 2,
   title: "Test task", description: "Some description",
-  status: TaskStatus.TODO, urgency: "HIGH",
+  column_id: 1, urgency: "HIGH",
   deadline: "2025-06-01T00:00:00", created_at: "2025-05-01T00:00:00", updated_at: "2025-05-01T00:00:00",
   assignee: { id: 2, full_name: "Test User", email: "test@test.com", is_active: true },
 };
@@ -44,6 +50,7 @@ function renderDrawer(taskOverrides: Partial<Task> = {}) {
   const task = { ...BASE_TASK, ...taskOverrides } as Task;
   const props = {
     task,
+    columns: MOCK_COLUMNS,
     open: true,
     onClose: vi.fn(),
     onUpdate: vi.fn(),
@@ -75,7 +82,7 @@ describe("TaskDrawer", () => {
     expect(screen.getByTestId("block-editor")).toBeInTheDocument();
   });
 
-  it("shows status buttons (Backlog, In Progress, In Review, Done)", () => {
+  it("shows column names in status selector", () => {
     renderDrawer();
     expect(screen.getByText("Backlog")).toBeInTheDocument();
     expect(screen.getByText("In Progress")).toBeInTheDocument();
@@ -99,10 +106,8 @@ describe("TaskDrawer", () => {
 
   it("shows close button", () => {
     const { onClose } = renderDrawer();
-    // Close button is the X icon button
     const buttons = screen.getAllByRole("button");
     expect(buttons.length).toBeGreaterThan(0);
-    // The first button should be the close button
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -111,6 +116,7 @@ describe("TaskDrawer", () => {
       <ThemeProvider>
         <TaskDrawer
           task={null}
+          columns={MOCK_COLUMNS}
           open={true}
           onClose={vi.fn()}
           onUpdate={vi.fn()}

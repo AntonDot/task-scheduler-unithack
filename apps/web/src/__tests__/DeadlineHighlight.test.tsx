@@ -3,7 +3,6 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { TaskCard } from "@/components/kanban/TaskCard";
 import { ThemeProvider } from "@/theme/ThemeContext";
 import { MobileTaskCard } from "@/components/mobile/MobileTaskCard";
-import { TaskStatus } from "@/types/domain";
 import type { Task } from "@/types/domain";
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -14,7 +13,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     assignee_id: 2,
     title: "Test task",
     description: null,
-    status: TaskStatus.TODO,
+    column_id: 1,
     urgency: "MEDIUM",
     deadline: null,
     created_at: "2025-05-01T00:00:00",
@@ -38,7 +37,6 @@ function renderMobileCard(task: Task) {
       role="OWNER"
       onApprove={vi.fn()}
       onDelete={vi.fn()}
-      onStatusChange={vi.fn()}
     />,
   );
 }
@@ -53,7 +51,6 @@ describe("Deadline highlights — TaskCard", () => {
     vi.setSystemTime(new Date("2025-06-15T12:00:00Z"));
     const task = makeTask({ deadline: "2025-06-10T00:00:00Z" });
     renderTaskCard(task);
-    // The card renders — deadline text should contain overdue indication
     expect(screen.getByText(/overdue/i)).toBeInTheDocument();
     vi.useRealTimers();
   });
@@ -65,7 +62,6 @@ describe("Deadline highlights — TaskCard", () => {
     const deadline = new Date(now.getTime() + 12 * 60 * 60 * 1000).toISOString();
     const task = makeTask({ deadline });
     renderTaskCard(task);
-    // Should show remaining time
     expect(screen.getByText(/Tomorrow/i)).toBeInTheDocument();
     vi.useRealTimers();
   });
@@ -76,7 +72,6 @@ describe("Deadline highlights — TaskCard", () => {
     const deadline = new Date("2025-06-22T12:00:00Z").toISOString();
     const task = makeTask({ deadline });
     renderTaskCard(task);
-    // Should render the card without errors
     expect(screen.getByText("Test task")).toBeInTheDocument();
     vi.useRealTimers();
   });
@@ -84,12 +79,8 @@ describe("Deadline highlights — TaskCard", () => {
   it("displays relative deadline text for overdue", () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2025-06-15T12:00:00Z"));
-    // 14T12:00 vs 15T12:00 is exactly 1 day. 
-    // today is 15T00:00. d is 14T12:00. 14.5 - 15 = -0.5. Round(-0.5) = 0 -> Today
-    // Let's use a date further back to get 'overdue' or 'Yesterday'
     const task = makeTask({ deadline: "2025-06-13T12:00:00Z" });
     renderTaskCard(task);
-    // 13.5 - 15 = -1.5. Round(-1.5) = -1 -> Yesterday
     expect(screen.getByText(/Yesterday/i)).toBeInTheDocument();
     vi.useRealTimers();
   });
@@ -98,10 +89,7 @@ describe("Deadline highlights — TaskCard", () => {
     vi.useFakeTimers();
     const now = new Date("2025-06-15T12:00:00Z");
     vi.setSystemTime(now);
-    // now + 1h = 13:00. today = 00:00. d = 13:00. 13/24 = 0.54. Round = 1 -> Tomorrow? 
-    // Wait, theme.ts uses Math.round. 0.5 rounds to 1 in JS. 
-    // To get 'Today', d - today should be < 0.5.
-    const deadline = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString(); // 06:00
+    const deadline = new Date(now.getTime() - 6 * 60 * 60 * 1000).toISOString();
     const task = makeTask({ deadline });
     renderTaskCard(task);
     expect(screen.getByText(/Today/i)).toBeInTheDocument();

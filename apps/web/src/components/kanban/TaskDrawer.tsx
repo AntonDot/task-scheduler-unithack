@@ -1,18 +1,18 @@
 import { useState, useEffect, useRef } from 'react';
 import type { Task } from '@/types/domain';
-import type { Theme, DesignColumn } from '@/theme/theme';
-import { getUrgencyMap, COLUMNS_DEF, apiUrgencyToDesign, statusToColumn, columnToStatus } from '@/theme/theme';
+import type { Theme } from '@/theme/theme';
+import { getUrgencyMap, apiUrgencyToDesign } from '@/theme/theme';
 import { BlockEditor } from '@/components/editor/BlockEditor';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Avatar } from './Avatar';
 import { IcoX } from '@/components/ui/Icons';
 import type { ProjectMember } from '@/api/members';
-import { fetchTask, updateTask, changeStatus } from '@/api/tasks';
+import { fetchTask, updateTask, changeColumn } from '@/api/tasks';
 import { fetchComments, addComment } from '@/api/comments';
 import { fetchAuditLogs } from '@/api/audit';
 import type { Comment } from '@/api/comments';
 import type { AuditLog } from '@/api/audit';
-import type { TaskStatus } from '@/types/domain';
+import type { BoardColumn } from '@/types/domain';
 import { useAuthStore } from '@/store/authStore';
 import { fetchAttachments, uploadAttachment, deleteAttachment, getDownloadUrl, type Attachment } from '@/api/attachments';
 
@@ -22,12 +22,13 @@ interface TaskDrawerProps {
   onClose: () => void;
   onUpdate: (updated: Task) => void;
   members: ProjectMember[];
+  columns: BoardColumn[];
   accentColor: string;
   theme: Theme;
   scrollToSection?: 'comments' | 'description';
 }
 
-export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor, theme, scrollToSection }: TaskDrawerProps) {
+export function TaskDrawer({ task, open, onClose, onUpdate, members, columns, accentColor, theme, scrollToSection }: TaskDrawerProps) {
   const [localTask, setLocalTask] = useState<Task | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openTaskIdRef = useRef<number | null>(null);
@@ -91,7 +92,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   const display = localTask || task;
 
   const urgKey  = apiUrgencyToDesign(display.urgency);
-  const col     = statusToColumn(display.status);
+  const col     = display.column_id;
   const urgMap  = getUrgencyMap(th.dark);
 
   const role = display.project_id ? projectRoles[display.project_id] : undefined;
@@ -107,10 +108,9 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
     onUpdate(updated);
   }
 
-  function handleStatusChange(column: DesignColumn) {
+  function handleColumnChange(columnId: number) {
     if (readonly) return;
-    const newStatus = columnToStatus(column) as TaskStatus;
-    changeStatus(display.id, newStatus).then(updated => {
+    changeColumn(display.id, columnId).then(updated => {
       setLocalTask(updated);
       onUpdate(updated);
     });
@@ -333,8 +333,8 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
             <div style={{ ...metaRowStyle, borderBottom: `1px solid ${th.border}` }}>
               <span style={metaLabelStyle}>Status</span>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {COLUMNS_DEF.map(c => (
-                  <button key={c.id} onClick={() => handleStatusChange(c.id)} style={{
+                {columns.map(c => (
+                  <button key={c.id} onClick={() => handleColumnChange(c.id)} style={{
                     padding: '3px 10px', borderRadius: 6, border: 'none', cursor: readonly ? 'default' : 'pointer',
                     fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600,
                     background: col === c.id ? acc + '18' : 'transparent',
@@ -342,7 +342,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
                     outline: col === c.id ? `1.5px solid ${acc}` : 'none',
                     transition: 'all 0.12s',
                   }}>
-                    {c.label}
+                    {c.name}
                   </button>
                 ))}
               </div>
@@ -569,12 +569,16 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
                         background: th.columnBg, display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 11,
                       }}>
-                        {l.action === 'status_changed' ? '↔' : l.action === 'created' ? '✦' : l.action.startsWith('attachment') ? '📎' : '✎'}
+                        {l.action === 'column_changed' ? '↔' : l.action === 'created' ? '✦' : l.action.startsWith('attachment') ? '📎' : '✎'}
                       </div>
                       <span style={{ fontSize: 11.5, color: th.textSecondary }}>
                         <strong>{l.user?.full_name ?? 'System'}</strong> {actionLabel(l.action)}
-                        {l.action === 'status_changed' && l.new_value && (() => {
-                          try { const v = JSON.parse(l.new_value); return ` → ${v.status}`; } catch { return ''; }
+                        {l.action === 'column_changed' && l.new_value && (() => {
+                          try { 
+                            const v = JSON.parse(l.new_value); 
+                            const colName = columns.find(c => c.id === v.column_id)?.name || v.column_id;
+                            return ` → ${colName}`; 
+                          } catch { return ''; }
                         })()}
                         {l.action === 'attachment_added' && l.new_value && ` «${l.new_value}»`}
                         {l.action === 'attachment_removed' && l.old_value && ` «${l.old_value}»`}

@@ -1,4 +1,4 @@
-import type { Task, TaskStatus } from "@/types/domain";
+import type { Task } from "@/types/domain";
 import { api } from "./client";
 
 export function fetchTasks(projectId: number, assigneeId?: number): Promise<Task[]> {
@@ -8,7 +8,7 @@ export function fetchTasks(projectId: number, assigneeId?: number): Promise<Task
 
 export function createTask(
   projectId: number,
-  body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string; status?: string },
+  body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string; column_id?: number },
 ): Promise<Task> {
   return api.post<Task>(`/projects/${projectId}/tasks`, body);
 }
@@ -20,18 +20,14 @@ export function updateTask(
   return api.patch<Task>(`/tasks/${taskId}`, body);
 }
 
-export function changeStatus(taskId: number, status: TaskStatus): Promise<Task> {
-  return api.patch<Task>(`/tasks/${taskId}/status`, { status });
-}
-
-export function approveDraft(taskId: number): Promise<Task> {
-  return api.post<Task>(`/tasks/${taskId}/approve`);
+export function changeColumn(taskId: number, column_id: number): Promise<Task> {
+  return api.patch<Task>(`/tasks/${taskId}/column`, { column_id });
 }
 
 export function fetchTask(taskId: number): Promise<Task> {
   return api.get<Task>(`/tasks/${taskId}`);
 }
 
-export function discardDraft(taskId: number): Promise<void> {
+export function deleteTask(taskId: number): Promise<void> {
   return api.delete<void>(`/tasks/${taskId}`);
 }

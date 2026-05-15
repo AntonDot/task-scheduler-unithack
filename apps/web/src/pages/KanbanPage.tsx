@@ -1,7 +1,8 @@
 import { useState, useCallback, useMemo, useEffect, useSyncExternalStore } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { fetchProjects } from '@/api/projects';
-import { fetchTasks, changeStatus, createTask } from '@/api/tasks';
+import { fetchTasks, changeColumn, createTask } from '@/api/tasks';
+import { fetchColumns } from '@/api/columns';
 import { fetchProjectMembers } from '@/api/members';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/theme/ThemeContext';
@@ -10,15 +11,14 @@ import { Sidebar, type AppView } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
 import { CreateTaskModal } from '@/components/kanban/CreateTaskModal';
+import { ColumnsManagerModal } from '@/components/kanban/ColumnsManagerModal';
 import { ToastContainer } from '@/components/ui/Toast';
 import { AnalyticsView } from '@/pages/AnalyticsView';
 import { TeamView } from '@/pages/TeamView';
 import { SettingsView } from '@/pages/SettingsView';
 import { AutomationsView } from '@/pages/AutomationsView';
 import { MobileApp } from '@/components/mobile/MobileApp';
-import type { Task, TaskStatus } from '@/types/domain';
-import type { DesignColumn } from '@/theme/theme';
-import { columnToStatus } from '@/theme/theme';
+import type { Task } from '@/types/domain';
 
 function useIsMobile() {
   return useSyncExternalStore(
@@ -48,11 +48,12 @@ function DesktopKanbanPage() {
   const [activeProjectId,  setActiveProjectId]  = useState<number | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [showCreate,       setShowCreate]       = useState(false);
-  const [createColumn,     setCreateColumn]     = useState<DesignColumn>('backlog');
+  const [createColumn,     setCreateColumn]     = useState<number | null>(null);
   const [search,           setSearch]           = useState('');
   const [syncing,          setSyncing]          = useState(false);
   const [compact]          = useState(false);
   const [colWidth]         = useState(300);
+  const [showColumnsManager, setShowColumnsManager] = useState(false);
   const [notifTarget, setNotifTarget] = useState<{ taskId: number; section?: 'comments' | 'description' } | null>(null);
 
   const accent = accentColor;
@@ -89,6 +90,12 @@ function DesktopKanbanPage() {
     enabled: !!resolvedProjectId,
   });
 
+  const { data: columns = [] } = useQuery({
+    queryKey: ['columns', resolvedProjectId],
+    queryFn: () => fetchColumns(resolvedProjectId!),
+    enabled: !!resolvedProjectId,
+  });
+
   // Filter tasks by search
   const filteredTasks = useMemo(() => {
     if (!search.trim()) return tasks;
@@ -99,15 +106,15 @@ function DesktopKanbanPage() {
     );
   }, [tasks, search]);
 
-  // Status change mutation
-  const statusMutation = useMutation({
-    mutationFn: ({ taskId, status }: { taskId: number; status: TaskStatus }) =>
-      changeStatus(taskId, status),
-    onMutate: async ({ taskId, status }) => {
+  // Column change mutation
+  const columnMutation = useMutation({
+    mutationFn: ({ taskId, column_id }: { taskId: number; column_id: number }) =>
+      changeColumn(taskId, column_id),
+    onMutate: async ({ taskId, column_id }) => {
       await queryClient.cancelQueries({ queryKey: tasksKey });
       const prev = queryClient.getQueryData<Task[]>(tasksKey);
       queryClient.setQueryData<Task[]>(tasksKey, old =>
-        (old || []).map(t => t.id === taskId ? { ...t, status, updated_at: new Date().toISOString() } : t)
+        (old || []).map(t => t.id === taskId ? { ...t, column_id, updated_at: new Date().toISOString() } : t)
       );
       return { prev };
     },
@@ -129,10 +136,9 @@ function DesktopKanbanPage() {
     },
   });
 
-  const handleStatusChange = useCallback((taskId: number, col: DesignColumn) => {
-    const status = columnToStatus(col) as TaskStatus;
-    statusMutation.mutate({ taskId, status });
-  }, [statusMutation]);
+  const handleColumnChange = useCallback((taskId: number, column_id: number) => {
+    columnMutation.mutate({ taskId, column_id });
+  }, [columnMutation]);
 
   const handleUpdate = useCallback((updated: Task) => {
     queryClient.setQueryData<Task[]>(tasksKey, old =>
@@ -169,14 +175,16 @@ function DesktopKanbanPage() {
             setView('kanban');
             setNotifTarget({ taskId, section });
           }}
+          onManageColumns={resolvedProjectId ? () => setShowColumnsManager(true) : undefined}
         />
 
         <div style={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column', background: theme.bg }}>
           {view === 'kanban' && (
             <KanbanBoard
               tasks={filteredTasks}
+              columns={columns}
               members={members}
-              onStatusChange={handleStatusChange}
+              onColumnChange={handleColumnChange}
               onUpdate={handleUpdate}
               onAddTask={col => { setCreateColumn(col); setShowCreate(true); }}
               accent={accent}
@@ -189,8 +197,8 @@ function DesktopKanbanPage() {
             />
           )}
           {view === 'automations' && <AutomationsView accent={accent} theme={theme} />}
-          {view === 'analytics'   && <AnalyticsView tasks={tasks} accent={accent} theme={theme} />}
-          {view === 'team'        && <TeamView tasks={tasks} members={members} accent={accent} theme={theme} />}
+          {view === 'analytics'   && <AnalyticsView tasks={tasks} columns={columns} accent={accent} theme={theme} />}
+          {view === 'team'        && <TeamView tasks={tasks} members={members} accent={accent} theme={theme} doneColumnId={(() => { const s = [...columns].sort((a,b)=>a.order-b.order); return s[s.length-1]?.id; })()} />}
           {view === 'settings'    && (
             <SettingsView
               accent={accent} theme={theme}
@@ -209,9 +217,21 @@ function DesktopKanbanPage() {
           loading={createMutation.isPending}
           members={members}
           project={activeProject}
+          columns={columns}
           accentColor={accent}
           theme={theme}
           initialColumn={createColumn}
+        />
+      )}
+
+      {showColumnsManager && resolvedProjectId && (
+        <ColumnsManagerModal
+          open={showColumnsManager}
+          onClose={() => setShowColumnsManager(false)}
+          projectId={resolvedProjectId}
+          columns={columns}
+          theme={theme}
+          accent={accent}
         />
       )}
 

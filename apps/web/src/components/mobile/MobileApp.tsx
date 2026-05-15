@@ -4,18 +4,18 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/theme/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { fetchProjects } from '@/api/projects';
-import { fetchTasks, changeStatus, createTask, updateTask } from '@/api/tasks';
+import { fetchTasks, changeColumn, createTask, updateTask } from '@/api/tasks';
 import { fetchProjectMembers } from '@/api/members';
+import { fetchColumns } from '@/api/columns';
 import { runReviewScraper, type ReviewScrapeResult } from '@/api/automations';
 import { fetchComments, addComment, type Comment } from '@/api/comments';
 import { fetchAttachments, uploadAttachment, deleteAttachment, getDownloadUrl, type Attachment } from '@/api/attachments';
 import { fetchNotifications, type NotificationItem } from '@/api/notifications';
 import { getAvatarUrl } from '@/components/kanban/Avatar';
 import { getPushStatus, getPushDiagnostics, enablePushNotifications, type PushStatus } from '@/api/push';
-import type { Task, TaskStatus } from '@/types/domain';
+import type { Task, BoardColumn } from '@/types/domain';
 import {
-  COLUMNS_DEF, getUrgencyMap, statusToColumn, columnToStatus,
-  formatDeadline, isOverdue, apiUrgencyToDesign, type DesignColumn,
+  getUrgencyMap, formatDeadline, isOverdue, apiUrgencyToDesign
 } from '@/theme/theme';
 import { BlockEditor } from '@/components/editor/BlockEditor';
 
@@ -158,9 +158,8 @@ function MobileCard({ task, onClick, accent, th }: {
   task: Task; onClick: (t: Task) => void; accent: string; th: ReturnType<typeof useTheme>['theme'];
 }) {
   const [pressed, setPressed] = useState(false);
-  const col = statusToColumn(task.status);
   const urg = getUrgencyMap(th.dark)[apiUrgencyToDesign(task.urgency)];
-  const overdue = isOverdue(task.deadline, col);
+  const overdue = isOverdue(task.deadline, false);
 
   const assignees = [task.assignee, ...(task.co_assignees || [])].filter(Boolean) as NonNullable<typeof task.assignee>[];
   const displayAssignees = assignees.slice(0, 5);
@@ -247,8 +246,8 @@ const IcoBell = ({ s = 22 }) => (
   </svg>
 );
 
-function BoardView({ tasks, onTaskClick, onCreateTask, projects, activeProjectId, onProjectChange, accent, th, notifications, onBellOpen }: {
-  tasks: Task[]; onTaskClick: (t: Task) => void; onCreateTask: () => void;
+function BoardView({ tasks, columns, onTaskClick, onCreateTask, projects, activeProjectId, onProjectChange, accent, th, notifications, onBellOpen }: {
+  tasks: Task[]; columns: BoardColumn[]; onTaskClick: (t: Task) => void; onCreateTask: () => void;
   projects: Array<{ id: number; name: string; color: string }>;
   activeProjectId: number | null; onProjectChange: (id: number) => void;
   accent: string; th: ReturnType<typeof useTheme>['theme'];
@@ -259,15 +258,11 @@ function BoardView({ tasks, onTaskClick, onCreateTask, projects, activeProjectId
   const [searchOpen, setSearchOpen] = useState(false);
   const [projOpen, setProjOpen] = useState(false);
 
-  const col = COLUMNS_DEF[colIdx] ?? COLUMNS_DEF[0]!;
-  const dotColors: Record<string, string> = {
-    backlog: th.textMuted, 'in-progress': accent, review: '#D97706', done: '#059669',
-  };
-
-  const colTasks = tasks.filter(t =>
-    statusToColumn(t.status) === col.id &&
+  const col = columns[colIdx] ?? columns[0];
+  const colTasks = col ? tasks.filter(t =>
+    t.column_id === col.id &&
     (!search || t.title.toLowerCase().includes(search.toLowerCase()))
-  );
+  ) : [];
 
   const activeProject = projects.find(p => p.id === activeProjectId) ?? projects[0] ?? null;
 
@@ -383,8 +378,8 @@ function BoardView({ tasks, onTaskClick, onCreateTask, projects, activeProjectId
 
         {/* Column tabs - scrollbar hidden via .mbl-tabs CSS class */}
         <div className="mbl-tabs" style={{ display: 'flex', overflowX: 'auto', marginLeft: -16, marginRight: -16, paddingLeft: 16 }}>
-          {COLUMNS_DEF.map((c, i) => {
-            const count = tasks.filter(t => statusToColumn(t.status) === c.id).length;
+          {columns.map((c, i) => {
+            const count = tasks.filter(t => t.column_id === c.id).length;
             const active = i === colIdx;
             return (
               <button key={c.id} onClick={() => setColIdx(i)} style={{
@@ -394,8 +389,8 @@ function BoardView({ tasks, onTaskClick, onCreateTask, projects, activeProjectId
                 color: active ? accent : th.textSecondary,
                 fontWeight: active ? 700 : 500, fontSize: 13.5, fontFamily: 'inherit',
               }}>
-                <div style={{ width: 7, height: 7, borderRadius: '50%', background: dotColors[c.id], opacity: active ? 1 : 0.5 }} />
-                {c.label}
+                <div style={{ width: 7, height: 7, borderRadius: '50%', background: c.color, opacity: active ? 1 : 0.5 }} />
+                {c.name}
                 <span style={{
                   background: active ? accent + '1A' : th.columnBg,
                   color: active ? accent : th.textMuted,
@@ -466,9 +461,9 @@ function BoardView({ tasks, onTaskClick, onCreateTask, projects, activeProjectId
 
 // ─── Task Detail Sheet ────────────────────────────────────────────────────────
 
-function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, onPriorityChange, onDeadlineChange, onAssigneeToggle, accent, th, members }: {
-  task: Task | null; open: boolean; onClose: () => void;
-  onStatusChange: (taskId: number, col: DesignColumn) => void;
+function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescriptionChange, onPriorityChange, onDeadlineChange, onAssigneeToggle, accent, th, members }: {
+  task: Task | null; columns: BoardColumn[]; open: boolean; onClose: () => void;
+  onColumnChange: (taskId: number, colId: number) => void;
   onDescriptionChange: (taskId: number, desc: string) => void;
   onPriorityChange: (taskId: number, urgency: string) => void;
   onDeadlineChange: (taskId: number, deadline: string | null) => void;
@@ -498,9 +493,9 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
 
   if (!task) return null;
 
-  const col = statusToColumn(task.status);
+  const col = task.column_id;
   const urg = getUrgencyMap(th.dark)[apiUrgencyToDesign(task.urgency)];
-  const overdue = isOverdue(task.deadline, col);
+  const overdue = isOverdue(task.deadline, false);
 
   function handleTouchStart(e: React.TouchEvent) {
     dragY.current = e.touches[0]?.clientY ?? 0;
@@ -625,14 +620,14 @@ function TaskSheet({ task, open, onClose, onStatusChange, onDescriptionChange, o
           }}>
             <select
               value={col}
-              onChange={e => onStatusChange(task.id, e.target.value as DesignColumn)}
+              onChange={e => onColumnChange(task.id, Number(e.target.value))}
               style={{
                 padding: '7px 12px', borderRadius: 10, border: `1px solid ${th.border}`,
                 background: th.surface, color: th.text, fontSize: 13, fontWeight: 600,
                 cursor: 'pointer', fontFamily: 'inherit',
               }}
             >
-              {COLUMNS_DEF.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
+              {columns.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
             </select>
             {urg && (
               <div style={{ position: 'relative', display: 'inline-block' }}>
@@ -1245,9 +1240,10 @@ function AutomationsMobileView({ accent, th }: { accent: string; th: ReturnType<
 
 // ─── Team Mobile View ─────────────────────────────────────────────────────────
 
-function TeamMobileView({ tasks, members, accent, th }: {
+function TeamMobileView({ tasks, members, accent, th, doneColumnId }: {
   tasks: Task[]; members: Array<{ id: number; full_name: string; email: string }>;
   accent: string; th: ReturnType<typeof useTheme>['theme'];
+  doneColumnId?: number;
 }) {
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 'calc(var(--sat, 0px) + 20px) 16px 100px' }}>
@@ -1255,7 +1251,7 @@ function TeamMobileView({ tasks, members, accent, th }: {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {members.map(m => {
           const mt = tasks.filter(t => t.assignee_id === m.id);
-          const done = mt.filter(t => t.status === 'DONE').length;
+          const done = doneColumnId ? mt.filter(t => t.column_id === doneColumnId).length : 0;
           const pct = mt.length > 0 ? (done / mt.length) * 100 : 0;
           return (
             <div key={m.id} style={{ background: th.surface, border: `1px solid ${th.border}`, borderRadius: 16, padding: 16 }}>
@@ -1704,6 +1700,12 @@ export function MobileApp() {
     enabled: !!resolvedProjectId,
   });
 
+  const { data: columns = [] } = useQuery({
+    queryKey: ['columns', resolvedProjectId],
+    queryFn: () => fetchColumns(resolvedProjectId!),
+    enabled: !!resolvedProjectId,
+  });
+
   const { data: rawNotifs = [] } = useQuery({
     queryKey: ['notifications'],
     queryFn: fetchNotifications,
@@ -1720,14 +1722,14 @@ export function MobileApp() {
   // Enrich notifications with local read state
   const notifications = rawNotifs.map(n => ({ ...n, read: readIds.has(n.id) })).slice(0, 20);
 
-  const statusMutation = useMutation({
-    mutationFn: ({ taskId, status }: { taskId: number; status: TaskStatus }) => changeStatus(taskId, status),
-    onMutate: async ({ taskId, status }) => {
+  const columnMutation = useMutation({
+    mutationFn: ({ taskId, column_id }: { taskId: number; column_id: number }) => changeColumn(taskId, column_id),
+    onMutate: async ({ taskId, column_id }) => {
       const key = ['tasks', resolvedProjectId] as const;
       await queryClient.cancelQueries({ queryKey: key });
       const prev = queryClient.getQueryData<Task[]>(key);
       queryClient.setQueryData<Task[]>(key, old =>
-        (old ?? []).map(t => t.id === taskId ? { ...t, status } : t)
+        (old ?? []).map(t => t.id === taskId ? { ...t, column_id } : t)
       );
       return { prev };
     },
@@ -1751,11 +1753,10 @@ export function MobileApp() {
     setSelTask(task); setSheetOpen(true);
   }
 
-  function handleStatusChange(taskId: number, col: DesignColumn) {
-    const status = columnToStatus(col) as TaskStatus;
-    statusMutation.mutate({ taskId, status });
+  function handleColumnChange(taskId: number, column_id: number) {
+    columnMutation.mutate({ taskId, column_id });
     if (selTask?.id === taskId) {
-      setSelTask(prev => prev ? { ...prev, status } : prev);
+      setSelTask(prev => prev ? { ...prev, column_id } : prev);
     }
   }
 
@@ -1848,7 +1849,7 @@ export function MobileApp() {
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
           {view === 'kanban' && (
             <BoardView
-              tasks={tasks} onTaskClick={handleTaskClick}
+              tasks={tasks} columns={columns} onTaskClick={handleTaskClick}
               onCreateTask={() => setCreateOpen(true)}
               projects={projects} activeProjectId={resolvedProjectId}
               onProjectChange={id => setActiveProjectId(id)}
@@ -1858,7 +1859,7 @@ export function MobileApp() {
             />
           )}
           {view === 'automations' && <AutomationsMobileView accent={accent} th={th} />}
-          {view === 'team' && <TeamMobileView tasks={tasks} members={members} accent={accent} th={th} />}
+          {view === 'team' && <TeamMobileView tasks={tasks} members={members} accent={accent} th={th} doneColumnId={columns[columns.length - 1]?.id} />}
           {view === 'settings' && (
             <SettingsMobileView
               accent={accent} th={th}
@@ -1872,9 +1873,9 @@ export function MobileApp() {
       </div>
 
       <TaskSheet
-        task={selTask} open={sheetOpen}
+        task={selTask} columns={columns} open={sheetOpen}
         onClose={() => setSheetOpen(false)}
-        onStatusChange={handleStatusChange}
+        onColumnChange={handleColumnChange}
         onDescriptionChange={handleDescriptionChange}
         onPriorityChange={handlePriorityChange}
         onDeadlineChange={handleDeadlineChange}

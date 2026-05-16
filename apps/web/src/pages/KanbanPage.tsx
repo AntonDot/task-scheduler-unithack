@@ -46,15 +46,15 @@ function DesktopKanbanPage() {
   const queryClient = useQueryClient();
   const { toasts, addToast, removeToast } = useToast();
 
-  const [view,             setView]            = useState<AppView>('kanban');
-  const [activeProjectId,  setActiveProjectId]  = useState<number | null>(null);
+  const [view, setView] = useState<AppView>('kanban');
+  const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const [showCreate,       setShowCreate]       = useState(false);
-  const [createColumn,     setCreateColumn]     = useState<number | null>(null);
-  const [search,           setSearch]           = useState('');
-  const [syncing,          setSyncing]          = useState(false);
-  const [compact]          = useState(false);
-  const [colWidth]         = useState(300);
+  const [showCreate, setShowCreate] = useState(false);
+  const [createColumn, setCreateColumn] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [compact] = useState(false);
+  const [colWidth] = useState(300);
   const [showColumnsManager, setShowColumnsManager] = useState(false);
   const [notifTarget, setNotifTarget] = useState<{ taskId: number; section?: 'comments' | 'description' } | null>(null);
 
@@ -148,8 +148,17 @@ function DesktopKanbanPage() {
   });
 
   const handleColumnChange = useCallback((taskId: number, column_id: number) => {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const isOwnerRole = resolvedProjectId ? projectRoles[resolvedProjectId] === 'OWNER' : false;
+    const isAssignee = task.assignee_id === user?.id || (task.co_assignees ?? []).some(a => a.id === user?.id);
+
+    if (!isOwnerRole && !isAssignee) {
+      addToast("У вас недостаточно прав для перемещения этой задачи. Изменять статус могут только исполнители или менеджеры проекта.", "warning");
+      return;
+    }
     columnMutation.mutate({ taskId, column_id });
-  }, [columnMutation]);
+  }, [columnMutation, tasks, resolvedProjectId, projectRoles, user, addToast]);
 
   const handleUpdate = useCallback((updated: Task) => {
     queryClient.setQueryData<Task[]>(tasksKey, old =>
@@ -216,9 +225,9 @@ function DesktopKanbanPage() {
             />
           )}
           {view === 'automations' && <AutomationsView projectId={resolvedProjectId!} accent={accent} theme={theme} />}
-          {view === 'analytics'   && <AnalyticsView tasks={tasks} columns={columns} accent={accent} theme={theme} />}
-          {view === 'team'        && <TeamView tasks={tasks} members={members} accent={accent} theme={theme} doneColumnId={(() => { const s = [...columns].sort((a,b)=>a.order-b.order); return s[s.length-1]?.id; })()} />}
-          {view === 'settings'    && (
+          {view === 'analytics' && <AnalyticsView tasks={tasks} columns={columns} accent={accent} theme={theme} />}
+          {view === 'team' && <TeamView tasks={tasks} members={members} accent={accent} theme={theme} doneColumnId={(() => { const s = [...columns].sort((a, b) => a.order - b.order); return s[s.length - 1]?.id; })()} />}
+          {view === 'settings' && (
             <SettingsView
               accent={accent} theme={theme}
               darkMode={isDark} onToggleDark={toggleTheme}

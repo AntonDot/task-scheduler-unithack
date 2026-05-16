@@ -25,6 +25,8 @@ import { BlockEditor } from '@/components/editor/BlockEditor';
 import { ColumnsManagerModal } from '@/components/kanban/ColumnsManagerModal';
 import { TagsSection } from '@/components/tags/TagsSection';
 import { TaskTagList } from '@/components/tags/TaskTagList';
+import { useToast } from '@/hooks/useToast';
+import { ToastContainer } from '@/components/ui/Toast';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -1956,6 +1958,7 @@ export function MobileApp() {
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
   const [bellOpen, setBellOpen] = useState(false);
   const { user, projectRoles } = useAuthStore();
+  const { toasts, addToast, removeToast } = useToast();
   const NOTIF_READ_KEY = `vt_read_notifs_${user?.id || 'default'}`;
   const [readIds, setReadIds] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem(NOTIF_READ_KEY) ?? '[]') as string[]); }
@@ -2058,6 +2061,15 @@ export function MobileApp() {
   }
 
   function handleColumnChange(taskId: number, column_id: number) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!task) return;
+    const isAssignee = task.assignee_id === user?.id || (task.co_assignees ?? []).some(a => a.id === user?.id);
+
+    if (!isLead && !isAssignee) {
+      addToast("У вас недостаточно прав для перемещения этой задачи. Изменять статус могут только исполнители или менеджеры проекта.", "warning");
+      return;
+    }
+
     columnMutation.mutate({ taskId, column_id });
     if (selTask?.id === taskId) {
       setSelTask(prev => prev ? { ...prev, column_id } : prev);
@@ -2308,6 +2320,7 @@ export function MobileApp() {
           void section; // section scrolling not supported in mobile sheet yet
         }}
       />
+      <ToastContainer toasts={toasts} onRemove={removeToast} />
     </>
   );
 }

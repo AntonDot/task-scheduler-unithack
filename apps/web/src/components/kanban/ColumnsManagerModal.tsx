@@ -23,12 +23,12 @@ export function ColumnsManagerModal({ open, onClose, projectId, columns, theme: 
 
   // Touch drag refs — avoid stale closure by keeping live order in a ref
   const touchActiveIdx = useRef<number | null>(null);
-  const draggingCols   = useRef<BoardColumn[]>([]);
-  const touchActive    = useRef(false);
+  const draggingCols = useRef<BoardColumn[]>([]);
+  const touchActive = useRef(false);
 
   useEffect(() => {
     if (open) setCols([...columns].sort((a, b) => a.order - b.order));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: ['columns', projectId] });
@@ -219,25 +219,53 @@ export function ColumnsManagerModal({ open, onClose, projectId, columns, theme: 
               >
                 {/* Drag handle — touch events live here only */}
                 <div
-                  style={{ color: th.textMuted, flexShrink: 0, cursor: 'grab', padding: '2px 4px', touchAction: 'none' }}
+                  style={{
+                    color: th.textMuted,
+                    flexShrink: 0,
+                    cursor: 'grab',
+                    padding: '10px 14px',
+                    margin: '-6px 0 -6px -8px',
+                    borderRadius: 10,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all 0.2s ease',
+                    touchAction: 'none',
+                  }}
+                  onMouseEnter={e => { e.currentTarget.style.background = th.border; e.currentTarget.style.color = th.text; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = th.textMuted; }}
                   onTouchStart={e => handleHandleTouchStart(e, idx)}
                   onTouchMove={handleHandleTouchMove}
                   onTouchEnd={handleHandleTouchEnd}
                 >
-                  <svg width="12" height="18" viewBox="0 0 12 18" fill="currentColor">
-                    <circle cx="4" cy="3"  r="1.5"/><circle cx="4" cy="9"  r="1.5"/><circle cx="4" cy="15" r="1.5"/>
-                    <circle cx="8" cy="3"  r="1.5"/><circle cx="8" cy="9"  r="1.5"/><circle cx="8" cy="15" r="1.5"/>
+                  <svg width="14" height="20" viewBox="0 0 14 20" fill="currentColor">
+                    <rect x="2" y="3" width="3" height="3" rx="1" />
+                    <rect x="2" y="9" width="3" height="3" rx="1" />
+                    <rect x="2" y="15" width="3" height="3" rx="1" />
+                    <rect x="9" y="3" width="3" height="3" rx="1" />
+                    <rect x="9" y="9" width="3" height="3" rx="1" />
+                    <rect x="9" y="15" width="3" height="3" rx="1" />
                   </svg>
                 </div>
 
-                {/* Color picker */}
-                <input
-                  type="color"
-                  value={col.color}
-                  onChange={e => handleColorChange(idx, e.target.value)}
-                  title="Column color"
-                  style={{ width: 24, height: 24, padding: 0, border: 'none', borderRadius: 4, cursor: 'pointer', background: 'none', flexShrink: 0 }}
-                />
+                {/* Color picker — styled to match tags design */}
+                <label
+                  style={{
+                    width: 28, height: 28, borderRadius: 8, flexShrink: 0,
+                    background: col.color, border: `1px solid ${th.border}`,
+                    cursor: 'pointer', position: 'relative', overflow: 'hidden',
+                  }}
+                >
+                  <input
+                    type="color"
+                    value={col.color}
+                    onChange={e => handleColorChange(idx, e.target.value)}
+                    style={{
+                      position: 'absolute', inset: -4, opacity: 0, cursor: 'pointer', width: 40, height: 40,
+                    }}
+                  />
+                </label>
+
 
                 {/* Name input — readOnly for protected columns */}
                 <input
@@ -261,8 +289,8 @@ export function ColumnsManagerModal({ open, onClose, projectId, columns, theme: 
                 {/* Lock icon */}
                 {col.is_protected && (
                   <svg width={13} height={13} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} style={{ color: th.textMuted, flexShrink: 0 }}>
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                   </svg>
                 )}
 

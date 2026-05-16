@@ -60,8 +60,11 @@ class TestAuditLogOnColumnChange:
         column_logs = [lg for lg in logs if lg["action"] == "column_changed"]
         assert len(column_logs) >= 1
         log = column_logs[-1]
-        assert log["old_value"] is not None
-        assert log["new_value"] is not None
+        import json
+        old = json.loads(log["old_value"])
+        new = json.loads(log["new_value"])
+        assert old["column_id"] == seed_data["todo_col"].id
+        assert new["column_id"] == review_col_id
 
 
 @pytest.mark.asyncio

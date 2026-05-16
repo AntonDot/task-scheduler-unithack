@@ -277,15 +277,15 @@ async def change_column(db: AsyncSession, task_id: int, new_column_id: int, user
 
 
 async def delete_task(db: AsyncSession, task_id: int, user_project: UserProject) -> tuple[int, int]:
-    if user_project.role != ProjectRole.OWNER:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner can delete tasks")
-
     task = await get_task(db, task_id)
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
 
     if task.project_id != user_project.project_id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Task not in your project")
+
+    if user_project.role != ProjectRole.OWNER and task.creator_id != user_project.user_id:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner or creator can delete tasks")
 
     project_id = task.project_id
     deleted_task_id = task.id

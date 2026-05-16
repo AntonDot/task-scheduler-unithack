@@ -4,7 +4,8 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useTheme } from '@/theme/ThemeContext';
 import { useAuthStore } from '@/store/authStore';
 import { fetchProjects } from '@/api/projects';
-import { fetchTasks, changeColumn, createTask, updateTask } from '@/api/tasks';
+import { fetchTasks, changeColumn, createTask, updateTask, deleteTask } from '@/api/tasks';
+
 import { fetchProjectMembers } from '@/api/members';
 import { fetchColumns } from '@/api/columns';
 import { runReviewScraper, type ReviewScrapeResult } from '@/api/automations';
@@ -31,7 +32,7 @@ function getInitials(name: string) {
   return name.split(' ').map(p => p[0]).join('').slice(0, 2).toUpperCase();
 }
 
-const USER_COLORS = ['#6366F1','#8B5CF6','#EC4899','#F97316','#EAB308','#22C55E','#14B8A6','#3B82F6'];
+const USER_COLORS = ['#6366F1', '#8B5CF6', '#EC4899', '#F97316', '#EAB308', '#22C55E', '#14B8A6', '#3B82F6'];
 function userColor(id: number) { return USER_COLORS[id % USER_COLORS.length]; }
 
 // ─── icons ────────────────────────────────────────────────────────────────────
@@ -57,16 +58,16 @@ function Ico({ d, size = 22, fill, poly, circle, rect, path, line, paths = [], .
   );
 }
 
-const IcoBoard   = ({ s = 22 }) => <Ico size={s} paths={['M3 3h7v9H3z','M14 3h7v5h-7z','M14 12h7v9h-7z','M3 16h7v5H3z']} />;
-const IcoBolt    = ({ s = 22 }) => <Ico size={s} fill="M13 2 3 14h9l-1 8 10-12h-9z" />;
-const IcoUsers   = ({ s = 22 }) => <Ico size={s} paths={['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2','M23 21v-2a4 4 0 0 0-3-3.87','M16 3.13a4 4 0 0 1 0 7.75']} circle="9 7 4" />;
-const IcoCog     = ({ s = 22 }) => <Ico size={s} paths={['M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z']} circle="12 12 3" />;
-const IcoPlus    = ({ s = 22 }) => <Ico size={s} paths={['M12 5v14','M5 12h14']} />;
-const IcoX       = ({ s = 22 }) => <Ico size={s} paths={['M18 6 6 18','M6 6l12 12']} />;
-const IcoSearch  = ({ s = 22 }) => <Ico size={s} d="M21 21l-4.35-4.35" circle="11 11 8" />;
+const IcoBoard = ({ s = 22 }) => <Ico size={s} paths={['M3 3h7v9H3z', 'M14 3h7v5h-7z', 'M14 12h7v9h-7z', 'M3 16h7v5H3z']} />;
+const IcoBolt = ({ s = 22 }) => <Ico size={s} fill="M13 2 3 14h9l-1 8 10-12h-9z" />;
+const IcoUsers = ({ s = 22 }) => <Ico size={s} paths={['M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2', 'M23 21v-2a4 4 0 0 0-3-3.87', 'M16 3.13a4 4 0 0 1 0 7.75']} circle="9 7 4" />;
+const IcoCog = ({ s = 22 }) => <Ico size={s} paths={['M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z']} circle="12 12 3" />;
+const IcoPlus = ({ s = 22 }) => <Ico size={s} paths={['M12 5v14', 'M5 12h14']} />;
+const IcoX = ({ s = 22 }) => <Ico size={s} paths={['M18 6 6 18', 'M6 6l12 12']} />;
+const IcoSearch = ({ s = 22 }) => <Ico size={s} d="M21 21l-4.35-4.35" circle="11 11 8" />;
 
-const IcoChevR   = ({ s = 22 }) => <Ico size={s} poly="9 18 15 12 9 6" />;
-const IcoCheck   = ({ s = 22 }) => <Ico size={s} poly="20 6 9 17 4 12" />;
+const IcoChevR = ({ s = 22 }) => <Ico size={s} poly="9 18 15 12 9 6" />;
+const IcoCheck = ({ s = 22 }) => <Ico size={s} poly="20 6 9 17 4 12" />;
 
 // ─── Toggle ───────────────────────────────────────────────────────────────────
 
@@ -193,9 +194,9 @@ function MobileCard({ task, onClick, accent, th }: {
       }}>
         {task.title}
       </p>
-      
+
       <TaskTagList tags={task.tags} />
-      
+
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <div style={{ display: 'flex', alignItems: 'center', marginRight: displayAssignees.length > 1 ? 2 : 0 }}>
@@ -277,7 +278,7 @@ function BoardView({ tasks, columns, onTaskClick, onCreateTask, projects, active
   const activeProject = projects.find(p => p.id === activeProjectId) ?? projects[0] ?? null;
 
   const unreadCount = notifications.filter(n => !n.read).length;
-  const handleRefresh = useCallback(() => {}, []);
+  const handleRefresh = useCallback(() => { }, []);
   const { el: ptrEl, progress: ptrProgress, pulling: ptrReady } = usePullToRefresh(handleRefresh);
 
   return (
@@ -490,8 +491,31 @@ function BoardView({ tasks, columns, onTaskClick, onCreateTask, projects, active
 
 // ─── Task Detail Sheet ────────────────────────────────────────────────────────
 
-function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescriptionChange, onPriorityChange, onDeadlineChange, onAssigneeToggle, accent, th, members, projectTags, onTagToggle, onCreateTag, onDeleteTag, isLead, canEditTags }: {
-  task: Task | null; columns: BoardColumn[]; open: boolean; onClose: () => void;
+function TaskSheet({
+  task,
+  columns,
+  open,
+  onClose,
+  onColumnChange,
+  onDescriptionChange,
+  onPriorityChange,
+  onDeadlineChange,
+  onAssigneeToggle,
+  accent,
+  th,
+  members,
+  projectTags,
+  onTagToggle,
+  onCreateTag,
+  onDeleteTag,
+  onDeleteTask,
+  isLead,
+  canEditTags,
+}: {
+  task: Task | null;
+  columns: BoardColumn[];
+  open: boolean;
+  onClose: () => void;
   onColumnChange: (taskId: number, colId: number) => void;
   onDescriptionChange: (taskId: number, desc: string) => void;
   onPriorityChange: (taskId: number, urgency: string) => void;
@@ -503,9 +527,11 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
   onTagToggle: (taskId: number, tagId: number) => void;
   onCreateTag: (name: string, color: string) => Promise<Tag | null>;
   onDeleteTag: (tagId: number) => void;
+  onDeleteTask: (taskId: number) => void;
   isLead: boolean;
   canEditTags: boolean;
 }) {
+  const { user } = useAuthStore();
   const dragY = useRef(0);
   const [dragging, setDragging] = useState(false);
   const [dragOffset, setDragOffset] = useState(0);
@@ -522,8 +548,8 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
 
   useEffect(() => {
     if (!task || !open) return;
-    fetchComments(task.id).then(setComments).catch(() => {});
-    fetchAttachments(task.id).then(setAttachments).catch(() => {});
+    fetchComments(task.id).then(setComments).catch(() => { });
+    fetchAttachments(task.id).then(setAttachments).catch(() => { });
   }, [task?.id, open]);
 
   if (!task) return null;
@@ -555,7 +581,7 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
     try {
       const c = await addComment(taskId, text);
       setComments(prev => [...prev, c]);
-    } catch {}
+    } catch { }
   }
 
   async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement> | File) {
@@ -599,7 +625,7 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
     try {
       await deleteAttachment(id);
       setAttachments(prev => prev.filter(a => a.id !== id));
-    } catch {}
+    } catch { }
   }
 
   return createPortal(
@@ -637,15 +663,21 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
               <div style={{ fontSize: 12.5, color: th.textMuted, fontWeight: 500, marginBottom: 4 }}>
                 Created {formatRelativeCreationDate(task.created_at)}
               </div>
-              <h2 style={{ fontSize: 18, fontWeight: 700, color: th.text, lineHeight: 1.3 }}>{task.title}</h2>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
+                <h2 style={{ fontSize: 18, fontWeight: 700, color: th.text, lineHeight: 1.3, margin: 0 }}>{task.title}</h2>
+              </div>
             </div>
-            <button onClick={onClose} style={{
-              width: 36, height: 36, borderRadius: '50%', background: th.columnBg,
-              border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center',
-              justifyContent: 'center', color: th.textMuted, flexShrink: 0,
-            }}>
-              <IcoX s={17} />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button onClick={onClose} style={{
+                width: 36, height: 36, borderRadius: '50%', background: th.columnBg,
+                border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', color: th.textMuted, flexShrink: 0,
+              }}>
+                <IcoX s={17} />
+              </button>
+            </div>
+
+
           </div>
         </div>
 
@@ -691,9 +723,9 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
               </div>
             )}
             <div style={{ position: 'relative', display: 'inline-block' }} onClick={(e) => {
-              try { e.currentTarget.querySelector('input')?.showPicker(); } catch {}
+              try { e.currentTarget.querySelector('input')?.showPicker(); } catch { }
             }}>
-              <input 
+              <input
                 type="date"
                 value={task.deadline ? task.deadline.substring(0, 10) : ''}
                 onChange={e => onDeadlineChange(task.id, e.target.value || null)}
@@ -880,7 +912,7 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
                       }}>
                         {isImg
                           ? <img src={getDownloadUrl(att.id) + `?token=${localStorage.getItem('token') ?? ''}`}
-                              alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           : att.filename.split('.').pop()?.toUpperCase().slice(0, 3) ?? 'FILE'
                         }
                       </div>
@@ -933,35 +965,35 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
               {comments.length === 0
                 ? <p style={{ fontSize: 13, color: th.textMuted, fontStyle: 'italic' }}>No comments yet</p>
                 : comments.map((c) => {
-                    const cUid = c.user?.id ?? c.user_id;
-                    const cAv = getAvatarUrl(cUid);
-                    return (
-                  <div key={c.id} style={{ display: 'flex', gap: 10 }}>
-                    <div style={{
-                      width: 30, height: 30, borderRadius: '50%',
-                      background: cAv ? 'transparent' : userColor(cUid),
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: 'white', fontSize: 10, fontWeight: 700, flexShrink: 0,
-                      overflow: 'hidden',
-                    }}>
-                      {cAv
-                        ? <img src={cAv} alt={c.user?.full_name ?? 'User'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        : getInitials(c.user?.full_name ?? 'User')}
-                    </div>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 5 }}>
-                        <span style={{ fontSize: 12.5, fontWeight: 600, color: th.text }}>{c.user?.full_name ?? 'User'}</span>
-                        <span style={{ fontSize: 12, color: th.textMuted }}>
-                          {new Date(c.created_at).toLocaleDateString()}
-                        </span>
+                  const cUid = c.user?.id ?? c.user_id;
+                  const cAv = getAvatarUrl(cUid);
+                  return (
+                    <div key={c.id} style={{ display: 'flex', gap: 10 }}>
+                      <div style={{
+                        width: 30, height: 30, borderRadius: '50%',
+                        background: cAv ? 'transparent' : userColor(cUid),
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'white', fontSize: 10, fontWeight: 700, flexShrink: 0,
+                        overflow: 'hidden',
+                      }}>
+                        {cAv
+                          ? <img src={cAv} alt={c.user?.full_name ?? 'User'} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : getInitials(c.user?.full_name ?? 'User')}
                       </div>
-                      <p style={{
-                        fontSize: 13.5, color: th.textSecondary, lineHeight: 1.5,
-                        background: th.columnBg, borderRadius: 10, padding: '9px 12px', margin: 0,
-                      }}>{c.text}</p>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 5 }}>
+                          <span style={{ fontSize: 12.5, fontWeight: 600, color: th.text }}>{c.user?.full_name ?? 'User'}</span>
+                          <span style={{ fontSize: 12, color: th.textMuted }}>
+                            {new Date(c.created_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                        <p style={{
+                          fontSize: 13.5, color: th.textSecondary, lineHeight: 1.5,
+                          background: th.columnBg, borderRadius: 10, padding: '9px 12px', margin: 0,
+                        }}>{c.text}</p>
+                      </div>
                     </div>
-                  </div>
-                );
+                  );
                 })
               }
             </div>
@@ -989,7 +1021,7 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
                           const pos = ta.selectionStart ?? commentText.length;
                           const atPos = commentText.lastIndexOf('@', pos - 1);
                           const before = commentText.slice(0, atPos);
-                          const after  = commentText.slice(pos);
+                          const after = commentText.slice(pos);
                           setCommentText(before + `@${m.full_name} ` + after);
                           setMentionQuery(null);
                           setTimeout(() => { ta.focus(); ta.setSelectionRange(before.length + m.full_name.length + 2, before.length + m.full_name.length + 2); }, 20);
@@ -1011,7 +1043,7 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
               <div style={{ display: 'flex', gap: 8 }}>
                 <input
                   ref={commentInputRef}
-                  value={commentText} 
+                  value={commentText}
                   onChange={e => {
                     const val = e.target.value;
                     setCommentText(val);
@@ -1027,7 +1059,7 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
                     if (mentionQuery !== null && members) {
                       const filtered = members.filter(m => m.full_name.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 5);
                       if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIdx(i => Math.min(i + 1, filtered.length - 1)); return; }
-                      if (e.key === 'ArrowUp')   { e.preventDefault(); setMentionIdx(i => Math.max(i - 1, 0)); return; }
+                      if (e.key === 'ArrowUp') { e.preventDefault(); setMentionIdx(i => Math.max(i - 1, 0)); return; }
                       if (e.key === 'Enter' || e.key === 'Tab') {
                         const m = filtered[mentionIdx];
                         if (m) {
@@ -1037,7 +1069,7 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
                           const pos = ta.selectionStart ?? commentText.length;
                           const atPos = commentText.lastIndexOf('@', pos - 1);
                           const before = commentText.slice(0, atPos);
-                          const after  = commentText.slice(pos);
+                          const after = commentText.slice(pos);
                           setCommentText(before + `@${m.full_name} ` + after);
                           setMentionQuery(null);
                           setTimeout(() => { ta.focus(); ta.setSelectionRange(before.length + m.full_name.length + 2, before.length + m.full_name.length + 2); }, 20);
@@ -1062,8 +1094,34 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
                 }}>Send</button>
               </div>
             </div>
+
+            {/* Delete Task Button at the very bottom */}
+            {(isLead || task.creator_id === user?.id) && (
+              <div style={{ marginTop: 32, paddingTop: 20, borderTop: `1px solid ${th.border}` }}>
+                <button
+                  onClick={() => {
+                    if (confirm(`Вы уверены, что хотите удалить таску ${task.title}?`)) {
+                      onDeleteTask(task.id);
+                    }
+                  }}
+                  style={{
+                    width: '100%', padding: '14px', borderRadius: 14,
+                    border: '1.5px solid #FCA5A5', background: '#FEF2F2',
+                    color: '#DC2626', fontSize: 15, fontWeight: 700,
+                    cursor: 'pointer', fontFamily: 'inherit',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10,
+                  }}
+                >
+                  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                  </svg>
+                  Удалить задачу
+                </button>
+              </div>
+            )}
           </div>
         </div>
+
       </div>
     </>,
     document.body,
@@ -1213,7 +1271,7 @@ function CreateSheet({ open, onClose, onCreate, members, accent, th, projectTags
 // ─── Automations Mobile View ──────────────────────────────────────────────────
 
 const MBL_RUNS_KEY = 'vt_scraper_runs';
-const MBL_LOG_KEY  = 'vt_scraper_log';
+const MBL_LOG_KEY = 'vt_scraper_log';
 
 function AutomationsMobileView({ accent, th }: { accent: string; th: ReturnType<typeof useTheme>['theme'] }) {
   const [scraperActive, setScraperActive] = useState(true);
@@ -1252,9 +1310,9 @@ function AutomationsMobileView({ accent, th }: { accent: string; th: ReturnType<
       {/* Stats */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
         {[
-          { label: 'Runs',    value: scraperRuns,                         color: accent    },
-          { label: 'Active',  value: activeCount,                          color: '#059669' },
-          { label: 'Tasks',   value: scraperLog?.tasks_created ?? 0,       color: '#D97706' },
+          { label: 'Runs', value: scraperRuns, color: accent },
+          { label: 'Active', value: activeCount, color: '#059669' },
+          { label: 'Tasks', value: scraperLog?.tasks_created ?? 0, color: '#D97706' },
         ].map(s => (
           <div key={s.label} style={{ background: th.surface, border: `1px solid ${th.border}`, borderRadius: 14, padding: '14px 16px' }}>
             <p style={{ fontSize: 11, color: th.textMuted, fontWeight: 500, marginBottom: 4 }}>{s.label}</p>
@@ -1377,17 +1435,17 @@ function PushNotifRow({ accent, th }: { accent: string; th: ReturnType<typeof us
   }, []);
 
   const statusMeta: Record<Exclude<PushStatus, 'checking'>, { label: string; sub: string; btnLabel?: string; color: string }> = {
-    'no-https':   { label: 'No HTTPS', sub: 'App must be opened over HTTPS for push to work', color: '#EF4444' },
-    unsupported:  {
+    'no-https': { label: 'No HTTPS', sub: 'App must be opened over HTTPS for push to work', color: '#EF4444' },
+    unsupported: {
       label: 'Not supported',
       sub: diag.ios
         ? 'Requires iOS 16.4+ — open the app from the Home Screen icon'
         : 'Push notifications are not supported in this browser',
       color: th.textMuted,
     },
-    'needs-pwa':  { label: 'Add to Home Screen', sub: 'Tap Share → Add to Home Screen, then reopen the app', color: '#D97706' },
-    denied:       { label: 'Blocked', sub: 'Go to iOS Settings → Victory → Notifications → Allow', color: '#EF4444' },
-    subscribed:   { label: 'Enabled', sub: 'Push notifications are active ✓', color: '#059669' },
+    'needs-pwa': { label: 'Add to Home Screen', sub: 'Tap Share → Add to Home Screen, then reopen the app', color: '#D97706' },
+    denied: { label: 'Blocked', sub: 'Go to iOS Settings → Victory → Notifications → Allow', color: '#EF4444' },
+    subscribed: { label: 'Enabled', sub: 'Push notifications are active ✓', color: '#059669' },
     unsubscribed: { label: 'Disabled', sub: 'Tap Enable to receive push notifications', btnLabel: 'Enable', color: th.textMuted },
   };
 
@@ -1487,7 +1545,7 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
       try {
         const updated = await updateProfile({ avatar_data: dataUrl });
         if (token) setAuth({ ...user, avatar_data: updated.avatar_data ?? dataUrl }, token);
-      } catch {}
+      } catch { }
     };
     reader.readAsDataURL(file);
     e.target.value = '';
@@ -1619,8 +1677,8 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
                         borderRadius: '50%',
                       }}>
                         <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-                          <circle cx="12" cy="13" r="4"/>
+                          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z" />
+                          <circle cx="12" cy="13" r="4" />
                         </svg>
                       </div>
                     </div>
@@ -1700,7 +1758,7 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
         <div style={{ padding: '14px 16px' }}>
           <p style={{ fontSize: 14, fontWeight: 500, color: th.text, marginBottom: 10 }}>Accent color</p>
           <div style={{ display: 'flex', gap: 10 }}>
-            {['#6366F1','#7C3AED','#059669','#DC2626','#D97706','#0EA5E9'].map(c => (
+            {['#6366F1', '#7C3AED', '#059669', '#DC2626', '#D97706', '#0EA5E9'].map(c => (
               <div key={c} onClick={() => onSetAccent(c)} style={{
                 width: 28, height: 28, borderRadius: '50%', background: c, cursor: 'pointer',
                 border: accent === c ? `3px solid ${th.text}` : '3px solid transparent',
@@ -1841,10 +1899,10 @@ function BottomNav({ view, setView, accent, th }: {
   accent: string; th: ReturnType<typeof useTheme>['theme'];
 }) {
   const tabs: Array<{ id: MobileView; label: string; Icon: ({ s }: { s: number }) => React.JSX.Element; dot?: boolean }> = [
-    { id: 'kanban',      label: 'Board',    Icon: IcoBoard },
+    { id: 'kanban', label: 'Board', Icon: IcoBoard },
     { id: 'automations', label: 'Automate', Icon: IcoBolt, dot: true },
-    { id: 'team',        label: 'Team',     Icon: IcoUsers },
-    { id: 'settings',    label: 'Settings', Icon: IcoCog  },
+    { id: 'team', label: 'Team', Icon: IcoUsers },
+    { id: 'settings', label: 'Settings', Icon: IcoCog },
   ];
 
   return (
@@ -2007,29 +2065,29 @@ export function MobileApp() {
   }
 
   function handleDescriptionChange(taskId: number, desc: string) {
-    updateTask(taskId, { description: desc }).catch(() => {});
+    updateTask(taskId, { description: desc }).catch(() => { });
     if (selTask?.id === taskId) {
       setSelTask(prev => prev ? { ...prev, description: desc } : prev);
     }
     const key = ['tasks', resolvedProjectId] as const;
-    queryClient.setQueryData<Task[]>(key, old => 
+    queryClient.setQueryData<Task[]>(key, old =>
       (old ?? []).map(t => t.id === taskId ? { ...t, description: desc } : t)
     );
   }
 
   function handlePriorityChange(taskId: number, urgency: string) {
-    updateTask(taskId, { urgency: urgency as Task['urgency'] }).catch(() => {});
+    updateTask(taskId, { urgency: urgency as Task['urgency'] }).catch(() => { });
     if (selTask?.id === taskId) {
       setSelTask(prev => prev ? { ...prev, urgency: urgency as Task['urgency'] } : prev);
     }
     const key = ['tasks', resolvedProjectId] as const;
-    queryClient.setQueryData<Task[]>(key, old => 
+    queryClient.setQueryData<Task[]>(key, old =>
       (old ?? []).map(t => t.id === taskId ? { ...t, urgency: urgency as Task['urgency'] } : t)
     );
   }
 
   function handleDeadlineChange(taskId: number, deadline: string | null) {
-    updateTask(taskId, { deadline }).catch(() => {});
+    updateTask(taskId, { deadline }).catch(() => { });
     if (selTask?.id === taskId) {
       setSelTask(prev => prev ? { ...prev, deadline } : prev);
     }
@@ -2078,13 +2136,13 @@ export function MobileApp() {
       if (selTask?.id === taskId) {
         setSelTask(prev => prev ? { ...prev, ...updated } : prev);
       }
-    } catch {}
+    } catch { }
   }
 
   async function handleTagToggle(taskId: number, tagId: number) {
     const task = tasks.find(t => t.id === taskId) ?? selTask;
     if (!task) return;
-    
+
     const isAssignee = task.assignee_id === user?.id || (task.co_assignees ?? []).some(a => a.id === user?.id);
     if (!isLead && task.creator_id !== user?.id && !isAssignee) return;
 
@@ -2147,8 +2205,21 @@ export function MobileApp() {
       if (selTask) {
         setSelTask(prev => prev ? { ...prev, tags: (prev.tags ?? []).filter(t => t.id !== tagId) } : prev);
       }
-    } catch {}
+    } catch { }
   }
+
+  async function handleDeleteTask(taskId: number) {
+    const task = tasks.find(t => t.id === taskId);
+    if (!isLead && task?.creator_id !== user?.id) return;
+    try {
+      await deleteTask(taskId);
+      const key = ['tasks', resolvedProjectId] as const;
+      queryClient.setQueryData<Task[]>(key, old => (old ?? []).filter(t => t.id !== taskId));
+      setSheetOpen(false);
+      setSelTask(null);
+    } catch { }
+  }
+
 
   return (
     <>
@@ -2201,9 +2272,11 @@ export function MobileApp() {
         onTagToggle={handleTagToggle}
         onCreateTag={handleCreateTag}
         onDeleteTag={handleDeleteTag}
+        onDeleteTask={handleDeleteTask}
         isLead={isLead}
         canEditTags={!!canEditTagsOnSelected}
       />
+
 
       <CreateSheet
         open={createOpen} onClose={() => setCreateOpen(false)}

@@ -199,7 +199,7 @@ function DesktopKanbanPage() {
               onTaskOpened={() => setNotifTarget(null)}
             />
           )}
-          {view === 'automations' && <AutomationsView accent={accent} theme={theme} />}
+          {view === 'automations' && <AutomationsView projectId={resolvedProjectId!} accent={accent} theme={theme} />}
           {view === 'analytics'   && <AnalyticsView tasks={tasks} columns={columns} accent={accent} theme={theme} />}
           {view === 'team'        && <TeamView tasks={tasks} members={members} accent={accent} theme={theme} doneColumnId={(() => { const s = [...columns].sort((a,b)=>a.order-b.order); return s[s.length-1]?.id; })()} />}
           {view === 'settings'    && (

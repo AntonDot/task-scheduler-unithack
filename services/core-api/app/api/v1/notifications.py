@@ -22,6 +22,7 @@ _ACTION_LABELS: dict[str, str] = {
     "attachment_added": "Файл прикреплён",
     "task_created": "Задача создана",
     "task_approved": "Задача одобрена",
+    "automation_triggered": "Автоматизация сработала",
 }
 
 _ACTION_TYPES: dict[str, str] = {
@@ -31,6 +32,7 @@ _ACTION_TYPES: dict[str, str] = {
     "attachment_added": "comment",
     "task_created": "task_assigned",
     "task_approved": "status_change",
+    "automation_triggered": "task_assigned",
 }
 
 
@@ -77,7 +79,10 @@ async def get_notifications(
         select(AuditLog)
         .where(
             AuditLog.task_id.in_(my_task_ids),
-            AuditLog.user_id != current_user.id,
+            or_(
+                AuditLog.user_id != current_user.id,
+                AuditLog.action == "automation_triggered"
+            ),
             AuditLog.action.in_(list(_ACTION_LABELS.keys())),
             AuditLog.created_at >= since,
         )
@@ -104,6 +109,8 @@ async def get_notifications(
         body = f"{actor} — {task_title}"
         if log.action == "status_changed" and log.new_value:
             body = f"{actor} изменил(а) статус на «{log.new_value}» — {task_title}"
+        elif log.action == "automation_triggered" and log.new_value:
+            body = f"{log.new_value} — {task_title}"
         notifications.append(
             NotificationItem(
                 id=f"audit-{log.id}",

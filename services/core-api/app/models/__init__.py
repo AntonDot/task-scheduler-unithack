@@ -1,5 +1,6 @@
 from app.models.attachment import Attachment
 from app.models.audit_log import AuditLog
+from app.models.automation import Automation, AutomationLog
 from app.models.base import Base
 from app.models.board_column import BoardColumn
 from app.models.comment import Comment
@@ -12,4 +13,4 @@ from app.models.task_tag import task_tags
 from app.models.user import User
 from app.models.user_project import UserProject
 
-__all__ = ["Attachment", "AuditLog", "Base", "BoardColumn", "Comment", "Project", "PushSubscription", "Tag", "Task", "task_assignees", "task_tags", "User", "UserProject"]
+__all__ = ["Attachment", "AuditLog", "Automation", "AutomationLog", "Base", "BoardColumn", "Comment", "Project", "PushSubscription", "Tag", "Task", "task_assignees", "task_tags", "User", "UserProject"]

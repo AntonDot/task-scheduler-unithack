@@ -1,8 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from fastapi import status as http_status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user, require_project_access
 from app.models import Task, User, UserProject
@@ -113,3 +115,54 @@ async def delete_task_endpoint(
     project_id, deleted_task_id = await task_service.delete_task(db, task_id, access)
     await db.commit()
     await ws_manager.broadcast(project_id, "task_deleted", {"task_id": deleted_task_id})
+
+
+class InternalAutomationUpdate(BaseModel):
+    task_id: int
+    action: str  # task_updated, column_changed, notification
+    message: str | None = None
+
+
+@router.post("/api/v1/tasks/internal/automation-event", status_code=204)
+async def internal_automation_event(
+    body: InternalAutomationUpdate,
+    x_service_token: str | None = Header(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Internal endpoint for automation worker to trigger WS and Audit Logs."""
+    if not settings.service_token or x_service_token != settings.service_token:
+        raise HTTPException(status_code=403, detail="Invalid service token")
+
+    # Fetch fresh task data
+    task = await task_service.get_task(db, body.task_id)
+    if not task:
+        return
+
+    # Broadcast real-time update
+    from app.schemas import TaskRead
+    data = TaskRead.model_validate(task).model_dump(mode="json")
+    ws_event = "task_updated"
+    if body.action == "column_changed":
+        ws_event = "task_column_changed"
+    
+    await ws_manager.broadcast(task.project_id, ws_event, data)
+
+    # Log to Audit Log for notification bell
+    from app.models import AuditLog, User
+
+    # Use the dedicated system user — create if not yet seeded
+    res = await db.execute(select(User.id).where(User.email == "system@victory.local"))
+    system_user_id = res.scalar()
+    if not system_user_id:
+        system_user = User(full_name="System", email="system@victory.local")
+        db.add(system_user)
+        await db.flush()
+        system_user_id = system_user.id
+
+    db.add(AuditLog(
+        task_id=task.id,
+        action="automation_triggered",
+        new_value=body.message or f"Automation: {body.action}",
+        user_id=system_user_id,
+    ))
+    await db.commit()

@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -13,9 +15,20 @@ from app.api.v1.projects import router as projects_router
 from app.api.v1.push import router as push_router
 from app.api.v1.tasks import router as tasks_router
 from app.config import settings
+from app.rabbitmq import rabbitmq_manager
 from app.websocket_manager import ws_manager
 
-app = FastAPI(title="Victory Group Task Scheduler", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await rabbitmq_manager.start()
+    yield
+    # Shutdown
+    await rabbitmq_manager.stop()
+
+
+app = FastAPI(title="Victory Group Task Scheduler", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,

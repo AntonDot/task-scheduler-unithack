@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.domain import ProjectRole
-
+from app.rabbitmq import rabbitmq_manager
 from app.models import Tag, Task, UserProject
 from app.models.user import User
 from app.schemas import TaskCreate, TaskUpdate
@@ -111,6 +111,18 @@ async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: 
     task = await _reload_task(db, task.id)
 
     await log_action(db, task.id, creator_id, "created")
+
+    # Publish to RabbitMQ for automations
+    await rabbitmq_manager.publish_event("task_created", {
+        "id": task.id,
+        "project_id": project_id,
+        "creator_id": creator_id,
+        "assignee_id": task.assignee_id,
+        "column_id": task.column_id,
+        "urgency": task.urgency,
+        "title": task.title,
+    })
+
     # Notify new assignee
     if data.assignee_id and data.assignee_id != creator_id:
         await send_push_to_user(db, data.assignee_id, "Новая задача назначена", task.title)
@@ -199,6 +211,16 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
             old_value=json.dumps({k: v for k, v in old_values.items() if k != "assignee_id"}, default=str),
             new_value=json.dumps(other_fields, default=str),
         )
+    
+    # Publish to RabbitMQ for automations
+    await rabbitmq_manager.publish_event("task_updated", {
+        "id": task.id,
+        "project_id": task.project_id,
+        "user_id": user_project.user_id,
+        "changes": {k: getattr(task, k) for k in update_data.keys()},
+        "old_values": old_values,
+    })
+
     return task
 
 
@@ -235,6 +257,16 @@ async def change_column(db: AsyncSession, task_id: int, new_column_id: int, user
         old_value=json.dumps({"column_id": old_column_id}),
         new_value=json.dumps({"column_id": new_column_id}),
     )
+    
+    # Publish to RabbitMQ for automations
+    await rabbitmq_manager.publish_event("column_changed", {
+        "id": task.id,
+        "project_id": task.project_id,
+        "user_id": user_project.user_id,
+        "old_column_id": old_column_id,
+        "new_column_id": new_column_id,
+    })
+    
     return task
 
 

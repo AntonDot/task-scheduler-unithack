@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -12,6 +12,7 @@ from app.database import get_db
 from app.dependencies import get_current_user
 from app.models import User
 from app.models.push_subscription import PushSubscription
+from app.services.push_service import send_push_to_user
 
 router = APIRouter(prefix="/api/v1/push", tags=["push"])
 
@@ -63,3 +64,23 @@ async def unsubscribe(
     """Remove all push subscriptions for the current user."""
     await db.execute(delete(PushSubscription).where(PushSubscription.user_id == current_user.id))
     await db.commit()
+
+
+class InternalNotifyRequest(BaseModel):
+    user_id: int
+    title: str
+    body: str
+    url: str = "/"
+
+
+@router.post("/internal/notify", status_code=status.HTTP_204_NO_CONTENT)
+async def internal_notify(
+    body: InternalNotifyRequest,
+    x_service_token: str | None = Header(None),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    """Internal endpoint for other services to trigger push notifications."""
+    if not settings.service_token or x_service_token != settings.service_token:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid service token")
+
+    await send_push_to_user(db, body.user_id, body.title, body.body, body.url)

@@ -1,6 +1,7 @@
 from app.schemas.analytics import AssigneeLoad, ProjectAnalytics
 from app.schemas.attachment import AttachmentRead
 from app.schemas.audit_log import AuditLogRead
+from app.schemas.automation import AutomationCreate, AutomationLogRead, AutomationRead, AutomationUpdate
 from app.schemas.board_column import BoardColumnCreate, BoardColumnRead, BoardColumnReorder, BoardColumnUpdate
 from app.schemas.comment import CommentCreate, CommentRead
 from app.schemas.project import ProjectCreate, ProjectRead, ProjectWithRole
@@ -12,6 +13,10 @@ __all__ = [
     "AssigneeLoad",
     "AttachmentRead",
     "AuditLogRead",
+    "AutomationCreate",
+    "AutomationLogRead",
+    "AutomationRead",
+    "AutomationUpdate",
     "BoardColumnCreate",
     "BoardColumnRead",
     "BoardColumnReorder",

@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { Theme } from '@/theme/theme';
 import type { AppView } from './Sidebar';
 import { Avatar } from '@/components/kanban/Avatar';
@@ -48,9 +49,8 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
   const { user } = useAuthStore();
   const [darkHover, setDarkHover] = useState(false);
   const [bellOpen,  setBellOpen]  = useState(false);
-  const [allNotifs,   setAllNotifs]   = useState<NotificationItem[]>([]);
   const NOTIF_READ_KEY = `vt_read_notifs_${user?.id || 'default'}`;
-  const [readIds,     setReadIds]     = useState<Set<string>>(() => {
+  const [readIds, setReadIds] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem(NOTIF_READ_KEY) ?? '[]') as string[]); }
     catch { return new Set<string>(); }
   });
@@ -68,12 +68,13 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
     localStorage.setItem(NOTIF_READ_KEY, JSON.stringify([...readIds]));
   }, [readIds, NOTIF_READ_KEY]);
 
-  // Fetch real notifications
-  useEffect(() => {
-    fetchNotifications().then(setAllNotifs).catch(() => {});
-    const id = setInterval(() => fetchNotifications().then(setAllNotifs).catch(() => {}), 60000);
-    return () => clearInterval(id);
-  }, []);
+  // Fetch notifications via React Query — invalidated by WS events for instant updates
+  const { data: allNotifs = [] } = useQuery<NotificationItem[]>({
+    queryKey: ['notifications'],
+    queryFn: fetchNotifications,
+    refetchInterval: 60_000,
+    staleTime: 10_000,
+  });
 
   // Filter by user's notification preferences
   const prefs = loadNotifPrefs();

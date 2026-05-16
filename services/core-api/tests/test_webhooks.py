@@ -128,11 +128,12 @@ async def test_github_pr_merged_publishes_event(client, automation_with_webhook)
             headers={"X-GitHub-Event": "pull_request", "X-GitHub-Delivery": "delivery-1"},
         )
     assert resp.status_code == 202, resp.text
-    assert resp.json()["event_type"] == "github_pr_merged"
+    assert resp.json()["event_type"] == "github_event"
 
     publish.assert_awaited_once()
     event_type, payload = publish.await_args.args
-    assert event_type == "github_pr_merged"
+    assert event_type == "github_event"
+    assert payload["github_event_type"] == "github_pr_merged"
     assert payload["pr"]["number"] == 42
     assert payload["pr"]["merged_by"] == "bob"
     assert payload["project_id"] == automation_with_webhook.project_id
@@ -229,7 +230,9 @@ async def test_generic_webhook_publishes_custom_event_type(client, automation_ge
     assert resp.status_code == 202
     publish.assert_awaited_once()
     event_type, payload = publish.await_args.args
-    assert event_type == "custom_thing"
+    # webhook_generic always publishes as "webhook_generic"; custom type is in payload
+    assert event_type == "webhook_generic"
+    assert payload["webhook_event_type"] == "custom_thing"
     assert payload["foo"] == "bar"
     assert payload["external_event_id"] == "evt-99"
 

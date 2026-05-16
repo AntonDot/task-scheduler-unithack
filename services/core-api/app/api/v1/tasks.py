@@ -20,7 +20,7 @@ async def _get_task_access(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> tuple[Task, UserProject]:
-    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False))
+    result = await db.execute(select(Task).where(Task.id == task_id, not Task.is_deleted))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -157,15 +157,18 @@ async def internal_automation_event(
         if not task:
             return
 
-        db.add(AuditLog(
-            task_id=task.id,
-            action="automation_triggered",
-            new_value=body.message or f"Automation: {body.action}",
-            user_id=system_user_id,
-        ))
+        db.add(
+            AuditLog(
+                task_id=task.id,
+                action="automation_triggered",
+                new_value=body.message or f"Automation: {body.action}",
+                user_id=system_user_id,
+            )
+        )
         await db.commit()
 
         from app.schemas import TaskRead
+
         data = TaskRead.model_validate(task).model_dump(mode="json")
         ws_event = "task_updated"
         if body.action == "column_changed":
@@ -178,13 +181,15 @@ async def internal_automation_event(
         if not project_id:
             return  # no anchor at all — nothing to do
 
-        db.add(AuditLog(
-            task_id=None,
-            project_id=project_id,
-            action="automation_triggered",
-            new_value=body.message or f"Automation: {body.action}",
-            user_id=system_user_id,
-        ))
+        db.add(
+            AuditLog(
+                task_id=None,
+                project_id=project_id,
+                action="automation_triggered",
+                new_value=body.message or f"Automation: {body.action}",
+                user_id=system_user_id,
+            )
+        )
         await db.commit()
 
         # Broadcast to project channel so WS listeners know something happened
@@ -243,4 +248,3 @@ async def internal_create_task_from_automation(
     await db.commit()
     await ws_manager.broadcast(body.project_id, "task_created", {"task_id": task.id})
     return task
-

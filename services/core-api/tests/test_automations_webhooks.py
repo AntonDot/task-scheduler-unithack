@@ -2,8 +2,6 @@
 
 import pytest
 
-from app.models import Automation
-
 
 @pytest.mark.asyncio
 async def test_create_internal_trigger_has_no_webhook_token(client, seed_data, get_token):

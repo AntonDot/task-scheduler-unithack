@@ -8,8 +8,8 @@ from app.api.v1.attachments import router as attachments_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.automations import router as automations_router
-from app.api.v1.comments import router as comments_router
 from app.api.v1.columns import router as columns_router
+from app.api.v1.comments import router as comments_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.projects import router as projects_router
 from app.api.v1.push import router as push_router

@@ -20,7 +20,7 @@ async def review_automation(session_factory, seed_data):
             creator_id=seed_data["manager"].id,
             name="Bad reviews → tasks",
             is_active=True,
-            webhook_token="rev-tok",
+            webhook_token="rev-tok",  # noqa: S106
             config={
                 "trigger": {"type": "review_received", "params": {"source_url": "http://fake/api/reviews"}},
                 "conditions": [],
@@ -35,8 +35,8 @@ async def review_automation(session_factory, seed_data):
 
 FAKE_REVIEWS = [
     {"id": "r1", "rating": 1, "author": "Alice", "text": "Bad", "business": "Cafe", "date": "2026-01-01"},
-    {"id": "r2", "rating": 2, "author": "Bob",   "text": "Meh", "business": "Cafe", "date": "2026-01-02"},
-    {"id": "r3", "rating": 5, "author": "Eve",   "text": "Great", "business": "Cafe", "date": "2026-01-03"},
+    {"id": "r2", "rating": 2, "author": "Bob", "text": "Meh", "business": "Cafe", "date": "2026-01-02"},
+    {"id": "r3", "rating": 5, "author": "Eve", "text": "Great", "business": "Cafe", "date": "2026-01-03"},
 ]
 
 
@@ -56,8 +56,10 @@ def _make_mock_httpx(reviews):
 @pytest.mark.asyncio
 async def test_run_scrape_publishes_event_per_new_review(session_factory, review_automation):
     publish = AsyncMock()
-    with patch("app.services.review_scraper_service.rabbitmq_manager.publish_event", publish), \
-         patch("app.services.review_scraper_service.httpx.AsyncClient", return_value=_make_mock_httpx(FAKE_REVIEWS)):
+    with (
+        patch("app.services.review_scraper_service.rabbitmq_manager.publish_event", publish),
+        patch("app.services.review_scraper_service.httpx.AsyncClient", return_value=_make_mock_httpx(FAKE_REVIEWS)),
+    ):
         async with session_factory() as db:
             result = await review_scraper_service.run_scrape(db)
 
@@ -77,15 +79,19 @@ async def test_run_scrape_skips_already_delivered_reviews(session_factory, revie
     """A review that already has a webhook_deliveries row must NOT republish."""
     # Pre-seed one delivery for r1 — simulates "we already saw this review"
     async with session_factory() as db:
-        db.add(WebhookDelivery(
-            automation_id=review_automation.id,
-            external_event_id="review:r1",
-        ))
+        db.add(
+            WebhookDelivery(
+                automation_id=review_automation.id,
+                external_event_id="review:r1",
+            )
+        )
         await db.commit()
 
     publish = AsyncMock()
-    with patch("app.services.review_scraper_service.rabbitmq_manager.publish_event", publish), \
-         patch("app.services.review_scraper_service.httpx.AsyncClient", return_value=_make_mock_httpx(FAKE_REVIEWS)):
+    with (
+        patch("app.services.review_scraper_service.rabbitmq_manager.publish_event", publish),
+        patch("app.services.review_scraper_service.httpx.AsyncClient", return_value=_make_mock_httpx(FAKE_REVIEWS)),
+    ):
         async with session_factory() as db:
             result = await review_scraper_service.run_scrape(db)
 
@@ -117,8 +123,10 @@ async def test_run_scrape_fetch_failure_is_safe(session_factory, review_automati
     bad_client.__aexit__ = AsyncMock(return_value=None)
 
     publish = AsyncMock()
-    with patch("app.services.review_scraper_service.rabbitmq_manager.publish_event", publish), \
-         patch("app.services.review_scraper_service.httpx.AsyncClient", return_value=bad_client):
+    with (
+        patch("app.services.review_scraper_service.rabbitmq_manager.publish_event", publish),
+        patch("app.services.review_scraper_service.httpx.AsyncClient", return_value=bad_client),
+    ):
         async with session_factory() as db:
             result = await review_scraper_service.run_scrape(db)
     assert result["events_published"] == 0

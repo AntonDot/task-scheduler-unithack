@@ -99,8 +99,7 @@ def _normalize_github(canonical: str, body: dict) -> dict[str, Any]:
         out["ref"] = body.get("ref")
         out["pusher"] = (body.get("pusher") or {}).get("name")
         out["commits"] = [
-            {"id": c.get("id"), "message": c.get("message"), "url": c.get("url")}
-            for c in (body.get("commits") or [])
+            {"id": c.get("id"), "message": c.get("message"), "url": c.get("url")} for c in (body.get("commits") or [])
         ]
     return out
 
@@ -116,7 +115,7 @@ async def receive_webhook(
     try:
         body_json: dict = json.loads(raw_body) if raw_body else {}
     except json.JSONDecodeError:
-        raise HTTPException(status_code=400, detail="Body must be valid JSON")
+        raise HTTPException(status_code=400, detail="Body must be valid JSON") from None
 
     result = await db.execute(select(Automation).where(Automation.webhook_token == token))
     automation = result.scalar_one_or_none()
@@ -134,9 +133,7 @@ async def receive_webhook(
         secret = params.get("secret")
         if secret:
             sig_header = request.headers.get("x-hub-signature-256", "")
-            expected = "sha256=" + hmac.new(
-                secret.encode("utf-8"), raw_body, hashlib.sha256
-            ).hexdigest()
+            expected = "sha256=" + hmac.new(secret.encode("utf-8"), raw_body, hashlib.sha256).hexdigest()
             if not hmac.compare_digest(sig_header, expected):
                 raise HTTPException(status_code=401, detail="Invalid HMAC signature")
 
@@ -145,7 +142,10 @@ async def receive_webhook(
         canonical = _map_github_event(gh_event, action, body_json)
         logger.info(
             "GitHub webhook: delivery=%s x-github-event=%r action=%r → canonical=%r",
-            request.headers.get("x-github-delivery", "?"), gh_event, action, canonical,
+            request.headers.get("x-github-delivery", "?"),
+            gh_event,
+            action,
+            canonical,
         )
         if not canonical:
             # Ignored but ack — GitHub retries on non-2xx
@@ -159,10 +159,7 @@ async def receive_webhook(
         # trigger.type == event_type check in the worker matches the stored config.
         # The specific canonical type goes into payload as github_event_type.
         event_type = "github_event"
-        external_event_id = (
-            request.headers.get("x-github-delivery")
-            or hashlib.sha256(raw_body).hexdigest()
-        )
+        external_event_id = request.headers.get("x-github-delivery") or hashlib.sha256(raw_body).hexdigest()
         normalized = _normalize_github(canonical, body_json)
         normalized["github_event_type"] = canonical  # e.g. "github_pr_merged"
 
@@ -173,10 +170,7 @@ async def receive_webhook(
         # so conditions/templates can still reference it.
         event_type = "webhook_generic"
         custom_event_type = body_json.get("event_type", "webhook_generic")
-        external_event_id = (
-            body_json.get("external_event_id")
-            or hashlib.sha256(raw_body).hexdigest()
-        )
+        external_event_id = body_json.get("external_event_id") or hashlib.sha256(raw_body).hexdigest()
         # Use either body.payload (if structured) or the whole body
         normalized = body_json.get("payload", body_json)
         if not isinstance(normalized, dict):
@@ -210,10 +204,12 @@ async def receive_webhook(
     if not allow_duplicates:
         # Dedupe via UNIQUE(automation_id, external_event_id)
         try:
-            db.add(WebhookDelivery(
-                automation_id=automation.id,
-                external_event_id=str(external_event_id),
-            ))
+            db.add(
+                WebhookDelivery(
+                    automation_id=automation.id,
+                    external_event_id=str(external_event_id),
+                )
+            )
             await db.commit()
         except IntegrityError:
             await db.rollback()
@@ -228,7 +224,10 @@ async def receive_webhook(
     await rabbitmq_manager.publish_event(event_type, normalized)
     logger.info(
         "Webhook accepted: token=%s automation=%s event=%s dedupe=%s",
-        token[:8], automation.id, event_type, not allow_duplicates,
+        token[:8],
+        automation.id,
+        event_type,
+        not allow_duplicates,
     )
 
     return JSONResponse(

@@ -22,20 +22,20 @@ def upgrade() -> None:
     conn = op.get_bind()
 
     # is_dark
-    result = conn.execute(sa.text(
-        "SELECT column_name "
-        "FROM information_schema.columns "
-        "WHERE table_name='users' AND column_name='is_dark'"
-    ))
+    result = conn.execute(
+        sa.text("SELECT column_name FROM information_schema.columns WHERE table_name='users' AND column_name='is_dark'")
+    )
     if result.scalar() is None:
         op.add_column("users", sa.Column("is_dark", sa.Boolean(), nullable=False, server_default=sa.text("false")))
 
     # last_notifications_read_at
-    result = conn.execute(sa.text(
-        "SELECT column_name "
-        "FROM information_schema.columns "
-        "WHERE table_name='users' AND column_name='last_notifications_read_at'"
-    ))
+    result = conn.execute(
+        sa.text(
+            "SELECT column_name "
+            "FROM information_schema.columns "
+            "WHERE table_name='users' AND column_name='last_notifications_read_at'"
+        )
+    )
     if result.scalar() is None:
         op.add_column("users", sa.Column("last_notifications_read_at", sa.DateTime(timezone=True), nullable=True))
 

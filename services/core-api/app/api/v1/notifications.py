@@ -10,7 +10,6 @@ from sqlalchemy.orm import joinedload
 
 from app.database import get_db
 from app.dependencies import get_current_user
-from app.domain import ProjectRole
 from app.models import AuditLog, Comment, Task, User, UserProject
 from app.models.task_assignee import task_assignees
 
@@ -57,8 +56,7 @@ async def get_notifications(
 
     # 1. Get all projects where the user is a member
     proj_result = await db.execute(
-        select(UserProject.project_id, UserProject.role)
-        .where(UserProject.user_id == current_user.id)
+        select(UserProject.project_id, UserProject.role).where(UserProject.user_id == current_user.id)
     )
     project_memberships = proj_result.all()
     if not project_memberships:
@@ -71,14 +69,11 @@ async def get_notifications(
     # 2. Identify relevant tasks:
     # - Any task in a project where user is OWNER
     # - Tasks where user is assignee or co-assignee
-    
+
     # Base subquery for tasks where user is co-assignee
     co_assignee_task_ids = select(task_assignees.c.task_id).where(task_assignees.c.user_id == current_user.id)
-    
-    criteria = [
-        Task.assignee_id == current_user.id,
-        Task.id.in_(co_assignee_task_ids)
-    ]
+
+    criteria = [Task.assignee_id == current_user.id, Task.id.in_(co_assignee_task_ids)]
     if owner_project_ids:
         criteria.append(Task.project_id.in_(owner_project_ids))
 
@@ -100,10 +95,7 @@ async def get_notifications(
         select(AuditLog)
         .where(
             AuditLog.task_id.in_(my_task_ids),
-            or_(
-                AuditLog.user_id != current_user.id,
-                AuditLog.action == "automation_triggered"
-            ),
+            or_(AuditLog.user_id != current_user.id, AuditLog.action == "automation_triggered"),
             AuditLog.action.in_(list(_ACTION_LABELS.keys())),
             AuditLog.created_at >= since,
         )

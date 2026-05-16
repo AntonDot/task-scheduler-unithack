@@ -39,6 +39,7 @@ class ProfileUpdate(BaseModel):
     is_dark: bool | None = Field(default=None)
     avatar_data: str | None = Field(default=None)  # base64 data URL
 
+
 @router.get("/mode", response_model=LoginMode)
 async def get_login_mode():
     return LoginMode(dev_login=settings.dev_login)

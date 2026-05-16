@@ -54,8 +54,7 @@ async def run_scrape(db: AsyncSession) -> dict[str, int]:
         select(Automation).where(Automation.is_active == True)  # noqa: E712
     )
     automations = [
-        a for a in result.scalars().all()
-        if ((a.config or {}).get("trigger") or {}).get("type") == "review_received"
+        a for a in result.scalars().all() if ((a.config or {}).get("trigger") or {}).get("type") == "review_received"
     ]
 
     if not automations:
@@ -96,10 +95,12 @@ async def run_scrape(db: AsyncSession) -> dict[str, int]:
                     if existing.scalar() is not None:
                         continue
 
-                    db.add(WebhookDelivery(
-                        automation_id=automation.id,
-                        external_event_id=external_event_id,
-                    ))
+                    db.add(
+                        WebhookDelivery(
+                            automation_id=automation.id,
+                            external_event_id=external_event_id,
+                        )
+                    )
                     try:
                         await db.commit()
                     except IntegrityError:
@@ -118,7 +119,8 @@ async def run_scrape(db: AsyncSession) -> dict[str, int]:
                     events_published += 1
                     logger.info(
                         "review_received published: automation=%s review_id=%s",
-                        automation.id, review_id,
+                        automation.id,
+                        review_id,
                     )
 
     return {

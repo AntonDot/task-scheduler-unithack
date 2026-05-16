@@ -8,10 +8,10 @@ from sqlalchemy import JSON, Boolean, DateTime, ForeignKey, Integer, String, fun
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.models.base import Base
+
 # Use JSONB on Postgres for indexability; fall back to plain JSON on SQLite (tests).
 _JSON_PORTABLE = JSON().with_variant(JSONB(), "postgresql")
-
-from app.models.base import Base
 
 if TYPE_CHECKING:
     from app.models.project import Project
@@ -35,11 +35,13 @@ class Automation(Base):
 
     # config stores { trigger: {...}, conditions: [...], actions: [...] }
     config: Mapped[dict[str, Any]] = mapped_column(_JSON_PORTABLE, server_default="{}")
-    
+
     stats_runs: Mapped[int] = mapped_column(Integer, default=0)
-    
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     project: Mapped[Project] = relationship(back_populates="automations")
     creator: Mapped[User | None] = relationship()
@@ -51,11 +53,11 @@ class AutomationLog(Base):
 
     id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     automation_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("automations.id", ondelete="CASCADE"), index=True)
-    status: Mapped[str] = mapped_column(String(50)) # success, failure
-    
+    status: Mapped[str] = mapped_column(String(50))  # success, failure
+
     # details stores execution path, errors, etc.
     details: Mapped[dict[str, Any]] = mapped_column(_JSON_PORTABLE, server_default="{}")
-    
+
     ran_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     automation: Mapped[Automation] = relationship(back_populates="logs")

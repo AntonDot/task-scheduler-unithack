@@ -49,6 +49,4 @@ class Task(Base):
     attachments: Mapped[list[Attachment]] = relationship(
         back_populates="task", cascade="all, delete-orphan", order_by="Attachment.created_at"
     )
-    tags: Mapped[list[Tag]] = relationship(
-        secondary=task_tags, back_populates="tasks", lazy="selectin"
-    )
+    tags: Mapped[list[Tag]] = relationship(secondary=task_tags, back_populates="tasks", lazy="selectin")

@@ -14,7 +14,13 @@ def test_render_basic():
 
 
 def test_render_nested():
-    assert _render("{{user.name}} - {{user.role}}", {"user": {"name": "Alice", "role": "admin"}}) == "Alice - admin"
+    assert (
+        _render(
+            "{{user.name}} - {{user.role}}",
+            {"user": {"name": "Alice", "role": "admin"}},
+        )
+        == "Alice - admin"
+    )
 
 
 def test_render_missing():
@@ -33,32 +39,84 @@ def test_get_field_nested():
 @pytest.mark.asyncio
 async def test_numeric_compare_lte():
     ctx = {"event_type": "review_received", "payload": {"review": {"rating": 2}}}
-    cond = {"type": "numeric_compare", "params": {"field": "review.rating", "op": "lte", "value": 2}}
+    cond = {
+        "type": "numeric_compare",
+        "params": {"field": "review.rating", "op": "lte", "value": 2},
+    }
     assert await evaluate_condition(cond, ctx) is True
 
-    cond2 = {"type": "numeric_compare", "params": {"field": "review.rating", "op": "lt", "value": 2}}
+    cond2 = {
+        "type": "numeric_compare",
+        "params": {"field": "review.rating", "op": "lt", "value": 2},
+    }
     assert await evaluate_condition(cond2, ctx) is False
 
 
 @pytest.mark.asyncio
 async def test_numeric_compare_gte_gt_eq():
     ctx = {"event_type": "x", "payload": {"score": 10}}
-    assert await evaluate_condition({"type": "numeric_compare", "params": {"field": "score", "op": "gte", "value": 10}}, ctx) is True
-    assert await evaluate_condition({"type": "numeric_compare", "params": {"field": "score", "op": "gt", "value": 10}}, ctx) is False
-    assert await evaluate_condition({"type": "numeric_compare", "params": {"field": "score", "op": "eq", "value": 10}}, ctx) is True
+    assert (
+        await evaluate_condition(
+            {
+                "type": "numeric_compare",
+                "params": {"field": "score", "op": "gte", "value": 10},
+            },
+            ctx,
+        )
+        is True
+    )
+    assert (
+        await evaluate_condition(
+            {
+                "type": "numeric_compare",
+                "params": {"field": "score", "op": "gt", "value": 10},
+            },
+            ctx,
+        )
+        is False
+    )
+    assert (
+        await evaluate_condition(
+            {
+                "type": "numeric_compare",
+                "params": {"field": "score", "op": "eq", "value": 10},
+            },
+            ctx,
+        )
+        is True
+    )
 
 
 @pytest.mark.asyncio
 async def test_contains_case_insensitive():
     ctx = {"event_type": "x", "payload": {"text": "Hello World"}}
-    assert await evaluate_condition({"type": "contains", "params": {"field": "text", "value": "hello"}}, ctx) is True
-    assert await evaluate_condition({"type": "contains", "params": {"field": "text", "value": "missing"}}, ctx) is False
+    assert (
+        await evaluate_condition(
+            {"type": "contains", "params": {"field": "text", "value": "hello"}}, ctx
+        )
+        is True
+    )
+    assert (
+        await evaluate_condition(
+            {"type": "contains", "params": {"field": "text", "value": "missing"}}, ctx
+        )
+        is False
+    )
 
 
 @pytest.mark.asyncio
 async def test_regex_match():
     ctx = {"event_type": "x", "payload": {"branch": "release/v1.2.3"}}
-    assert await evaluate_condition({"type": "regex_match", "params": {"field": "branch", "pattern": "^release/"}}, ctx) is True
+    assert (
+        await evaluate_condition(
+            {
+                "type": "regex_match",
+                "params": {"field": "branch", "pattern": "^release/"},
+            },
+            ctx,
+        )
+        is True
+    )
 
 
 @pytest.mark.asyncio
@@ -74,16 +132,22 @@ async def test_field_equals_no_db_fallback_for_external_event():
 @pytest.mark.asyncio
 async def test_create_task_action():
     """create_task action calls the internal endpoint with templated body."""
-    ctx = {"event_type": "review_received", "payload": {
-        "project_id": 42,
-        "review": {"rating": 1, "author": "Bob", "text": "Bad service"},
-    }}
-    action = {"type": "create_task", "params": {
-        "column_id": 5,
-        "title": "Complaint from {{review.author}}",
-        "description": "{{review.text}}",
-        "urgency": "URGENT",
-    }}
+    ctx = {
+        "event_type": "review_received",
+        "payload": {
+            "project_id": 42,
+            "review": {"rating": 1, "author": "Bob", "text": "Bad service"},
+        },
+    }
+    action = {
+        "type": "create_task",
+        "params": {
+            "column_id": 5,
+            "title": "Complaint from {{review.author}}",
+            "description": "{{review.text}}",
+            "urgency": "URGENT",
+        },
+    }
 
     mock_response = MagicMock()
     mock_response.raise_for_status = MagicMock()

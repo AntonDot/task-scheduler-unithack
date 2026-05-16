@@ -16,7 +16,8 @@ class Settings(BaseSettings):
     review_board_url: str = "http://localhost:8002"
     rabbitmq_url: str = "amqp://guest:guest@localhost:5672/"
     automation_events_queue: str = "automation.events"
-    # VAPID keys for Web Push — generate with: python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.public_key, v.private_key)"
+    # VAPID keys for Web Push — generate with:
+    # python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.public_key, v.private_key)"
     vapid_private_key: str = ""
     vapid_public_key: str = ""
     vapid_claims_email: str = "admin@victory.local"

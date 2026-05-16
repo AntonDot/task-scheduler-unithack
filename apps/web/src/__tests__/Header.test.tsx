@@ -3,9 +3,17 @@ import { describe, it, expect, vi } from "vitest";
 import { Header } from "@/components/layout/Header";
 import { ThemeProvider } from "@/theme/ThemeContext";
 import { createTheme } from "@/theme/theme";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Helper to get a light theme
 const lightTheme = createTheme(false);
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+    },
+  },
+});
 
 function renderHeader(overrides: Partial<Parameters<typeof Header>[0]> = {}) {
   const defaultProps = {
@@ -22,9 +30,11 @@ function renderHeader(overrides: Partial<Parameters<typeof Header>[0]> = {}) {
   const props = { ...defaultProps, ...overrides };
   return {
     ...render(
-      <ThemeProvider>
-        <Header {...props} />
-      </ThemeProvider>,
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <Header {...props} />
+        </ThemeProvider>
+      </QueryClientProvider>,
     ),
     props,
   };

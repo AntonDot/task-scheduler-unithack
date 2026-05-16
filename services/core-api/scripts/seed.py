@@ -38,17 +38,17 @@ PROJECTS = [
 
 # Default columns created for every project
 DEFAULT_COLUMNS = [
-    {"name": "Backlog",     "color": "#9CA3AF", "order": 0, "is_protected": True},
+    {"name": "Backlog", "color": "#9CA3AF", "order": 0, "is_protected": True},
     {"name": "In Progress", "color": "#6366F1", "order": 1, "is_protected": True},
-    {"name": "Review",      "color": "#D97706", "order": 2, "is_protected": True},
-    {"name": "Done",        "color": "#059669", "order": 3, "is_protected": True},
+    {"name": "Review", "color": "#D97706", "order": 2, "is_protected": True},
+    {"name": "Done", "color": "#059669", "order": 3, "is_protected": True},
 ]
 
 # Column order indexes for task placement
-COL_BACKLOG     = 0
+COL_BACKLOG = 0
 COL_IN_PROGRESS = 1
-COL_REVIEW      = 2
-COL_DONE        = 3
+COL_REVIEW = 2
+COL_DONE = 3
 
 now = datetime.now(tz=UTC)
 
@@ -135,8 +135,9 @@ async def seed():
         session.add_all(cols1 + cols2)
         await session.flush()
 
-        tasks = _tasks(proj1.id, manager.id, specialist1.id, cols1) + \
-                _tasks(proj2.id, manager.id, specialist2.id, cols2)
+        tasks = _tasks(proj1.id, manager.id, specialist1.id, cols1) + _tasks(
+            proj2.id, manager.id, specialist2.id, cols2
+        )
         session.add_all([Task(**t) for t in tasks])
 
         await session.commit()

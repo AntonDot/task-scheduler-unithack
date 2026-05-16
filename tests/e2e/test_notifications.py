@@ -34,7 +34,9 @@ def _get_assignee(client, project_id, headers):
     return next((m for m in members if m["role"] == "ASSIGNEE"), None)
 
 
-def _get_assignee_headers(client, assignee, assignee_onegin_headers, assignee_bereg_headers):
+def _get_assignee_headers(
+    client, assignee, assignee_onegin_headers, assignee_bereg_headers
+):
     """Return the right headers fixture based on the assignee email."""
     if "kozlova" in assignee.get("email", ""):
         return assignee_onegin_headers
@@ -80,10 +82,27 @@ class TestNotificationsAPI:
             return  # Nothing to validate schema against — pass silently
 
         item = items[0]
-        required_fields = {"id", "type", "title", "body", "task_id", "task_title", "created_at", "actor_name"}
-        assert required_fields.issubset(item.keys()), f"Missing fields: {required_fields - item.keys()}"
+        required_fields = {
+            "id",
+            "type",
+            "title",
+            "body",
+            "task_id",
+            "task_title",
+            "created_at",
+            "actor_name",
+        }
+        assert required_fields.issubset(item.keys()), (
+            f"Missing fields: {required_fields - item.keys()}"
+        )
         assert isinstance(item["task_id"], int)
-        assert item["type"] in {"task_assigned", "comment", "status_change", "mention", "task_assigned"}
+        assert item["type"] in {
+            "task_assigned",
+            "comment",
+            "status_change",
+            "mention",
+            "task_assigned",
+        }
 
     def test_assignment_creates_notification_for_assignee(
         self, client, owner_headers, assignee_onegin_headers, onegin_project
@@ -114,8 +133,7 @@ class TestNotificationsAPI:
             client,
             assignee_onegin_headers,
             lambda items: any(
-                n["task_id"] == task_id and n["type"] == "task_assigned"
-                for n in items
+                n["task_id"] == task_id and n["type"] == "task_assigned" for n in items
             ),
         )
         assert result is not None, (
@@ -137,7 +155,11 @@ class TestNotificationsAPI:
 
         task_resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{pid}/tasks",
-            json={"title": f"Mention test {uuid.uuid4().hex[:8]}", "urgency": "LOW", "assignee_id": assignee_id},
+            json={
+                "title": f"Mention test {uuid.uuid4().hex[:8]}",
+                "urgency": "LOW",
+                "assignee_id": assignee_id,
+            },
             headers=owner_headers,
         )
         assert task_resp.status_code == 201
@@ -154,7 +176,9 @@ class TestNotificationsAPI:
         result = _wait_for_notification(
             client,
             assignee_onegin_headers,
-            lambda items: any(n["type"] == "mention" and n["task_id"] == task_id for n in items),
+            lambda items: any(
+                n["type"] == "mention" and n["task_id"] == task_id for n in items
+            ),
         )
         assert result is not None, (
             f"Assignee did not receive mention notification in task {task_id}"
@@ -172,7 +196,9 @@ class TestNotificationsAPI:
         if len(items) < 2:
             return
         timestamps = [n["created_at"] for n in items]
-        assert timestamps == sorted(timestamps, reverse=True), "Notifications are not sorted newest-first"
+        assert timestamps == sorted(timestamps, reverse=True), (
+            "Notifications are not sorted newest-first"
+        )
 
 
 @pytest.mark.e2e
@@ -227,7 +253,7 @@ class TestPushSubscription:
         assert resp.status_code == 204
 
     def test_internal_notify_rejects_missing_token(self, client, onegin_project):
-        pid = onegin_project["id"]
+        onegin_project["id"]
         resp = client.post(
             f"{CORE_API_URL}/api/v1/push/internal/notify",
             json={"user_id": 1, "title": "Test", "body": "Hello", "url": "/"},
@@ -249,7 +275,12 @@ class TestPushSubscription:
 
         resp = client.post(
             f"{CORE_API_URL}/api/v1/push/internal/notify",
-            json={"user_id": user_id, "title": "E2E Test", "body": "Test push", "url": "/"},
+            json={
+                "user_id": user_id,
+                "title": "E2E Test",
+                "body": "Test push",
+                "url": "/",
+            },
             headers={"X-Service-Token": SERVICE_TOKEN},
         )
         # 204 = accepted (push will silently skip if VAPID not configured)
@@ -264,7 +295,9 @@ class TestAutomationNotifications:
     If the worker is absent, assertions will time-out and fail with a descriptive message.
     """
 
-    def _create_automation(self, client, project_id, trigger_type, column_id, message, headers):
+    def _create_automation(
+        self, client, project_id, trigger_type, column_id, message, headers
+    ):
         body = {
             "name": f"E2E notif {uuid.uuid4().hex[:6]}",
             "project_id": project_id,
@@ -355,9 +388,7 @@ class TestAutomationNotifications:
         finally:
             self._delete_automation(client, automation_id, owner_headers)
 
-    def test_automation_log_records_run(
-        self, client, owner_headers, onegin_project
-    ):
+    def test_automation_log_records_run(self, client, owner_headers, onegin_project):
         pid = onegin_project["id"]
         columns = _get_columns(client, pid, owner_headers)
         if len(columns) < 2:
@@ -415,15 +446,23 @@ class TestAutomationNotifications:
 
         task_resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{pid}/tasks",
-            json={"title": f"InactiveAuto {uuid.uuid4().hex[:8]}", "urgency": "LOW",
-                  "assignee_id": assignee["id"]},
+            json={
+                "title": f"InactiveAuto {uuid.uuid4().hex[:8]}",
+                "urgency": "LOW",
+                "assignee_id": assignee["id"],
+            },
             headers=owner_headers,
         )
         task_id = task_resp.json()["id"]
 
         # Create automation, then immediately disable it
         automation = self._create_automation(
-            client, pid, "column_changed", dest_col_id, "Не должно прийти", owner_headers
+            client,
+            pid,
+            "column_changed",
+            dest_col_id,
+            "Не должно прийти",
+            owner_headers,
         )
         automation_id = automation["id"]
         client.put(
@@ -437,7 +476,7 @@ class TestAutomationNotifications:
             before_resp = client.get(
                 f"{CORE_API_URL}/api/v1/notifications", headers=assignee_onegin_headers
             )
-            before_count = len(before_resp.json())
+            len(before_resp.json())
 
             client.patch(
                 f"{CORE_API_URL}/api/v1/tasks/{task_id}/column",
@@ -450,7 +489,8 @@ class TestAutomationNotifications:
                 f"{CORE_API_URL}/api/v1/notifications", headers=assignee_onegin_headers
             )
             automation_notifs = [
-                n for n in after_resp.json()
+                n
+                for n in after_resp.json()
                 if n.get("task_id") == task_id
                 and "automation" in n.get("title", "").lower()
             ]
@@ -476,7 +516,11 @@ class TestAutomationNotifications:
 
         resp = client.post(
             f"{CORE_API_URL}/api/v1/tasks/internal/automation-event",
-            json={"task_id": task_id, "action": "notification", "message": "E2E direct call"},
+            json={
+                "task_id": task_id,
+                "action": "notification",
+                "message": "E2E direct call",
+            },
             headers={"X-Service-Token": SERVICE_TOKEN},
         )
         assert resp.status_code == 204

@@ -14,4 +14,21 @@ from app.models.user import User
 from app.models.user_project import UserProject
 from app.models.webhook_delivery import WebhookDelivery
 
-__all__ = ["Attachment", "AuditLog", "Automation", "AutomationLog", "Base", "BoardColumn", "Comment", "Project", "PushSubscription", "Tag", "Task", "task_assignees", "task_tags", "User", "UserProject", "WebhookDelivery"]
+__all__ = [
+    "Attachment",
+    "AuditLog",
+    "Automation",
+    "AutomationLog",
+    "Base",
+    "BoardColumn",
+    "Comment",
+    "Project",
+    "PushSubscription",
+    "Tag",
+    "Task",
+    "task_assignees",
+    "task_tags",
+    "User",
+    "UserProject",
+    "WebhookDelivery",
+]

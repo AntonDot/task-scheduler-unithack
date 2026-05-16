@@ -7,7 +7,7 @@ from app.config import settings
 from app.database import get_db
 from app.domain import ProjectRole, Urgency
 from app.main import app
-from app.models import Base, Project, Task, User, UserProject, BoardColumn
+from app.models import Base, BoardColumn, Project, Task, User, UserProject
 
 TEST_SECRET = "test-secret"  # noqa: S105
 TEST_SERVICE_TOKEN = "test-service-token"  # noqa: S105

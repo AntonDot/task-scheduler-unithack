@@ -3,11 +3,9 @@ import json
 import logging
 import re
 import uuid
-from typing import Any
 
 import aio_pika
 import httpx
-from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from pydantic_settings import BaseSettings
@@ -17,6 +15,7 @@ def _render(template: str, context: dict) -> str:
     """Substitute {{a.b.c}} from nested dict context."""
     if not template:
         return ""
+
     def repl(m):
         path = m.group(1).strip().split(".")
         v = context
@@ -27,6 +26,7 @@ def _render(template: str, context: dict) -> str:
                 v = None
                 break
         return str(v) if v is not None else ""
+
     return re.sub(r"\{\{\s*([^}]+?)\s*\}\}", repl, template)
 
 
@@ -42,14 +42,18 @@ def _get_field(payload: dict, dotted: str):
             return None
     return v
 
+
 class Settings(BaseSettings):
-    database_url: str = "postgresql+asyncpg://postgres:postgres@postgres:5432/taskscheduler"
+    database_url: str = (
+        "postgresql+asyncpg://postgres:postgres@postgres:5432/taskscheduler"
+    )
     rabbitmq_url: str = "amqp://guest:guest@rabbitmq:5672/"
     automation_events_queue: str = "automation.events"
     core_api_url: str = "http://core-api:8000"
     service_token: str = "dev-service-token"
 
     model_config = {"env_prefix": "AUTOMATION_", "extra": "ignore"}
+
 
 settings = Settings()
 logging.basicConfig(level=logging.INFO)
@@ -58,11 +62,12 @@ logger = logging.getLogger(__name__)
 engine = create_async_engine(settings.database_url)
 SessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False)
 
+
 async def evaluate_condition(condition: dict, context: dict) -> bool:
     """Evaluate a single condition with AND/OR support."""
     c_type = condition.get("type")
     params = condition.get("params", {})
-    
+
     event_type = context.get("event_type", "")
 
     if c_type == "field_value_equals":
@@ -77,12 +82,21 @@ async def evaluate_condition(condition: dict, context: dict) -> bool:
         if actual is None and task_id and event_type.startswith(("task_", "column_")):
             async with SessionLocal() as db:
                 from sqlalchemy import text
+
                 # Note: field name is from config, usually title/urgency/etc.
-                res = await db.execute(text(f"SELECT {field} FROM tasks WHERE id = :tid"), {"tid": task_id})
+                res = await db.execute(
+                    text(f"SELECT {field} FROM tasks WHERE id = :tid"), {"tid": task_id}
+                )
                 actual = res.scalar()
 
         res_bool = str(actual) == str(expected)
-        logger.info("Evaluating field_value_equals: field=%s, actual=%s, expected=%s -> %s", field, actual, expected, res_bool)
+        logger.info(
+            "Evaluating field_value_equals: field=%s, actual=%s, expected=%s -> %s",
+            field,
+            actual,
+            expected,
+            res_bool,
+        )
         return res_bool
 
     if c_type == "column_equals":
@@ -100,13 +114,22 @@ async def evaluate_condition(condition: dict, context: dict) -> bool:
         elif task_id and event_type.startswith(("task_", "column_")):
             async with SessionLocal() as db:
                 from sqlalchemy import text
-                res = await db.execute(text("SELECT column_id FROM tasks WHERE id = :tid"), {"tid": task_id})
+
+                res = await db.execute(
+                    text("SELECT column_id FROM tasks WHERE id = :tid"),
+                    {"tid": task_id},
+                )
                 actual = res.scalar()
         else:
             actual = None
 
         res_bool = str(actual) == str(expected)
-        logger.info("Evaluating column_equals: actual=%s, expected=%s -> %s", actual, expected, res_bool)
+        logger.info(
+            "Evaluating column_equals: actual=%s, expected=%s -> %s",
+            actual,
+            expected,
+            res_bool,
+        )
         return res_bool
 
     if c_type == "numeric_compare":
@@ -122,11 +145,16 @@ async def evaluate_condition(condition: dict, context: dict) -> bool:
             e = float(expected)
         except (TypeError, ValueError):
             return False
-        if op == "gte": return a >= e
-        if op == "lte": return a <= e
-        if op == "gt": return a > e
-        if op == "lt": return a < e
-        if op == "eq": return a == e
+        if op == "gte":
+            return a >= e
+        if op == "lte":
+            return a <= e
+        if op == "gt":
+            return a > e
+        if op == "lt":
+            return a < e
+        if op == "eq":
+            return a == e
         return False
 
     if c_type == "contains":
@@ -160,7 +188,8 @@ async def evaluate_condition(condition: dict, context: dict) -> bool:
                 return True
         return False
 
-    return True # Default to True if unknown
+    return True  # Default to True if unknown
+
 
 async def execute_action(action: dict, context: dict):
     """Execute a single action (e.g., update task)."""
@@ -199,7 +228,11 @@ async def execute_action(action: dict, context: dict):
                     headers={"X-Service-Token": settings.service_token},
                 )
                 resp.raise_for_status()
-                logger.info("Automation create_task succeeded: project=%s title=%r", project_id, title[:50])
+                logger.info(
+                    "Automation create_task succeeded: project=%s title=%r",
+                    project_id,
+                    title[:50],
+                )
         except Exception as e:
             logger.error("Automation create_task failed: %s", e)
             raise
@@ -213,15 +246,23 @@ async def execute_action(action: dict, context: dict):
             new_col = params.get("column_id")
             if new_col:
                 from sqlalchemy import text
-                await db.execute(text("UPDATE tasks SET column_id = :col WHERE id = :tid"), {"col": new_col, "tid": task_id})
+
+                await db.execute(
+                    text("UPDATE tasks SET column_id = :col WHERE id = :tid"),
+                    {"col": new_col, "tid": task_id},
+                )
                 logger.info("Automation changed task %s column to %s", task_id, new_col)
                 # Notify core-api about the update for real-time UI
                 async with httpx.AsyncClient() as client:
                     await client.post(
                         f"{settings.core_api_url}/api/v1/tasks/internal/automation-event",
-                        json={"task_id": task_id, "action": "column_changed", "message": f"Moved to column {new_col}"},
+                        json={
+                            "task_id": task_id,
+                            "action": "column_changed",
+                            "message": f"Moved to column {new_col}",
+                        },
                         headers={"X-Service-Token": settings.service_token},
-                        timeout=5.0
+                        timeout=5.0,
                     )
 
         elif a_type == "assign_user":
@@ -230,15 +271,23 @@ async def execute_action(action: dict, context: dict):
                 return
             user_id = params.get("user_id")
             from sqlalchemy import text
-            await db.execute(text("UPDATE tasks SET assignee_id = :uid WHERE id = :tid"), {"uid": user_id, "tid": task_id})
+
+            await db.execute(
+                text("UPDATE tasks SET assignee_id = :uid WHERE id = :tid"),
+                {"uid": user_id, "tid": task_id},
+            )
             logger.info("Automation assigned task %s to user %s", task_id, user_id)
             # Notify core-api about the update for real-time UI
             async with httpx.AsyncClient() as client:
                 await client.post(
                     f"{settings.core_api_url}/api/v1/tasks/internal/automation-event",
-                    json={"task_id": task_id, "action": "task_updated", "message": f"Assigned to user {user_id}"},
+                    json={
+                        "task_id": task_id,
+                        "action": "task_updated",
+                        "message": f"Assigned to user {user_id}",
+                    },
                     headers={"X-Service-Token": settings.service_token},
-                    timeout=5.0
+                    timeout=5.0,
                 )
 
         elif a_type == "send_notification":
@@ -247,10 +296,19 @@ async def execute_action(action: dict, context: dict):
             project_id = payload.get("project_id")
             if not user_id and task_id:
                 from sqlalchemy import text
-                res = await db.execute(text("SELECT assignee_id FROM tasks WHERE id = :tid"), {"tid": task_id})
+
+                res = await db.execute(
+                    text("SELECT assignee_id FROM tasks WHERE id = :tid"),
+                    {"tid": task_id},
+                )
                 user_id = res.scalar()
 
-            logger.info("Automation send_notification task=%s project=%s user=%s", task_id, project_id, user_id)
+            logger.info(
+                "Automation send_notification task=%s project=%s user=%s",
+                task_id,
+                project_id,
+                user_id,
+            )
             try:
                 async with httpx.AsyncClient() as client:
                     # 1. Audit Log + WS bell — works with or without task_id
@@ -263,7 +321,7 @@ async def execute_action(action: dict, context: dict):
                         f"{settings.core_api_url}/api/v1/tasks/internal/automation-event",
                         json=event_body,
                         headers={"X-Service-Token": settings.service_token},
-                        timeout=5.0
+                        timeout=5.0,
                     )
 
                     # 2. Push notification (only if VAPID is configured)
@@ -274,15 +332,16 @@ async def execute_action(action: dict, context: dict):
                                 "user_id": user_id,
                                 "title": "Automation",
                                 "body": message,
-                                "url": f"/task/{task_id}" if task_id else "/"
+                                "url": f"/task/{task_id}" if task_id else "/",
                             },
                             headers={"X-Service-Token": settings.service_token},
-                            timeout=5.0
+                            timeout=5.0,
                         )
             except Exception as e:
                 logger.error("Failed to send notification via core-api: %s", e)
 
         await db.commit()
+
 
 async def process_event(event: dict):
     event_type = event.get("type")
@@ -299,23 +358,37 @@ async def process_event(event: dict):
 
     async with SessionLocal() as db:
         from sqlalchemy import text
+
         # Fetch active automations for the project matching this trigger
         result = await db.execute(
-            text("SELECT id, config FROM automations WHERE project_id = :pid AND is_active = true"),
-            {"pid": project_id}
+            text(
+                "SELECT id, config FROM automations WHERE project_id = :pid AND is_active = true"
+            ),
+            {"pid": project_id},
         )
         automations = result.fetchall()
-        logger.info("Found %d active automations for project %s", len(automations), project_id)
+        logger.info(
+            "Found %d active automations for project %s", len(automations), project_id
+        )
 
         for auto_id, config in automations:
             # Simple trigger check
             trigger = config.get("trigger", {})
             trigger_type = trigger.get("type")
             if trigger_type != event_type:
-                logger.debug("Automation %s skipped: trigger=%r != event=%r", auto_id, trigger_type, event_type)
+                logger.debug(
+                    "Automation %s skipped: trigger=%r != event=%r",
+                    auto_id,
+                    trigger_type,
+                    event_type,
+                )
                 continue
 
-            logger.info("Automation %s matches event %r, evaluating conditions...", auto_id, event_type)
+            logger.info(
+                "Automation %s matches event %r, evaluating conditions...",
+                auto_id,
+                event_type,
+            )
 
             # Evaluate conditions
             conditions = config.get("conditions", [])
@@ -328,32 +401,51 @@ async def process_event(event: dict):
                     break
 
             if all_pass:
-                logger.info("Triggering automation %s (all %d conditions passed)", auto_id, len(conditions))
+                logger.info(
+                    "Triggering automation %s (all %d conditions passed)",
+                    auto_id,
+                    len(conditions),
+                )
                 actions = config.get("actions", [])
                 for action in actions:
                     await execute_action(action, context)
-                
+
                 # Log execution and update stats
                 await db.execute(
-                    text("INSERT INTO automation_logs (id, automation_id, status, details, ran_at) VALUES (:id, :aid, :status, :details, NOW())"),
-                    {"id": uuid.uuid4(), "aid": auto_id, "status": "success", "details": json.dumps({"event": event_type})}
+                    text(
+                        "INSERT INTO automation_logs (id, automation_id, status, details, ran_at) VALUES (:id, :aid, :status, :details, NOW())"
+                    ),
+                    {
+                        "id": uuid.uuid4(),
+                        "aid": auto_id,
+                        "status": "success",
+                        "details": json.dumps({"event": event_type}),
+                    },
                 )
                 await db.execute(
-                    text("UPDATE automations SET stats_runs = stats_runs + 1 WHERE id = :aid"),
-                    {"aid": auto_id}
+                    text(
+                        "UPDATE automations SET stats_runs = stats_runs + 1 WHERE id = :aid"
+                    ),
+                    {"aid": auto_id},
                 )
                 await db.commit()
+
 
 async def consume():
     connection = await aio_pika.connect_robust(settings.rabbitmq_url)
     async with connection:
         channel = await connection.channel()
         await channel.set_qos(prefetch_count=10)
-        
-        queue = await channel.declare_queue(settings.automation_events_queue, durable=True)
-        
-        logger.info("Automation worker started, consuming from queue %s", settings.automation_events_queue)
-        
+
+        queue = await channel.declare_queue(
+            settings.automation_events_queue, durable=True
+        )
+
+        logger.info(
+            "Automation worker started, consuming from queue %s",
+            settings.automation_events_queue,
+        )
+
         async with queue.iterator() as queue_iter:
             async for message in queue_iter:
                 async with message.process():
@@ -362,6 +454,7 @@ async def consume():
                         await process_event(event)
                     except Exception as e:
                         logger.error("Error processing event: %s", e)
+
 
 if __name__ == "__main__":
     asyncio.run(consume())

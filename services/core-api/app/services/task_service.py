@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -7,18 +7,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.domain import ProjectRole
-from app.rabbitmq import rabbitmq_manager
 from app.models import Tag, Task, UserProject
 from app.models.user import User
+from app.rabbitmq import rabbitmq_manager
 from app.schemas import TaskCreate, TaskUpdate
 from app.services.audit_service import log_action
 from app.services.push_service import send_push_to_user
 
-_TASK_OPTS = [selectinload(Task.project), selectinload(Task.assignee), selectinload(Task.co_assignees), selectinload(Task.tags)]
+_TASK_OPTS = [
+    selectinload(Task.project),
+    selectinload(Task.assignee),
+    selectinload(Task.co_assignees),
+    selectinload(Task.tags),
+]
 
 
 async def list_tasks(db: AsyncSession, project_id: int, assignee_id: int | None = None) -> list[Task]:
-    stmt = select(Task).where(Task.project_id == project_id, Task.is_deleted == False)
+    stmt = select(Task).where(Task.project_id == project_id, not Task.is_deleted)
     if assignee_id is not None:
         stmt = stmt.where(Task.assignee_id == assignee_id)
     result = await db.execute(
@@ -28,7 +33,7 @@ async def list_tasks(db: AsyncSession, project_id: int, assignee_id: int | None 
 
 
 async def get_task(db: AsyncSession, task_id: int) -> Task | None:
-    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False).options(*_TASK_OPTS))
+    result = await db.execute(select(Task).where(Task.id == task_id, not Task.is_deleted).options(*_TASK_OPTS))
     return result.scalar_one_or_none()
 
 
@@ -41,7 +46,7 @@ async def _set_co_assignees(db: AsyncSession, task: Task, ids: list[int]) -> Non
 
 
 async def _reload_task(db: AsyncSession, task_id: int) -> Task:
-    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False).options(*_TASK_OPTS))
+    result = await db.execute(select(Task).where(Task.id == task_id, not Task.is_deleted).options(*_TASK_OPTS))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -54,9 +59,7 @@ async def _set_tags(db: AsyncSession, task: Task, tag_ids: list[int] | None) -> 
         task.tags = []
         return
     unique_ids = list(dict.fromkeys(tag_ids))
-    result = await db.execute(
-        select(Tag).where(Tag.id.in_(unique_ids), Tag.project_id == task.project_id)
-    )
+    result = await db.execute(select(Tag).where(Tag.id.in_(unique_ids), Tag.project_id == task.project_id))
     tags = list(result.scalars().all())
     if len(tags) != len(unique_ids):
         raise HTTPException(
@@ -70,7 +73,10 @@ async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: 
     column_id = data.column_id
     if column_id is None:
         from app.models.board_column import BoardColumn
-        col_result = await db.execute(select(BoardColumn.id).where(BoardColumn.project_id == project_id).order_by(BoardColumn.order).limit(1))
+
+        col_result = await db.execute(
+            select(BoardColumn.id).where(BoardColumn.project_id == project_id).order_by(BoardColumn.order).limit(1)
+        )
         column_id = col_result.scalar_one_or_none()
         if column_id is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Project has no columns")
@@ -85,17 +91,15 @@ async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: 
         urgency=data.urgency,
         deadline=data.deadline,
     )
-    
+
     # Fetch and set relationships BEFORE adding to session to avoid lazy load triggers
     if data.co_assignee_ids:
         result = await db.execute(select(User).where(User.id.in_(data.co_assignee_ids)))
         task.co_assignees = list(result.scalars().all())
-    
+
     if data.tag_ids:
         unique_ids = list(dict.fromkeys(data.tag_ids))
-        result = await db.execute(
-            select(Tag).where(Tag.id.in_(unique_ids), Tag.project_id == project_id)
-        )
+        result = await db.execute(select(Tag).where(Tag.id.in_(unique_ids), Tag.project_id == project_id))
         tags = list(result.scalars().all())
         if len(tags) != len(unique_ids):
             raise HTTPException(
@@ -114,15 +118,18 @@ async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: 
     await log_action(db, task.id, creator_id, "created")
 
     # Publish to RabbitMQ for automations
-    await rabbitmq_manager.publish_event("task_created", {
-        "id": task.id,
-        "project_id": project_id,
-        "creator_id": creator_id,
-        "assignee_id": task.assignee_id,
-        "column_id": task.column_id,
-        "urgency": task.urgency,
-        "title": task.title,
-    })
+    await rabbitmq_manager.publish_event(
+        "task_created",
+        {
+            "id": task.id,
+            "project_id": project_id,
+            "creator_id": creator_id,
+            "assignee_id": task.assignee_id,
+            "column_id": task.column_id,
+            "urgency": task.urgency,
+            "title": task.title,
+        },
+    )
 
     # Notify new assignee
     if data.assignee_id and data.assignee_id != creator_id:
@@ -131,7 +138,7 @@ async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: 
 
 
 async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_project: UserProject) -> Task:
-    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False).options(*_TASK_OPTS))
+    result = await db.execute(select(Task).where(Task.id == task_id, not Task.is_deleted).options(*_TASK_OPTS))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -156,17 +163,20 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
             if restricted in update_data:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Cannot update {restricted}")
 
-    if "tag_ids" in update_data:
-        if user_project.role != ProjectRole.OWNER and task.creator_id != user_project.user_id and not is_assignee:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner, creator or assignee can manage tags")
+    if "tag_ids" in update_data and (
+        user_project.role != ProjectRole.OWNER and task.creator_id != user_project.user_id and not is_assignee
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, detail="Only owner, creator or assignee can manage tags"
+        )
 
     co_assignee_ids = update_data.pop("co_assignee_ids", None)
     tag_ids = update_data.pop("tag_ids", None)
 
     old_values = {field: getattr(task, field) for field in update_data}
-    
+
     # Check if assignee_id is changing
-    assignee_changed = "assignee_id" in update_data and update_data["assignee_id"] != getattr(task, "assignee_id")
+    assignee_changed = "assignee_id" in update_data and update_data["assignee_id"] != task.assignee_id
     co_assignee_changed = co_assignee_ids is not None
 
     for field, value in update_data.items():
@@ -174,21 +184,23 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
 
     if co_assignee_ids is not None:
         await _set_co_assignees(db, task, co_assignee_ids)
-        
+
     if tag_ids is not None:
         await _set_tags(db, task, tag_ids)
 
     await db.flush()
     task = await _reload_task(db, task.id)
     new_values = {field: getattr(task, field) for field in update_data}
-    
+
     if assignee_changed or co_assignee_changed:
         await log_action(
             db,
             task.id,
             user_project.user_id,
             "task_assigned",
-            old_value=json.dumps({"assignee_id": old_values.get("assignee_id", getattr(task, "assignee_id", None))}, default=str),
+            old_value=json.dumps(
+                {"assignee_id": old_values.get("assignee_id", getattr(task, "assignee_id", None))}, default=str
+            ),
             new_value=json.dumps({"assignee_id": task.assignee_id}, default=str),
         )
         # Push notification to newly assigned user (if different from actor)
@@ -200,7 +212,7 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
             for uid in new_co_ids - old_co_ids:
                 if uid != user_project.user_id:
                     await send_push_to_user(db, uid, "Вы добавлены как соисполнитель", task.title)
-    
+
     # Only log 'updated' if there are other fields changed besides assignee_id
     other_fields = {k: v for k, v in new_values.items() if k != "assignee_id"}
     if other_fields:
@@ -212,25 +224,24 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
             old_value=json.dumps({k: v for k, v in old_values.items() if k != "assignee_id"}, default=str),
             new_value=json.dumps(other_fields, default=str),
         )
-    
+
     # Publish to RabbitMQ for automations
-    await rabbitmq_manager.publish_event("task_updated", {
-        "id": task.id,
-        "project_id": task.project_id,
-        "user_id": user_project.user_id,
-        "changes": {k: getattr(task, k) for k in update_data.keys()},
-        "old_values": old_values,
-    })
+    await rabbitmq_manager.publish_event(
+        "task_updated",
+        {
+            "id": task.id,
+            "project_id": task.project_id,
+            "user_id": user_project.user_id,
+            "changes": {k: getattr(task, k) for k in update_data},
+            "old_values": old_values,
+        },
+    )
 
     return task
 
 
 async def change_column(db: AsyncSession, task_id: int, new_column_id: int, user_project: UserProject) -> Task:
-    result = await db.execute(
-        select(Task)
-        .where(Task.id == task_id, Task.is_deleted == False)
-        .options(*_TASK_OPTS)
-    )
+    result = await db.execute(select(Task).where(Task.id == task_id, not Task.is_deleted).options(*_TASK_OPTS))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -242,9 +253,8 @@ async def change_column(db: AsyncSession, task_id: int, new_column_id: int, user
     is_co = user_project.user_id in co_ids_in_task
     is_assignee = task.assignee_id == user_project.user_id or is_co
 
-    if user_project.role == ProjectRole.ASSIGNEE:
-        if not is_assignee:
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your task")
+    if user_project.role == ProjectRole.ASSIGNEE and not is_assignee:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your task")
 
     old_column_id = task.column_id
     task.column_id = new_column_id
@@ -258,22 +268,23 @@ async def change_column(db: AsyncSession, task_id: int, new_column_id: int, user
         old_value=json.dumps({"column_id": old_column_id}),
         new_value=json.dumps({"column_id": new_column_id}),
     )
-    
+
     # Publish to RabbitMQ for automations
-    await rabbitmq_manager.publish_event("column_changed", {
-        "id": task.id,
-        "project_id": task.project_id,
-        "user_id": user_project.user_id,
-        "old_column_id": old_column_id,
-        "new_column_id": new_column_id,
-    })
-    
+    await rabbitmq_manager.publish_event(
+        "column_changed",
+        {
+            "id": task.id,
+            "project_id": task.project_id,
+            "user_id": user_project.user_id,
+            "old_column_id": old_column_id,
+            "new_column_id": new_column_id,
+        },
+    )
+
     return task
 
 
-
 # Legacy functions removed due to missing TaskStatus and status field in Task model
-
 
 
 async def delete_task(db: AsyncSession, task_id: int, user_project: UserProject) -> tuple[int, int]:
@@ -291,6 +302,6 @@ async def delete_task(db: AsyncSession, task_id: int, user_project: UserProject)
     deleted_task_id = task.id
     await log_action(db, task.id, user_project.user_id, "deleted")
     task.is_deleted = True
-    task.deleted_at = datetime.now(timezone.utc)
+    task.deleted_at = datetime.now(UTC)
     await db.flush()
     return project_id, deleted_task_id

@@ -56,9 +56,7 @@ async def send_push_to_user(
         logger.warning("pywebpush not installed — push notifications disabled")
         return
 
-    result = await db.execute(
-        select(PushSubscription).where(PushSubscription.user_id == user_id)
-    )
+    result = await db.execute(select(PushSubscription).where(PushSubscription.user_id == user_id))
     subs = list(result.scalars().all())
     if not subs:
         return
@@ -75,15 +73,11 @@ async def send_push_to_user(
             "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
         }
         # Run blocking I/O in a thread so we don't block the event loop
-        dead = await asyncio.to_thread(
-            _send_one_blocking, subscription_info, payload, private_key, claims
-        )
+        dead = await asyncio.to_thread(_send_one_blocking, subscription_info, payload, private_key, claims)
         if dead:
             dead_endpoints.append(dead)
 
     # Remove expired subscriptions
     if dead_endpoints:
-        await db.execute(
-            sa.delete(PushSubscription).where(PushSubscription.endpoint.in_(dead_endpoints))
-        )
+        await db.execute(sa.delete(PushSubscription).where(PushSubscription.endpoint.in_(dead_endpoints)))
         await db.commit()

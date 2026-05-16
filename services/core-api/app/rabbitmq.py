@@ -8,6 +8,7 @@ from app.config import settings
 
 logger = logging.getLogger(__name__)
 
+
 class RabbitMQManager:
     def __init__(self):
         self.connection: aio_pika.abc.AbstractConnection | None = None
@@ -16,7 +17,7 @@ class RabbitMQManager:
     async def start(self):
         if self.connection:
             return
-        
+
         try:
             self.connection = await aio_pika.connect_robust(settings.rabbitmq_url)
             self.channel = await self.connection.channel()
@@ -52,5 +53,6 @@ class RabbitMQManager:
             )
         except Exception as e:
             logger.error("Failed to publish event %s to RabbitMQ: %s", event_type, e)
+
 
 rabbitmq_manager = RabbitMQManager()

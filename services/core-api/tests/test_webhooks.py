@@ -7,12 +7,11 @@ GitHub event mapping, and the RabbitMQ publish call.
 import hashlib
 import hmac
 import json
-import uuid
 from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.models import Automation, WebhookDelivery
+from app.models import Automation
 
 
 @pytest.fixture
@@ -24,7 +23,7 @@ async def automation_with_webhook(session_factory, seed_data):
             creator_id=seed_data["manager"].id,
             name="PR notifier",
             is_active=True,
-            webhook_token="test-token-123",
+            webhook_token="test-token-123",  # noqa: S106
             config={
                 "trigger": {"type": "github_event", "params": {}},
                 "conditions": [],
@@ -45,7 +44,7 @@ async def automation_with_secret(session_factory, seed_data):
             creator_id=seed_data["manager"].id,
             name="Secured PR",
             is_active=True,
-            webhook_token="secret-token-999",
+            webhook_token="secret-token-999",  # noqa: S106
             config={
                 "trigger": {"type": "github_event", "params": {"secret": "supersecret"}},
                 "conditions": [],
@@ -66,7 +65,7 @@ async def automation_generic(session_factory, seed_data):
             creator_id=seed_data["manager"].id,
             name="Generic ingress",
             is_active=True,
-            webhook_token="generic-tok",
+            webhook_token="generic-tok",  # noqa: S106
             config={
                 "trigger": {"type": "webhook_generic", "params": {}},
                 "conditions": [],
@@ -93,7 +92,7 @@ async def test_disabled_automation_returns_410(client, session_factory, seed_dat
             project_id=seed_data["project"].id,
             name="Disabled",
             is_active=False,
-            webhook_token="disabled-tok",
+            webhook_token="disabled-tok",  # noqa: S106
             config={"trigger": {"type": "webhook_generic"}},
         )
         session.add(a)
@@ -141,15 +140,26 @@ async def test_github_pr_merged_publishes_event(client, automation_with_webhook)
 
 @pytest.mark.asyncio
 async def test_github_duplicate_delivery_dedupes(client, automation_with_webhook):
-    body = {"action": "opened", "pull_request": {"number": 1, "title": "x", "user": {"login": "a"}, "base": {"ref": "main"}, "head": {"ref": "x"}}}
+    body = {
+        "action": "opened",
+        "pull_request": {
+            "number": 1,
+            "title": "x",
+            "user": {"login": "a"},
+            "base": {"ref": "main"},
+            "head": {"ref": "x"},
+        },
+    }
     publish = AsyncMock()
     with patch("app.api.v1.webhooks.rabbitmq_manager.publish_event", publish):
         r1 = await client.post(
-            "/api/v1/webhooks/test-token-123", json=body,
+            "/api/v1/webhooks/test-token-123",
+            json=body,
             headers={"X-GitHub-Event": "pull_request", "X-GitHub-Delivery": "same-delivery"},
         )
         r2 = await client.post(
-            "/api/v1/webhooks/test-token-123", json=body,
+            "/api/v1/webhooks/test-token-123",
+            json=body,
             headers={"X-GitHub-Event": "pull_request", "X-GitHub-Delivery": "same-delivery"},
         )
     assert r1.status_code == 202
@@ -160,7 +170,10 @@ async def test_github_duplicate_delivery_dedupes(client, automation_with_webhook
 
 @pytest.mark.asyncio
 async def test_github_hmac_mismatch_returns_401(client, automation_with_secret):
-    body = {"action": "opened", "pull_request": {"number": 1, "user": {"login": "a"}, "base": {"ref":"main"}, "head":{"ref":"x"}}}
+    body = {
+        "action": "opened",
+        "pull_request": {"number": 1, "user": {"login": "a"}, "base": {"ref": "main"}, "head": {"ref": "x"}},
+    }
     publish = AsyncMock()
     with patch("app.api.v1.webhooks.rabbitmq_manager.publish_event", publish):
         resp = await client.post(
@@ -180,7 +193,13 @@ async def test_github_hmac_mismatch_returns_401(client, automation_with_secret):
 async def test_github_hmac_valid_passes(client, automation_with_secret):
     body = {
         "action": "opened",
-        "pull_request": {"number": 1, "title": "x", "user": {"login": "a"}, "base": {"ref":"main"}, "head":{"ref":"x"}},
+        "pull_request": {
+            "number": 1,
+            "title": "x",
+            "user": {"login": "a"},
+            "base": {"ref": "main"},
+            "head": {"ref": "x"},
+        },
         "repository": {"full_name": "o/r"},
     }
     raw = json.dumps(body).encode("utf-8")

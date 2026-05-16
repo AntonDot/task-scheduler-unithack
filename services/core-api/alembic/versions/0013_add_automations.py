@@ -8,8 +8,9 @@ Create Date: 2026-05-16 17:00:00.000000
 from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
+
+from alembic import op
 
 revision: str = "0013_add_automations"
 down_revision: str | None = "0012_tag_name_text"

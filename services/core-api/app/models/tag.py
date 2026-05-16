@@ -8,7 +8,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 from app.models.task_tag import task_tags
 
-
 if TYPE_CHECKING:
     from app.models.project import Project
     from app.models.task import Task
@@ -23,7 +22,4 @@ class Tag(Base):
     color: Mapped[str] = mapped_column(String(50))
 
     project: Mapped[Project] = relationship(back_populates="tags")
-    tasks: Mapped[list[Task]] = relationship(
-        secondary=task_tags, back_populates="tags"
-    )
-
+    tasks: Mapped[list[Task]] = relationship(secondary=task_tags, back_populates="tags")

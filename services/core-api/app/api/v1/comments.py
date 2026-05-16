@@ -58,9 +58,7 @@ async def add_comment(
     db: AsyncSession = Depends(get_db),
 ):
     # Reload task with co_assignees so we can notify all of them
-    result = await db.execute(
-        select(Task).where(Task.id == task_id).options(selectinload(Task.co_assignees))
-    )
+    result = await db.execute(select(Task).where(Task.id == task_id).options(selectinload(Task.co_assignees)))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -93,9 +91,7 @@ async def add_comment(
         words = body.text.split()
         mention_names = {w.lstrip("@") for w in words if w.startswith("@")}
         if mention_names:
-            name_result = await db.execute(
-                select(User).where(User.full_name.in_(list(mention_names)))
-            )
+            name_result = await db.execute(select(User).where(User.full_name.in_(list(mention_names))))
             for u in name_result.scalars().all():
                 if u.id != current_user.id:
                     recipients.add(u.id)

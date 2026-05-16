@@ -4,6 +4,7 @@ import { TaskDrawer } from "@/components/kanban/TaskDrawer";
 import { ThemeProvider } from "@/theme/ThemeContext";
 import { createTheme } from "@/theme/theme";
 import type { Task, BoardColumn } from "@/types/domain";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Mock BlockEditor to avoid initialization issues in tests
 vi.mock("@/components/editor/BlockEditor", () => ({
@@ -25,6 +26,13 @@ vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
 }));
 
 const lightTheme = createTheme(false);
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+    },
+  },
+});
 
 const MOCK_COLUMNS: BoardColumn[] = [
   { id: 1, project_id: 1, name: "Backlog",     color: "#9CA3AF", order: 0 },
@@ -46,8 +54,8 @@ const MOCK_MEMBERS = [
   { id: 2, full_name: "Test User", email: "test@test.com", role: "ASSIGNEE" },
 ];
 
-function renderDrawer(taskOverrides: Partial<Task> = {}) {
-  const task = { ...BASE_TASK, ...taskOverrides } as Task;
+function renderDrawer(taskOverrides: Partial<Task> | null = {}) {
+  const task = taskOverrides === null ? null : ({ ...BASE_TASK, ...taskOverrides } as Task);
   const props = {
     task,
     columns: MOCK_COLUMNS,
@@ -59,9 +67,11 @@ function renderDrawer(taskOverrides: Partial<Task> = {}) {
     theme: lightTheme,
   };
   const result = render(
-    <ThemeProvider>
-      <TaskDrawer {...props} />
-    </ThemeProvider>,
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <TaskDrawer {...props} />
+      </ThemeProvider>
+    </QueryClientProvider>,
   );
   return { ...result, ...props };
 }
@@ -112,20 +122,7 @@ describe("TaskDrawer", () => {
   });
 
   it("does not render when task is null", () => {
-    const { container } = render(
-      <ThemeProvider>
-        <TaskDrawer
-          task={null}
-          columns={MOCK_COLUMNS}
-          open={true}
-          onClose={vi.fn()}
-          onUpdate={vi.fn()}
-          members={MOCK_MEMBERS}
-          accentColor="#6366F1"
-          theme={lightTheme}
-        />
-      </ThemeProvider>,
-    );
+    const { container } = renderDrawer(null);
     expect(container.firstChild).toBeNull();
   });
 });

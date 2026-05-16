@@ -8,6 +8,7 @@ Create Date: 2026-05-16 16:00:00.000000
 from collections.abc import Sequence
 
 import sqlalchemy as sa
+
 from alembic import op
 
 revision: str = "0016_fix_protected_columns"
@@ -16,8 +17,14 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 _PROTECTED_NAMES = (
-    "Backlog", "In Progress", "Review", "Done",
-    "Бэклог", "В работе", "Ревью", "Готово",
+    "Backlog",
+    "In Progress",
+    "Review",
+    "Done",
+    "Бэклог",
+    "В работе",
+    "Ревью",
+    "Готово",
     "To Do",
 )
 

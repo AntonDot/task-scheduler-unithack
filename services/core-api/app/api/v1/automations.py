@@ -105,8 +105,12 @@ async def get_automation_catalog(_user: User = Depends(get_current_user)):
                     "description": "Send a notification when a task priority is set to 'High'.",
                     "config": {
                         "trigger": {"type": "task_updated", "filters": {"field": "priority"}},
-                        "conditions": [{"type": "field_value_equals", "params": {"field": "priority", "value": "High"}}],
-                        "actions": [{"type": "send_notification", "params": {"message": "High priority task detected!"}}],
+                        "conditions": [
+                            {"type": "field_value_equals", "params": {"field": "priority", "value": "High"}}
+                        ],
+                        "actions": [
+                            {"type": "send_notification", "params": {"message": "High priority task detected!"}}
+                        ],
                     },
                 }
             ],
@@ -116,19 +120,29 @@ async def get_automation_catalog(_user: User = Depends(get_current_user)):
             "templates": [
                 {
                     "name": "Negative review → Urgent task",
-                    "description": "When a 1-2 star review arrives, create an urgent task in the backlog with the review text.",
+                    "description": (
+                        "When a 1-2 star review arrives, create an urgent task "
+                        "in the backlog with the review text."
+                    ),
                     "config": {
-                        "trigger": {"type": "review_received", "params": {"source_url": "http://mock-review-board:8002/api/reviews"}},
-                        "conditions": [{"type": "numeric_compare", "params": {"field": "review.rating", "op": "lte", "value": 2}}],
-                        "actions": [{
-                            "type": "create_task",
-                            "params": {
-                                "column_id": None,
-                                "title": "Жалоба {{review.rating}}★ от {{review.author}}",
-                                "description": "{{review.text}}\n\n— {{review.business}} ({{review.date}})",
-                                "urgency": "URGENT",
-                            },
-                        }],
+                        "trigger": {
+                            "type": "review_received",
+                            "params": {"source_url": "http://mock-review-board:8002/api/reviews"},
+                        },
+                        "conditions": [
+                            {"type": "numeric_compare", "params": {"field": "review.rating", "op": "lte", "value": 2}}
+                        ],
+                        "actions": [
+                            {
+                                "type": "create_task",
+                                "params": {
+                                    "column_id": None,
+                                    "title": "Жалоба {{review.rating}}★ от {{review.author}}",
+                                    "description": "{{review.text}}\n\n— {{review.business}} ({{review.date}})",
+                                    "urgency": "URGENT",
+                                },
+                            }
+                        ],
                     },
                 },
             ],
@@ -142,10 +156,12 @@ async def get_automation_catalog(_user: User = Depends(get_current_user)):
                     "config": {
                         "trigger": {"type": "github_event", "params": {}},
                         "conditions": [],
-                        "actions": [{
-                            "type": "send_notification",
-                            "params": {"message": "PR #{{pr.number}} '{{pr.title}}' merged by {{pr.merged_by}}"},
-                        }],
+                        "actions": [
+                            {
+                                "type": "send_notification",
+                                "params": {"message": "PR #{{pr.number}} '{{pr.title}}' merged by {{pr.merged_by}}"},
+                            }
+                        ],
                     },
                 },
                 {
@@ -154,15 +170,17 @@ async def get_automation_catalog(_user: User = Depends(get_current_user)):
                     "config": {
                         "trigger": {"type": "github_event", "params": {}},
                         "conditions": [],
-                        "actions": [{
-                            "type": "create_task",
-                            "params": {
-                                "column_id": None,
-                                "title": "Issue #{{issue.number}}: {{issue.title}}",
-                                "description": "{{issue.body}}\n\n{{issue.html_url}}",
-                                "urgency": "MEDIUM",
-                            },
-                        }],
+                        "actions": [
+                            {
+                                "type": "create_task",
+                                "params": {
+                                    "column_id": None,
+                                    "title": "Issue #{{issue.number}}: {{issue.title}}",
+                                    "description": "{{issue.body}}\n\n{{issue.html_url}}",
+                                    "urgency": "MEDIUM",
+                                },
+                            }
+                        ],
                     },
                 },
             ],
@@ -176,15 +194,17 @@ async def get_automation_catalog(_user: User = Depends(get_current_user)):
                     "config": {
                         "trigger": {"type": "webhook_generic", "params": {}},
                         "conditions": [],
-                        "actions": [{
-                            "type": "create_task",
-                            "params": {
-                                "column_id": None,
-                                "title": "{{title}}",
-                                "description": "{{description}}",
-                                "urgency": "MEDIUM",
-                            },
-                        }],
+                        "actions": [
+                            {
+                                "type": "create_task",
+                                "params": {
+                                    "column_id": None,
+                                    "title": "{{title}}",
+                                    "description": "{{description}}",
+                                    "urgency": "MEDIUM",
+                                },
+                            }
+                        ],
                     },
                 },
             ],

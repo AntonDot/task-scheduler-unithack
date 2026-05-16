@@ -31,9 +31,7 @@ class WebhookDelivery(Base):
         index=True,
     )
     external_event_id: Mapped[str] = mapped_column(String(255))
-    received_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now()
-    )
+    received_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
     automation: Mapped[Automation] = relationship()
 

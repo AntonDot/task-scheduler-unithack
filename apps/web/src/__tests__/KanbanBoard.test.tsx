@@ -4,6 +4,7 @@ import { KanbanBoard } from "@/components/kanban/KanbanBoard";
 import { ThemeProvider } from "@/theme/ThemeContext";
 import { createTheme } from "@/theme/theme";
 import type { Task, BoardColumn } from "@/types/domain";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 // Mock BlockEditor to avoid ESM issues in vitest
 vi.mock("@/components/editor/BlockEditor", () => ({
@@ -18,6 +19,13 @@ vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
 }));
 
 const lightTheme = createTheme(false);
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: false,
+    },
+  },
+});
 
 // Replicate 4 default columns with IDs 1-4
 const MOCK_COLUMNS: BoardColumn[] = [
@@ -81,9 +89,11 @@ function renderBoard(overrides: Partial<Parameters<typeof KanbanBoard>[0]> = {})
     theme: lightTheme,
   };
   return render(
-    <ThemeProvider>
-      <KanbanBoard {...defaultProps} {...overrides} />
-    </ThemeProvider>,
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <KanbanBoard {...defaultProps} {...overrides} />
+      </ThemeProvider>
+    </QueryClientProvider>,
   );
 }
 

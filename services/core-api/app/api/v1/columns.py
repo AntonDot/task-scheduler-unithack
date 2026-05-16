@@ -19,9 +19,7 @@ async def list_columns(
     db: AsyncSession = Depends(get_db),
 ):
     result = await db.execute(
-        select(BoardColumn)
-        .where(BoardColumn.project_id == project_id)
-        .order_by(BoardColumn.order, BoardColumn.id)
+        select(BoardColumn).where(BoardColumn.project_id == project_id).order_by(BoardColumn.order, BoardColumn.id)
     )
     return result.scalars().all()
 
@@ -37,7 +35,10 @@ async def create_column(
     order = body.order
     if order is None:
         result = await db.execute(
-            select(BoardColumn.order).where(BoardColumn.project_id == project_id).order_by(BoardColumn.order.desc()).limit(1)
+            select(BoardColumn.order)
+            .where(BoardColumn.project_id == project_id)
+            .order_by(BoardColumn.order.desc())
+            .limit(1)
         )
         max_order = result.scalar_one_or_none()
         order = (max_order + 1) if max_order is not None else 0
@@ -70,7 +71,9 @@ async def reorder_columns(
     # Validate all ids belong to project
     for col_id in body.column_ids:
         if col_id not in columns:
-            raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"Column {col_id} not found in this project")
+            raise HTTPException(
+                status_code=http_status.HTTP_400_BAD_REQUEST, detail=f"Column {col_id} not found in this project"
+            )
 
     # Update order
     for idx, col_id in enumerate(body.column_ids):
@@ -138,7 +141,7 @@ async def delete_column(
     # Move all non-deleted tasks from target to fallback
     await db.execute(
         Task.__table__.update()
-        .where(Task.column_id == column_id, Task.is_deleted == False)
+        .where(Task.column_id == column_id, not Task.is_deleted)
         .values(column_id=fallback_col.id)
     )
 

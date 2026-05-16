@@ -1,14 +1,46 @@
 import asyncio
 import json
 import logging
+import re
 import uuid
 from typing import Any
 
 import aio_pika
+import httpx
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
 
 from pydantic_settings import BaseSettings
+
+
+def _render(template: str, context: dict) -> str:
+    """Substitute {{a.b.c}} from nested dict context."""
+    if not template:
+        return ""
+    def repl(m):
+        path = m.group(1).strip().split(".")
+        v = context
+        for p in path:
+            if isinstance(v, dict):
+                v = v.get(p)
+            else:
+                v = None
+                break
+        return str(v) if v is not None else ""
+    return re.sub(r"\{\{\s*([^}]+?)\s*\}\}", repl, template)
+
+
+def _get_field(payload: dict, dotted: str):
+    """Walk dotted path through nested dict, return None if missing."""
+    if not dotted:
+        return None
+    v = payload
+    for p in dotted.split("."):
+        if isinstance(v, dict):
+            v = v.get(p)
+        else:
+            return None
+    return v
 
 class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@postgres:5432/taskscheduler"
@@ -31,36 +63,33 @@ async def evaluate_condition(condition: dict, context: dict) -> bool:
     c_type = condition.get("type")
     params = condition.get("params", {})
     
+    event_type = context.get("event_type", "")
+
     if c_type == "field_value_equals":
         field = params.get("field")
         expected = params.get("value")
         payload = context.get("payload", {})
-        
-        # Check all possible payload locations first
-        if field in payload:
-            actual = payload.get(field)
-        elif "changes" in payload and field in payload["changes"]:
-            actual = payload["changes"].get(field)
-        else:
-            # Not in payload, must fetch from DB for accurate evaluation
-            task_id = payload.get("id") or payload.get("task_id")
-            if task_id:
-                async with SessionLocal() as db:
-                    from sqlalchemy import text
-                    # Note: field name is from config, usually title/urgency/etc.
-                    res = await db.execute(text(f"SELECT {field} FROM tasks WHERE id = :tid"), {"tid": task_id})
-                    actual = res.scalar()
-            else:
-                actual = None
-        
+        task_id = payload.get("id") or payload.get("task_id")
+
+        actual = _get_field(payload, field)
+        if actual is None and "changes" in payload:
+            actual = _get_field(payload["changes"], field)
+        if actual is None and task_id and event_type.startswith(("task_", "column_")):
+            async with SessionLocal() as db:
+                from sqlalchemy import text
+                # Note: field name is from config, usually title/urgency/etc.
+                res = await db.execute(text(f"SELECT {field} FROM tasks WHERE id = :tid"), {"tid": task_id})
+                actual = res.scalar()
+
         res_bool = str(actual) == str(expected)
         logger.info("Evaluating field_value_equals: field=%s, actual=%s, expected=%s -> %s", field, actual, expected, res_bool)
         return res_bool
-    
+
     if c_type == "column_equals":
         expected = params.get("column_id")
         payload = context.get("payload", {})
-        
+        task_id = payload.get("id") or payload.get("task_id")
+
         # Check all possible payload locations
         if "new_column_id" in payload:
             actual = payload.get("new_column_id")
@@ -68,20 +97,54 @@ async def evaluate_condition(condition: dict, context: dict) -> bool:
             actual = payload.get("column_id")
         elif "changes" in payload and "column_id" in payload["changes"]:
             actual = payload["changes"].get("column_id")
+        elif task_id and event_type.startswith(("task_", "column_")):
+            async with SessionLocal() as db:
+                from sqlalchemy import text
+                res = await db.execute(text("SELECT column_id FROM tasks WHERE id = :tid"), {"tid": task_id})
+                actual = res.scalar()
         else:
-            # Not in payload, must fetch from DB
-            task_id = payload.get("id") or payload.get("task_id")
-            if task_id:
-                async with SessionLocal() as db:
-                    from sqlalchemy import text
-                    res = await db.execute(text("SELECT column_id FROM tasks WHERE id = :tid"), {"tid": task_id})
-                    actual = res.scalar()
-            else:
-                actual = None
-        
+            actual = None
+
         res_bool = str(actual) == str(expected)
         logger.info("Evaluating column_equals: actual=%s, expected=%s -> %s", actual, expected, res_bool)
         return res_bool
+
+    if c_type == "numeric_compare":
+        field = params.get("field")
+        op = params.get("op", "eq")
+        expected = params.get("value")
+        payload = context.get("payload", {})
+        actual = _get_field(payload, field)
+        if actual is None:
+            return False
+        try:
+            a = float(actual)
+            e = float(expected)
+        except (TypeError, ValueError):
+            return False
+        if op == "gte": return a >= e
+        if op == "lte": return a <= e
+        if op == "gt": return a > e
+        if op == "lt": return a < e
+        if op == "eq": return a == e
+        return False
+
+    if c_type == "contains":
+        field = params.get("field")
+        needle = str(params.get("value", "")).lower()
+        payload = context.get("payload", {})
+        haystack = str(_get_field(payload, field) or "").lower()
+        return needle in haystack
+
+    if c_type == "regex_match":
+        field = params.get("field")
+        pattern = params.get("pattern", "")
+        payload = context.get("payload", {})
+        target = str(_get_field(payload, field) or "")
+        try:
+            return bool(re.search(pattern, target))
+        except re.error:
+            return False
 
     if c_type == "and":
         subs = params.get("conditions", [])
@@ -103,14 +166,50 @@ async def execute_action(action: dict, context: dict):
     """Execute a single action (e.g., update task)."""
     a_type = action.get("type")
     params = action.get("params", {})
-    task_id = context.get("payload", {}).get("id")
-    
-    if not task_id:
+    payload = context.get("payload", {})
+    task_id = payload.get("id") or payload.get("task_id")
+
+    if a_type == "create_task":
+        project_id = payload.get("project_id")
+        if not project_id:
+            logger.warning("create_task requires project_id in payload")
+            return
+        title = _render(params.get("title", "New task"), payload)
+        description = _render(params.get("description", ""), payload)
+        urgency = params.get("urgency", "MEDIUM")
+        column_id = params.get("column_id")  # may be None — backend will resolve
+        assignee_id = params.get("assignee_id")
+
+        body = {
+            "project_id": project_id,
+            "title": title,
+            "description": description,
+            "urgency": urgency,
+        }
+        if column_id is not None:
+            body["column_id"] = column_id
+        if assignee_id is not None:
+            body["assignee_id"] = assignee_id
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                resp = await client.post(
+                    f"{settings.core_api_url}/api/v1/tasks/internal/from-automation",
+                    json=body,
+                    headers={"X-Service-Token": settings.service_token},
+                )
+                resp.raise_for_status()
+                logger.info("Automation create_task succeeded: project=%s title=%r", project_id, title[:50])
+        except Exception as e:
+            logger.error("Automation create_task failed: %s", e)
+            raise
         return
 
-    import httpx
     async with SessionLocal() as db:
         if a_type == "change_status" or a_type == "change_column":
+            if not task_id:
+                logger.warning("change_column requires task_id in payload")
+                return
             new_col = params.get("column_id")
             if new_col:
                 from sqlalchemy import text
@@ -124,8 +223,11 @@ async def execute_action(action: dict, context: dict):
                         headers={"X-Service-Token": settings.service_token},
                         timeout=5.0
                     )
-        
+
         elif a_type == "assign_user":
+            if not task_id:
+                logger.warning("assign_user requires task_id in payload")
+                return
             user_id = params.get("user_id")
             from sqlalchemy import text
             await db.execute(text("UPDATE tasks SET assignee_id = :uid WHERE id = :tid"), {"uid": user_id, "tid": task_id})
@@ -138,28 +240,33 @@ async def execute_action(action: dict, context: dict):
                     headers={"X-Service-Token": settings.service_token},
                     timeout=5.0
                 )
-        
+
         elif a_type == "send_notification":
-            message = params.get("message", "Automation trigger")
+            message = _render(params.get("message", "Automation trigger"), payload)
             user_id = params.get("user_id")
-            if not user_id:
+            project_id = payload.get("project_id")
+            if not user_id and task_id:
                 from sqlalchemy import text
                 res = await db.execute(text("SELECT assignee_id FROM tasks WHERE id = :tid"), {"tid": task_id})
                 user_id = res.scalar()
-            
-            logger.info("Automation processing notification for task %s (targeted user: %s)", task_id, user_id)
+
+            logger.info("Automation send_notification task=%s project=%s user=%s", task_id, project_id, user_id)
             try:
                 async with httpx.AsyncClient() as client:
-                    # 1. Trigger Audit Log and WS for UI Bell - ALWAYS DO THIS
-                    # This ensures co-assignees and the general task history are updated
+                    # 1. Audit Log + WS bell — works with or without task_id
+                    event_body: dict = {"action": "notification", "message": message}
+                    if task_id:
+                        event_body["task_id"] = task_id
+                    if project_id:
+                        event_body["project_id"] = int(project_id)
                     await client.post(
                         f"{settings.core_api_url}/api/v1/tasks/internal/automation-event",
-                        json={"task_id": task_id, "action": "notification", "message": message},
+                        json=event_body,
                         headers={"X-Service-Token": settings.service_token},
                         timeout=5.0
                     )
 
-                    # 2. Trigger Push Notification only if we have a specific recipient
+                    # 2. Push notification (only if VAPID is configured)
                     if user_id:
                         await client.post(
                             f"{settings.core_api_url}/api/v1/push/internal/notify",
@@ -167,7 +274,7 @@ async def execute_action(action: dict, context: dict):
                                 "user_id": user_id,
                                 "title": "Automation",
                                 "body": message,
-                                "url": f"/task/{task_id}"
+                                "url": f"/task/{task_id}" if task_id else "/"
                             },
                             headers={"X-Service-Token": settings.service_token},
                             timeout=5.0

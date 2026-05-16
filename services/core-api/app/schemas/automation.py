@@ -28,6 +28,7 @@ class AutomationRead(AutomationBase):
     project_id: int
     creator_id: int | None
     stats_runs: int
+    webhook_token: str | None = None
     created_at: datetime
     updated_at: datetime
 

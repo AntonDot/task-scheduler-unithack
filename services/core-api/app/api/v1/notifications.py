@@ -42,7 +42,7 @@ class NotificationItem(BaseModel):
     type: str  # matches settings keys: task_assigned / comment / status_change / mention
     title: str
     body: str
-    task_id: int
+    task_id: int | None = None
     task_title: str
     created_at: datetime
     actor_name: str
@@ -200,6 +200,35 @@ async def get_notifications(
                 task_id=t.id,
                 task_title=t.title,
                 created_at=t.updated_at,
+                actor_name=actor,
+            )
+        )
+
+    # --- Taskless automation notifications (webhook/review events, no specific task) ---
+    taskless_result = await db.execute(
+        select(AuditLog)
+        .where(
+            AuditLog.task_id.is_(None),
+            AuditLog.project_id.in_(project_ids),
+            AuditLog.action == "automation_triggered",
+            AuditLog.created_at >= since,
+        )
+        .options(joinedload(AuditLog.user))
+        .order_by(AuditLog.created_at.desc())
+        .limit(10)
+    )
+    taskless_logs = list(taskless_result.scalars().unique().all())
+    for log in taskless_logs:
+        actor = log.user.full_name if log.user else "Система"
+        notifications.append(
+            NotificationItem(
+                id=f"audit-{log.id}",
+                type="task_assigned",
+                title="Автоматизация сработала",
+                body=log.new_value or "Automation triggered",
+                task_id=None,
+                task_title="—",
+                created_at=log.created_at,
                 actor_name=actor,
             )
         )

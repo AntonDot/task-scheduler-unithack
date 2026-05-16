@@ -12,6 +12,7 @@ export interface Automation {
     actions: Array<{ type: string; params: Record<string, any> }>;
   };
   stats_runs: number;
+  webhook_token?: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -72,6 +73,10 @@ export function getAutomationHistory(id: string): Promise<AutomationLog[]> {
 
 export function getAutomationCatalog(): Promise<AutomationTemplate[]> {
   return api.get<AutomationTemplate[]>('/automations/catalog');
+}
+
+export function rotateWebhookToken(id: string): Promise<Automation> {
+  return api.post<Automation>(`/automations/${id}/rotate-token`);
 }
 
 // Keep legacy for now if needed by other components, but redirect to new logic if possible

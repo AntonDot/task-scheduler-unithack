@@ -221,7 +221,10 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
                       onClick={() => {
                         setBellOpen(false);
                         setReadIds(prev => new Set([...prev, n.id]));
-                        onOpenTask?.(n.task_id, section);
+                        // Taskless notifications (webhook/automation events) have no task to open
+                        if (n.task_id != null) {
+                          onOpenTask?.(n.task_id, section);
+                        }
                       }}
                       style={{
                         padding: '11px 16px', borderBottom: `1px solid ${th.border}`,

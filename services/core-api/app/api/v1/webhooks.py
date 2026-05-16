@@ -143,18 +143,28 @@ async def receive_webhook(
         gh_event = request.headers.get("x-github-event", "")
         action = body_json.get("action", "")
         canonical = _map_github_event(gh_event, action, body_json)
+        logger.info(
+            "GitHub webhook: delivery=%s x-github-event=%r action=%r → canonical=%r",
+            request.headers.get("x-github-delivery", "?"), gh_event, action, canonical,
+        )
         if not canonical:
             # Ignored but ack — GitHub retries on non-2xx
+            logger.info("GitHub event ignored (no canonical mapping): event=%r action=%r", gh_event, action)
             return JSONResponse(status_code=200, content={"status": "ignored", "event": gh_event, "action": action})
         if canonical == "github_ping":
+            logger.info("GitHub ping received for automation %s — pong", automation.id)
             return JSONResponse(status_code=200, content={"status": "pong"})
 
-        event_type = canonical
+        # Always use "github_event" as the RabbitMQ event_type so that
+        # trigger.type == event_type check in the worker matches the stored config.
+        # The specific canonical type goes into payload as github_event_type.
+        event_type = "github_event"
         external_event_id = (
             request.headers.get("x-github-delivery")
             or hashlib.sha256(raw_body).hexdigest()
         )
         normalized = _normalize_github(canonical, body_json)
+        normalized["github_event_type"] = canonical  # e.g. "github_pr_merged"
 
     elif trigger_type == "webhook_generic":
         # Always use "webhook_generic" as event_type so the worker's

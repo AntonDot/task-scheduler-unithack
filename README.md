@@ -124,10 +124,25 @@ Payload, доступный в шаблонах:
 
 GitHub присылает PR/Issue/Push. После нормализации доступно:
 
+Тип конкретного события доступен как `{{github_event_type}}`:
+
+| Значение | Когда |
+|----------|-------|
+| `github_pr_merged` | PR закрыт и смержен |
+| `github_pr_opened` | PR открыт |
+| `github_pr_closed` | PR закрыт без мержа |
+| `github_issue_opened` | Issue открыт |
+| `github_issue_closed` | Issue закрыт |
+| `github_push` | Пуш в ветку |
+
+Пример condition для фильтрации конкретного события:
+- Type: `field_value_equals` / Field: `github_event_type` / Value: `github_pr_merged`
+
 **PR-события** (`github_pr_merged`, `github_pr_opened`, `github_pr_closed`):
 
 | Переменная | Описание |
 |------------|----------|
+| `{{github_event_type}}` | Тип события (`github_pr_merged` и т.д.) |
 | `{{pr.number}}` | Номер PR |
 | `{{pr.title}}` | Название |
 | `{{pr.author}}` | Автор (GitHub login) |

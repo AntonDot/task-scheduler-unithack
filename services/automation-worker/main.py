@@ -288,8 +288,11 @@ async def process_event(event: dict):
     event_type = event.get("type")
     payload = event.get("payload", {})
     project_id = payload.get("project_id")
-    
+
+    logger.info("Processing event: type=%r project_id=%s", event_type, project_id)
+
     if not project_id:
+        logger.warning("Event has no project_id, skipping: %r", event)
         return
 
     context = {"event_type": event_type, "payload": payload}
@@ -302,23 +305,30 @@ async def process_event(event: dict):
             {"pid": project_id}
         )
         automations = result.fetchall()
+        logger.info("Found %d active automations for project %s", len(automations), project_id)
 
         for auto_id, config in automations:
             # Simple trigger check
             trigger = config.get("trigger", {})
-            if trigger.get("type") != event_type:
+            trigger_type = trigger.get("type")
+            if trigger_type != event_type:
+                logger.debug("Automation %s skipped: trigger=%r != event=%r", auto_id, trigger_type, event_type)
                 continue
-            
+
+            logger.info("Automation %s matches event %r, evaluating conditions...", auto_id, event_type)
+
             # Evaluate conditions
             conditions = config.get("conditions", [])
             all_pass = True
-            for cond in conditions:
-                if not await evaluate_condition(cond, context):
+            for i, cond in enumerate(conditions):
+                result_cond = await evaluate_condition(cond, context)
+                logger.info("  Condition[%d] %r → %s", i, cond.get("type"), result_cond)
+                if not result_cond:
                     all_pass = False
                     break
-            
+
             if all_pass:
-                logger.info("Triggering automation %s", auto_id)
+                logger.info("Triggering automation %s (all %d conditions passed)", auto_id, len(conditions))
                 actions = config.get("actions", [])
                 for action in actions:
                     await execute_action(action, context)

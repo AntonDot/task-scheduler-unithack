@@ -1,5 +1,7 @@
 from pydantic_settings import BaseSettings
 
+# Application settings loaded from environment variables with CORE_ prefix
+
 
 class Settings(BaseSettings):
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/taskscheduler"

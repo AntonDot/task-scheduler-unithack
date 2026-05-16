@@ -138,15 +138,6 @@ async def internal_automation_event(
     if not task:
         return
 
-    # Broadcast real-time update
-    from app.schemas import TaskRead
-    data = TaskRead.model_validate(task).model_dump(mode="json")
-    ws_event = "task_updated"
-    if body.action == "column_changed":
-        ws_event = "task_column_changed"
-    
-    await ws_manager.broadcast(task.project_id, ws_event, data)
-
     # Log to Audit Log for notification bell
     from app.models import AuditLog, User
 
@@ -166,3 +157,13 @@ async def internal_automation_event(
         user_id=system_user_id,
     ))
     await db.commit()
+
+    # Broadcast real-time update AFTER commit to avoid race conditions
+    from app.schemas import TaskRead
+    data = TaskRead.model_validate(task).model_dump(mode="json")
+    ws_event = "task_updated"
+    if body.action == "column_changed":
+        ws_event = "task_column_changed"
+
+    await ws_manager.broadcast(task.project_id, ws_event, data)
+

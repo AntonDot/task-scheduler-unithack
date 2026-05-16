@@ -8,6 +8,7 @@ import { setAvatarUrl } from '@/components/kanban/Avatar';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/theme/ThemeContext';
 import { useToast } from '@/hooks/useToast';
+import { useTasksRealtime } from '@/hooks/useTasksRealtime';
 import { Sidebar, type AppView } from '@/components/layout/Sidebar';
 import { Header } from '@/components/layout/Header';
 import { KanbanBoard } from '@/components/kanban/KanbanBoard';
@@ -43,7 +44,7 @@ function DesktopKanbanPage() {
   const { theme, isDark, toggleTheme, accentColor, setAccentColor } = useTheme();
   const { user, clearAuth, projectRoles } = useAuthStore();
   const queryClient = useQueryClient();
-  const { toasts, removeToast } = useToast();
+  const { toasts, addToast, removeToast } = useToast();
 
   const [view,             setView]            = useState<AppView>('kanban');
   const [activeProjectId,  setActiveProjectId]  = useState<number | null>(null);
@@ -59,6 +60,12 @@ function DesktopKanbanPage() {
 
   const accent = accentColor;
 
+  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects });
+  const resolvedProjectId = activeProjectId ?? projects[0]?.id ?? null;
+
+  // Real-time updates via WebSocket
+  useTasksRealtime(resolvedProjectId, addToast);
+
   // Periodic sync pulse
   useEffect(() => {
     const id = setInterval(() => {
@@ -73,10 +80,6 @@ function DesktopKanbanPage() {
     document.body.style.background = theme.bg;
     document.body.style.color = theme.text;
   }, [theme]);
-
-  const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects });
-
-  const resolvedProjectId = activeProjectId ?? projects[0]?.id ?? null;
   const tasksKey = ['tasks', resolvedProjectId] as const;
 
   const { data: tasks = [] } = useQuery({

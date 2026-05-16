@@ -15,6 +15,7 @@ import { updateProfile } from '@/api/auth';
 import { Avatar, getAvatarUrl, setAvatarUrl } from '@/components/kanban/Avatar';
 import { getPushStatus, getPushDiagnostics, enablePushNotifications, type PushStatus } from '@/api/push';
 import { fetchProjectTags, createTag, deleteTag } from '@/api/tags';
+import { useTasksRealtime } from '@/hooks/useTasksRealtime';
 import type { Task, BoardColumn, Tag } from '@/types/domain';
 import {
   getUrgencyMap, formatDeadline, formatRelativeCreationDate, isOverdue, apiUrgencyToDesign
@@ -1953,6 +1954,9 @@ export function MobileApp() {
     queryFn: fetchNotifications,
     refetchInterval: 30_000,
   });
+
+  // Real-time updates via WebSocket
+  useTasksRealtime(resolvedProjectId);
 
   // Persist read IDs to localStorage
   useEffect(() => {

@@ -6,13 +6,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.domain import ProjectRole
-from app.models import Task, UserProject
+
+from app.models import Tag, Task, UserProject
 from app.models.user import User
 from app.schemas import TaskCreate, TaskUpdate
 from app.services.audit_service import log_action
 from app.services.push_service import send_push_to_user
 
-_TASK_OPTS = [selectinload(Task.project), selectinload(Task.assignee), selectinload(Task.co_assignees)]
+_TASK_OPTS = [selectinload(Task.project), selectinload(Task.assignee), selectinload(Task.co_assignees), selectinload(Task.tags)]
 
 
 async def list_tasks(db: AsyncSession, project_id: int, assignee_id: int | None = None) -> list[Task]:
@@ -38,6 +39,32 @@ async def _set_co_assignees(db: AsyncSession, task: Task, ids: list[int]) -> Non
     task.co_assignees = list(result.scalars().all())
 
 
+async def _reload_task(db: AsyncSession, task_id: int) -> Task:
+    result = await db.execute(select(Task).where(Task.id == task_id).options(*_TASK_OPTS))
+    task = result.scalar_one_or_none()
+    if task is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    return task
+
+
+async def _set_tags(db: AsyncSession, task: Task, tag_ids: list[int] | None) -> None:
+
+    if not tag_ids:
+        task.tags = []
+        return
+    unique_ids = list(dict.fromkeys(tag_ids))
+    result = await db.execute(
+        select(Tag).where(Tag.id.in_(unique_ids), Tag.project_id == task.project_id)
+    )
+    tags = list(result.scalars().all())
+    if len(tags) != len(unique_ids):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="One or more tags are invalid for this project",
+        )
+    task.tags = tags
+
+
 async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: TaskCreate) -> Task:
     column_id = data.column_id
     if column_id is None:
@@ -57,12 +84,32 @@ async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: 
         urgency=data.urgency,
         deadline=data.deadline,
     )
+    
+    # Fetch and set relationships BEFORE adding to session to avoid lazy load triggers
+    if data.co_assignee_ids:
+        result = await db.execute(select(User).where(User.id.in_(data.co_assignee_ids)))
+        task.co_assignees = list(result.scalars().all())
+    
+    if data.tag_ids:
+        unique_ids = list(dict.fromkeys(data.tag_ids))
+        result = await db.execute(
+            select(Tag).where(Tag.id.in_(unique_ids), Tag.project_id == project_id)
+        )
+        tags = list(result.scalars().all())
+        if len(tags) != len(unique_ids):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="One or more tags are invalid for this project",
+            )
+        task.tags = tags
+    else:
+        task.tags = []
+
     db.add(task)
     await db.flush()
-    if data.co_assignee_ids:
-        await _set_co_assignees(db, task, data.co_assignee_ids)
-    await db.refresh(task)
-    await db.refresh(task, attribute_names=["project", "assignee", "co_assignees"])
+
+    task = await _reload_task(db, task.id)
+
     await log_action(db, task.id, creator_id, "created")
     # Notify new assignee
     if data.assignee_id and data.assignee_id != creator_id:
@@ -83,7 +130,9 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
     is_co = user_project.user_id in co_ids_in_task
     is_assignee = task.assignee_id == user_project.user_id or is_co
 
-    if user_project.role == ProjectRole.ASSIGNEE and not is_assignee:
+    is_creator = task.creator_id == user_project.user_id
+
+    if user_project.role == ProjectRole.ASSIGNEE and not is_assignee and not is_creator:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not your task")
 
     update_data = data.model_dump(exclude_unset=True)
@@ -94,7 +143,12 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
             if restricted in update_data:
                 raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Cannot update {restricted}")
 
+    if "tag_ids" in update_data:
+        if user_project.role != ProjectRole.OWNER and task.creator_id != user_project.user_id and not is_assignee:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only owner, creator or assignee can manage tags")
+
     co_assignee_ids = update_data.pop("co_assignee_ids", None)
+    tag_ids = update_data.pop("tag_ids", None)
 
     old_values = {field: getattr(task, field) for field in update_data}
     
@@ -107,10 +161,12 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
 
     if co_assignee_ids is not None:
         await _set_co_assignees(db, task, co_assignee_ids)
+        
+    if tag_ids is not None:
+        await _set_tags(db, task, tag_ids)
 
     await db.flush()
-    await db.refresh(task)
-    await db.refresh(task, attribute_names=["project", "assignee", "co_assignees"])
+    task = await _reload_task(db, task.id)
     new_values = {field: getattr(task, field) for field in update_data}
     
     if assignee_changed or co_assignee_changed:
@@ -150,7 +206,7 @@ async def change_column(db: AsyncSession, task_id: int, new_column_id: int, user
     result = await db.execute(
         select(Task)
         .where(Task.id == task_id)
-        .options(selectinload(Task.project), selectinload(Task.assignee), selectinload(Task.co_assignees))
+        .options(*_TASK_OPTS)
     )
     task = result.scalar_one_or_none()
     if task is None:
@@ -170,8 +226,7 @@ async def change_column(db: AsyncSession, task_id: int, new_column_id: int, user
     old_column_id = task.column_id
     task.column_id = new_column_id
     await db.flush()
-    await db.refresh(task)
-    await db.refresh(task, attribute_names=["project", "assignee", "co_assignees"])
+    task = await _reload_task(db, task.id)
     await log_action(
         db,
         task.id,
@@ -183,6 +238,8 @@ async def change_column(db: AsyncSession, task_id: int, new_column_id: int, user
     return task
 
 
+
+# Legacy functions removed due to missing TaskStatus and status field in Task model
 
 
 

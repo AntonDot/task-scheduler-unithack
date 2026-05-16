@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 
 from app.domain import Urgency
 from app.schemas.project import ProjectRead
+from app.schemas.tag import TagRead
 from app.schemas.user import UserRead
 
 
@@ -15,6 +16,7 @@ class TaskCreate(BaseModel):
     urgency: Urgency = Urgency.MEDIUM
     deadline: datetime | None = None
     column_id: int | None = None
+    tag_ids: list[int] = Field(default_factory=list)
 
 
 class TaskUpdate(BaseModel):
@@ -24,6 +26,7 @@ class TaskUpdate(BaseModel):
     co_assignee_ids: list[int] | None = None
     urgency: Urgency | None = None
     deadline: datetime | None = None
+    tag_ids: list[int] | None = None
 
 
 class ColumnUpdate(BaseModel):
@@ -45,5 +48,6 @@ class TaskRead(BaseModel):
     project: ProjectRead | None = None
     assignee: UserRead | None = None
     co_assignees: list[UserRead] = Field(default_factory=list)
+    tags: list[TagRead] = Field(default_factory=list)
 
     model_config = {"from_attributes": True}

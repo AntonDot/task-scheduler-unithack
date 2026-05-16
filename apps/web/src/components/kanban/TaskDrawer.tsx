@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { Task } from '@/types/domain';
 import type { Theme } from '@/theme/theme';
 import { getUrgencyMap, apiUrgencyToDesign } from '@/theme/theme';
@@ -15,6 +16,10 @@ import type { AuditLog } from '@/api/audit';
 import type { BoardColumn } from '@/types/domain';
 import { useAuthStore } from '@/store/authStore';
 import { fetchAttachments, uploadAttachment, deleteAttachment, getDownloadUrl, type Attachment } from '@/api/attachments';
+import { fetchProjectTags, createTag, deleteTag } from '@/api/tags';
+import type { Tag } from '@/types/domain';
+import { formatRelativeCreationDate } from '@/theme/theme';
+import { TagsSection } from '@/components/tags/TagsSection';
 
 interface TaskDrawerProps {
   task: Task | null;
@@ -36,6 +41,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, columns, ac
   const acc = accentColor;
   const th  = theme;
   const { user, projectRoles } = useAuthStore();
+  const queryClient = useQueryClient();
 
   // Scroll refs for notification deep-linking
   const descriptionRef   = useRef<HTMLDivElement>(null);
@@ -63,6 +69,8 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, columns, ac
   const [fileDragOver, setFileDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const [projectTags, setProjectTags] = useState<Tag[]>([]);
+
   // Mention state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
   const [mentionIdx, setMentionIdx]     = useState(0);
@@ -79,7 +87,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, columns, ac
   }, [task?.id]);
 
   useEffect(() => {
-    if (!task || !open) return;
+    if (!open || !task) return;
     const id = task.id;
     openTaskIdRef.current = id;
     fetchTask(id).then(t   => { if (openTaskIdRef.current === id) setLocalTask(t); }).catch(() => {});
@@ -87,6 +95,12 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, columns, ac
     fetchAuditLogs(id).then(ls => { if (openTaskIdRef.current === id) setAuditLogs(ls); }).catch(() => {});
     fetchAttachments(id).then(as => { if (openTaskIdRef.current === id) setAttachments(as); }).catch(() => {});
   }, [task?.id, open]);
+
+  useEffect(() => {
+    if (task?.project_id && open) {
+      fetchProjectTags(task.project_id).then(setProjectTags).catch(() => {});
+    }
+  }, [task?.project_id, open]);
 
   if (!task) return null;
   const display = localTask || task;
@@ -97,8 +111,10 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, columns, ac
 
   const role = display.project_id ? projectRoles[display.project_id] : undefined;
   const isLead = role === 'OWNER';
+  const isCreator = display.creator_id === user?.id;
   const isAssignee = display.assignee_id === user?.id || display.co_assignees?.some(c => c.id === user?.id);
   const canEdit = isLead || isAssignee;
+  const canEditTags = isLead || isCreator || isAssignee;
   const readonly = !canEdit;
 
   function patch(changes: Partial<Task>) {
@@ -225,6 +241,65 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, columns, ac
       setLocalTask(updated);
       onUpdate(updated);
     });
+  }
+
+  function handleTagClick(tag: Tag) {
+    if (!canEditTags) return;
+    const currentTags = display.tags ?? [];
+    const hasTag = currentTags.some(t => t.id === tag.id);
+    let newTags: Tag[];
+    if (hasTag) {
+      newTags = currentTags.filter(t => t.id !== tag.id);
+    } else {
+      newTags = [...currentTags, tag];
+    }
+
+    // Optimistic update
+    const updatedWithTags = { ...display, tags: newTags };
+    setLocalTask(updatedWithTags);
+    onUpdate(updatedWithTags);
+
+    updateTask(display.id, { tag_ids: newTags.map(t => t.id) }).then(updated => {
+      setLocalTask(updated);
+      onUpdate(updated);
+    });
+  }
+
+  async function handleDeleteTag(tagId: number) {
+    if (!isLead) return;
+    try {
+      await deleteTag(tagId);
+      setProjectTags(prev => prev.filter(t => t.id !== tagId));
+
+      // Update current task
+      if ((display.tags ?? []).some(t => t.id === tagId)) {
+        const newTags = (display.tags ?? []).filter(t => t.id !== tagId);
+        const updated = { ...display, tags: newTags };
+        setLocalTask(updated);
+        onUpdate(updated);
+      }
+
+      // Update all tasks in query cache
+      if (display.project_id) {
+        queryClient.setQueryData<Task[]>(['tasks', display.project_id], old =>
+          (old ?? []).map(t => ({
+            ...t,
+            tags: (t.tags ?? []).filter(tag => tag.id !== tagId),
+          }))
+        );
+      }
+    } catch {}
+  }
+
+  async function handleCreateTag(name: string, color: string): Promise<Tag | null> {
+    if (!isLead || !display.project_id) return null;
+    try {
+      const tag = await createTag(display.project_id, { name, color });
+      setProjectTags(prev => [...prev, tag]);
+      return tag;
+    } catch {
+      return null;
+    }
   }
 
   async function handleSendComment() {
@@ -399,6 +474,13 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, columns, ac
                 readonly={readonly}
               />
             </div>
+            {/* Created At */}
+            <div style={{ ...metaRowStyle, borderBottom: `1px solid ${th.border}` }}>
+              <span style={metaLabelStyle}>Created</span>
+              <span style={{ fontSize: 12, color: th.textMuted }}>
+                {formatRelativeCreationDate(display.created_at)}
+              </span>
+            </div>
             {/* Project */}
             <div style={metaRowStyle}>
               <span style={metaLabelStyle}>Project</span>
@@ -409,6 +491,18 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, columns, ac
               )}
             </div>
           </div>
+
+          <TagsSection
+            projectTags={projectTags}
+            selectedTags={display.tags ?? []}
+            isLead={isLead}
+            canEditTags={!!canEditTags}
+            onToggleTag={handleTagClick}
+            onCreateTag={handleCreateTag}
+            onDeleteTag={handleDeleteTag}
+            theme={th}
+            accent={acc}
+          />
 
           {/* Description */}
           <div ref={descriptionRef} style={{ marginBottom: 24 }}>

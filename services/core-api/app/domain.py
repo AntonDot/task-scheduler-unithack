@@ -11,3 +11,9 @@ class Urgency(StrEnum):
     MEDIUM = "MEDIUM"
     HIGH = "HIGH"
     URGENT = "URGENT"
+class TaskStatus(StrEnum):
+    AI_DRAFT = "AI_DRAFT"
+    TODO = "TODO"
+    IN_PROGRESS = "IN_PROGRESS"
+    REVIEW = "REVIEW"
+    DONE = "DONE"

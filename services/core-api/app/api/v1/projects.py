@@ -11,8 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.dependencies import get_current_user, require_project_access, verify_service_token
 from app.domain import ProjectRole
-from app.models import Project, Task, User, UserProject, BoardColumn
-from app.schemas import ProjectMemberRead, ProjectWithRole, TaskCreate, TaskRead, UserRead
+from app.models import Project, Tag, Task, User, UserProject, BoardColumn
+from app.schemas import ProjectMemberRead, ProjectWithRole, TagCreate, TagRead, TaskCreate, TaskRead, UserRead
 from app.schemas.analytics import AssigneeLoad, ProjectAnalytics
 from app.services import task_service
 from app.websocket_manager import ws_manager
@@ -237,3 +237,59 @@ async def export_project_tasks(
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=project_{project_id}_tasks.csv"},
     )
+
+
+@router.get("/projects/{project_id}/tags", response_model=list[TagRead])
+async def list_project_tags(
+    project_id: int,
+    _access: UserProject = Depends(require_project_access),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Tag).where(Tag.project_id == project_id))
+    return list(result.scalars().all())
+
+
+@router.post("/projects/{project_id}/tags", response_model=TagRead, status_code=201)
+async def create_project_tag(
+    project_id: int,
+    body: TagCreate,
+    _access: UserProject = Depends(require_project_access),
+    db: AsyncSession = Depends(get_db),
+):
+    if _access.role != ProjectRole.OWNER:
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Only owner can manage tags")
+    tag = Tag(project_id=project_id, name=body.name, color=body.color)
+    db.add(tag)
+    await db.commit()
+    await db.refresh(tag)
+    return tag
+
+
+@router.delete("/tags/{tag_id}", status_code=204)
+async def delete_tag(
+    tag_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # First get the tag and its project to verify access
+    result = await db.execute(select(Tag).where(Tag.id == tag_id))
+    tag = result.scalar_one_or_none()
+    if not tag:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Tag not found")
+
+    # Verify access to the project
+    access_result = await db.execute(
+        select(UserProject).where(
+            UserProject.user_id == current_user.id,
+            UserProject.project_id == tag.project_id,
+        )
+    )
+    access = access_result.scalar_one_or_none()
+    if not access:
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="No access to project")
+
+    if access.role != ProjectRole.OWNER:
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Only owner can manage tags")
+
+    await db.delete(tag)
+    await db.commit()

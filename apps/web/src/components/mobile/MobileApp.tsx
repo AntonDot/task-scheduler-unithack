@@ -13,11 +13,14 @@ import { fetchAttachments, uploadAttachment, deleteAttachment, getDownloadUrl, t
 import { fetchNotifications, type NotificationItem } from '@/api/notifications';
 import { getAvatarUrl } from '@/components/kanban/Avatar';
 import { getPushStatus, getPushDiagnostics, enablePushNotifications, type PushStatus } from '@/api/push';
-import type { Task, BoardColumn } from '@/types/domain';
+import { fetchProjectTags, createTag, deleteTag } from '@/api/tags';
+import type { Task, BoardColumn, Tag } from '@/types/domain';
 import {
-  getUrgencyMap, formatDeadline, isOverdue, apiUrgencyToDesign
+  getUrgencyMap, formatDeadline, formatRelativeCreationDate, isOverdue, apiUrgencyToDesign
 } from '@/theme/theme';
 import { BlockEditor } from '@/components/editor/BlockEditor';
+import { TagsSection } from '@/components/tags/TagsSection';
+import { TaskTagList } from '@/components/tags/TaskTagList';
 
 // ─── helpers ─────────────────────────────────────────────────────────────────
 
@@ -187,6 +190,9 @@ function MobileCard({ task, onClick, accent, th }: {
       }}>
         {task.title}
       </p>
+      
+      <TaskTagList tags={task.tags} />
+      
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
           <div style={{ display: 'flex', alignItems: 'center', marginRight: displayAssignees.length > 1 ? 2 : 0 }}>
@@ -461,7 +467,7 @@ function BoardView({ tasks, columns, onTaskClick, onCreateTask, projects, active
 
 // ─── Task Detail Sheet ────────────────────────────────────────────────────────
 
-function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescriptionChange, onPriorityChange, onDeadlineChange, onAssigneeToggle, accent, th, members }: {
+function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescriptionChange, onPriorityChange, onDeadlineChange, onAssigneeToggle, accent, th, members, projectTags, onTagToggle, onCreateTag, onDeleteTag, isLead, canEditTags }: {
   task: Task | null; columns: BoardColumn[]; open: boolean; onClose: () => void;
   onColumnChange: (taskId: number, colId: number) => void;
   onDescriptionChange: (taskId: number, desc: string) => void;
@@ -470,6 +476,12 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
   onAssigneeToggle?: (taskId: number, memberId: number) => void;
   accent: string; th: ReturnType<typeof useTheme>['theme'];
   members?: Array<{ id: number; full_name: string; email?: string }>;
+  projectTags: Tag[];
+  onTagToggle: (taskId: number, tagId: number) => void;
+  onCreateTag: (name: string, color: string) => Promise<Tag | null>;
+  onDeleteTag: (tagId: number) => void;
+  isLead: boolean;
+  canEditTags: boolean;
 }) {
   const dragY = useRef(0);
   const [dragging, setDragging] = useState(false);
@@ -486,10 +498,10 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (!task) return;
+    if (!task || !open) return;
     fetchComments(task.id).then(setComments).catch(() => {});
     fetchAttachments(task.id).then(setAttachments).catch(() => {});
-  }, [task?.id]);
+  }, [task?.id, open]);
 
   if (!task) return null;
 
@@ -599,6 +611,9 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
                   display: 'inline-block', marginBottom: 7,
                 }}>{task.project.name}</span>
               )}
+              <div style={{ fontSize: 12.5, color: th.textMuted, fontWeight: 500, marginBottom: 4 }}>
+                Created {formatRelativeCreationDate(task.created_at)}
+              </div>
               <h2 style={{ fontSize: 18, fontWeight: 700, color: th.text, lineHeight: 1.3 }}>{task.title}</h2>
             </div>
             <button onClick={onClose} style={{
@@ -766,6 +781,18 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
             )}
           </div>
 
+          <TagsSection
+            projectTags={projectTags}
+            selectedTags={task.tags ?? []}
+            isLead={isLead}
+            canEditTags={canEditTags}
+            onToggleTag={tag => onTagToggle(task.id, tag.id)}
+            onCreateTag={onCreateTag}
+            onDeleteTag={onDeleteTag}
+            theme={th}
+            accent={accent}
+          />
+
           {/* Description */}
           <div style={{ marginBottom: 20 }}>
             <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
@@ -901,7 +928,7 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', gap: 6, alignItems: 'center', marginBottom: 5 }}>
                         <span style={{ fontSize: 12.5, fontWeight: 600, color: th.text }}>{c.user?.full_name ?? 'User'}</span>
-                        <span style={{ fontSize: 11, color: th.textMuted }}>
+                        <span style={{ fontSize: 12, color: th.textMuted }}>
                           {new Date(c.created_at).toLocaleDateString()}
                         </span>
                       </div>
@@ -1028,16 +1055,27 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
 
 // ─── Create Sheet ─────────────────────────────────────────────────────────────
 
-function CreateSheet({ open, onClose, onCreate, members, accent, th }: {
+function CreateSheet({ open, onClose, onCreate, members, accent, th, projectTags, onCreateTagAsync, onDeleteTag, isLead }: {
   open: boolean; onClose: () => void;
-  onCreate: (body: { title: string; urgency: string; assignee_id?: number; deadline?: string }) => void;
+  onCreate: (body: { title: string; urgency: string; assignee_id?: number; deadline?: string; tag_ids?: number[] }) => void;
   members: Array<{ id: number; full_name: string }>; accent: string;
   th: ReturnType<typeof useTheme>['theme'];
+  projectTags: Tag[];
+  onCreateTagAsync: (name: string, color: string) => Promise<Tag | null>;
+  onDeleteTag: (tagId: number) => void;
+  isLead: boolean;
 }) {
   const [title, setTitle] = useState('');
   const [urgency, setUrgency] = useState('MEDIUM');
   const [assigneeId, setAssigneeId] = useState<number | ''>('');
   const [deadline, setDeadline] = useState('');
+  const [tagIds, setTagIds] = useState<number[]>([]);
+
+  useEffect(() => {
+    if (open) {
+      setTitle(''); setUrgency('MEDIUM'); setAssigneeId(''); setDeadline(''); setTagIds([]);
+    }
+  }, [open]);
 
   function handleCreate() {
     if (!title.trim()) return;
@@ -1045,8 +1083,12 @@ function CreateSheet({ open, onClose, onCreate, members, accent, th }: {
       title: title.trim(), urgency,
       assignee_id: assigneeId !== '' ? assigneeId : undefined,
       deadline: deadline || undefined,
+      tag_ids: tagIds,
     });
-    setTitle(''); setUrgency('MEDIUM'); setAssigneeId(''); setDeadline('');
+  }
+
+  function toggleTag(tagId: number) {
+    setTagIds(prev => prev.includes(tagId) ? prev.filter(id => id !== tagId) : [...prev, tagId]);
   }
 
   const inp = {
@@ -1116,6 +1158,22 @@ function CreateSheet({ open, onClose, onCreate, members, accent, th }: {
               <label style={lbl}>DEADLINE</label>
               <input type="date" value={deadline} onChange={e => setDeadline(e.target.value)} style={inp} />
             </div>
+            <TagsSection
+              projectTags={projectTags}
+              selectedTags={projectTags.filter(t => tagIds.includes(t.id))}
+              isLead={isLead}
+              canEditTags
+              onToggleTag={tag => toggleTag(tag.id)}
+              onCreateTag={onCreateTagAsync}
+              onDeleteTag={tagId => {
+                onDeleteTag(tagId);
+                setTagIds(prev => prev.filter(id => id !== tagId));
+              }}
+              theme={th}
+              accent={accent}
+              layout="compact"
+            />
+
             <button onClick={handleCreate} disabled={!title.trim()} style={{
               padding: '15px', borderRadius: 14, border: 'none',
               background: title.trim() ? accent : th.border,
@@ -1615,7 +1673,7 @@ function BottomNav({ view, setView, accent, th }: {
   view: MobileView; setView: (v: MobileView) => void;
   accent: string; th: ReturnType<typeof useTheme>['theme'];
 }) {
-  const tabs: Array<{ id: MobileView; label: string; Icon: ({ s }: { s: number }) => JSX.Element; dot?: boolean }> = [
+  const tabs: Array<{ id: MobileView; label: string; Icon: ({ s }: { s: number }) => React.JSX.Element; dot?: boolean }> = [
     { id: 'kanban',      label: 'Board',    Icon: IcoBoard },
     { id: 'automations', label: 'Automate', Icon: IcoBolt, dot: true },
     { id: 'team',        label: 'Team',     Icon: IcoUsers },
@@ -1672,7 +1730,7 @@ export function MobileApp() {
   const [createOpen, setCreateOpen] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
   const [bellOpen, setBellOpen] = useState(false);
-  const { user } = useAuthStore();
+  const { user, projectRoles } = useAuthStore();
   const NOTIF_READ_KEY = `vt_read_notifs_${user?.id || 'default'}`;
   const [readIds, setReadIds] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem(NOTIF_READ_KEY) ?? '[]') as string[]); }
@@ -1687,6 +1745,11 @@ export function MobileApp() {
 
   const { data: projects = [] } = useQuery({ queryKey: ['projects'], queryFn: fetchProjects });
   const resolvedProjectId = activeProjectId ?? projects[0]?.id ?? null;
+
+  const role = resolvedProjectId ? projectRoles[resolvedProjectId] : undefined;
+  const isLead = role === 'OWNER';
+  const isAssigneeOnSelected = selTask?.assignee_id === user?.id || (selTask?.co_assignees ?? []).some(a => a.id === user?.id);
+  const canEditTagsOnSelected = isLead || selTask?.creator_id === user?.id || isAssigneeOnSelected;
 
   const { data: tasks = [] } = useQuery({
     queryKey: ['tasks', resolvedProjectId],
@@ -1703,6 +1766,12 @@ export function MobileApp() {
   const { data: columns = [] } = useQuery({
     queryKey: ['columns', resolvedProjectId],
     queryFn: () => fetchColumns(resolvedProjectId!),
+    enabled: !!resolvedProjectId,
+  });
+
+  const { data: projectTags = [] } = useQuery({
+    queryKey: ['tags', resolvedProjectId],
+    queryFn: () => fetchProjectTags(resolvedProjectId!),
     enabled: !!resolvedProjectId,
   });
 
@@ -1835,6 +1904,75 @@ export function MobileApp() {
     } catch {}
   }
 
+  async function handleTagToggle(taskId: number, tagId: number) {
+    const task = tasks.find(t => t.id === taskId) ?? selTask;
+    if (!task) return;
+    
+    const isAssignee = task.assignee_id === user?.id || (task.co_assignees ?? []).some(a => a.id === user?.id);
+    if (!isLead && task.creator_id !== user?.id && !isAssignee) return;
+
+    const currentTags = task.tags ?? [];
+    const hasTag = currentTags.some(t => t.id === tagId);
+    let newTags: Tag[];
+    if (hasTag) {
+      newTags = currentTags.filter(t => t.id !== tagId);
+    } else {
+      const tagToAdd = projectTags.find(t => t.id === tagId);
+      if (!tagToAdd) return;
+      newTags = [...currentTags, tagToAdd];
+    }
+
+    // Optimistic update
+    const key = ['tasks', resolvedProjectId] as const;
+    queryClient.setQueryData<Task[]>(key, old =>
+      (old ?? []).map(t => t.id === taskId ? { ...t, tags: newTags } : t)
+    );
+    if (selTask?.id === taskId) {
+      setSelTask(prev => prev ? { ...prev, tags: newTags } : prev);
+    }
+
+    try {
+      const updated = await updateTask(taskId, { tag_ids: newTags.map(t => t.id) });
+      queryClient.setQueryData<Task[]>(key, old =>
+        (old ?? []).map(t => t.id === taskId ? { ...t, ...updated } : t)
+      );
+      if (selTask?.id === taskId) {
+        setSelTask(prev => prev ? { ...prev, ...updated } : prev);
+      }
+    } catch {
+      // Rollback? For now just rely on next sync or refetch
+    }
+  }
+
+  async function handleCreateTag(name: string, color: string) {
+    if (!isLead || !resolvedProjectId) return null;
+    try {
+      const tag = await createTag(resolvedProjectId, { name, color });
+      const key = ['tags', resolvedProjectId] as const;
+      queryClient.setQueryData<Tag[]>(key, old => [...(old ?? []), tag]);
+      return tag;
+    } catch {
+      return null;
+    }
+  }
+
+  async function handleDeleteTag(tagId: number) {
+    if (!isLead || !resolvedProjectId) return;
+    try {
+      await deleteTag(tagId);
+      queryClient.setQueryData<Tag[]>(['tags', resolvedProjectId], old => (old ?? []).filter(t => t.id !== tagId));
+      queryClient.setQueryData<Task[]>(['tasks', resolvedProjectId], old =>
+        (old ?? []).map(t => ({
+          ...t,
+          tags: (t.tags ?? []).filter(tag => tag.id !== tagId),
+        }))
+      );
+      if (selTask) {
+        setSelTask(prev => prev ? { ...prev, tags: (prev.tags ?? []).filter(t => t.id !== tagId) } : prev);
+      }
+    } catch {}
+  }
+
   return (
     <>
       <style>{`
@@ -1882,12 +2020,22 @@ export function MobileApp() {
         onAssigneeToggle={handleAssigneeToggle}
         accent={accent} th={th}
         members={members}
+        projectTags={projectTags}
+        onTagToggle={handleTagToggle}
+        onCreateTag={handleCreateTag}
+        onDeleteTag={handleDeleteTag}
+        isLead={isLead}
+        canEditTags={!!canEditTagsOnSelected}
       />
 
       <CreateSheet
         open={createOpen} onClose={() => setCreateOpen(false)}
         onCreate={body => createMutation.mutate(body)}
         members={members} accent={accent} th={th}
+        projectTags={projectTags}
+        onCreateTagAsync={handleCreateTag}
+        onDeleteTag={handleDeleteTag}
+        isLead={isLead}
       />
 
       <NotificationSheet

@@ -99,6 +99,25 @@ export function formatDeadline(dateStr: string | null): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+export function formatRelativeCreationDate(dateStr: string | null): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const now = new Date();
+  
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dateObj = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  
+  const diffDays = Math.round((today.getTime() - dateObj.getTime()) / (1000 * 60 * 60 * 24));
+  
+  const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  
+  if (diffDays === 0) return `today at ${timeStr}`;
+  if (diffDays === 1) return `yesterday at ${timeStr}`;
+  if (diffDays > 1 && diffDays <= 7) return `${diffDays} days ago at ${timeStr}`;
+  
+  return `${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })} at ${timeStr}`;
+}
+
 export function isOverdue(dateStr: string | null, isDone: boolean = false): boolean {
   if (!dateStr || isDone) return false;
   const d = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00');

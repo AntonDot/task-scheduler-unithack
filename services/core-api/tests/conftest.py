@@ -5,9 +5,9 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config import settings
 from app.database import get_db
-from app.domain import ProjectRole, TaskStatus, Urgency
+from app.domain import ProjectRole, Urgency
 from app.main import app
-from app.models import Base, Project, Task, User, UserProject
+from app.models import Base, Project, Task, User, UserProject, BoardColumn
 
 TEST_SECRET = "test-secret"  # noqa: S105
 TEST_SERVICE_TOKEN = "test-service-token"  # noqa: S105
@@ -89,12 +89,17 @@ async def seed_data(session_factory):
         )
         await session.flush()
 
+        todo_col = BoardColumn(name="TODO", project_id=project.id, order=0)
+        review_col = BoardColumn(name="REVIEW", project_id=project.id, order=1)
+        session.add_all([todo_col, review_col])
+        await session.flush()
+
         draft_task = Task(
             project_id=project.id,
             creator_id=manager.id,
             assignee_id=specialist.id,
             title="AI Draft Task",
-            status=TaskStatus.AI_DRAFT,
+            column_id=todo_col.id,
             urgency=Urgency.MEDIUM,
         )
         todo_task = Task(
@@ -102,7 +107,7 @@ async def seed_data(session_factory):
             creator_id=manager.id,
             assignee_id=specialist.id,
             title="Todo Task",
-            status=TaskStatus.TODO,
+            column_id=todo_col.id,
             urgency=Urgency.HIGH,
         )
         review_task = Task(
@@ -110,7 +115,7 @@ async def seed_data(session_factory):
             creator_id=manager.id,
             assignee_id=specialist.id,
             title="Review Task",
-            status=TaskStatus.REVIEW,
+            column_id=review_col.id,
             urgency=Urgency.LOW,
         )
         session.add_all([draft_task, todo_task, review_task])

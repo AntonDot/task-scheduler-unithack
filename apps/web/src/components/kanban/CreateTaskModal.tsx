@@ -1,32 +1,72 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import type { Theme } from '@/theme/theme';
 import { getUrgencyMap } from '@/theme/theme';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { IcoX } from '@/components/ui/Icons';
-import type { Project, BoardColumn } from '@/types/domain';
+import type { Project, Tag, BoardColumn } from '@/types/domain';
 import type { ProjectMember } from '@/api/members';
+import { fetchProjectTags, createTag, deleteTag } from '@/api/tags';
+import { TagsSection } from '@/components/tags/TagsSection';
 
 interface CreateTaskModalProps {
   open: boolean;
   onClose: () => void;
-  onCreate: (body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string; column_id?: number }) => void;
+  onCreate: (body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string; column_id?: number; tag_ids?: number[] }) => void;
   loading?: boolean;
   members: ProjectMember[];
   columns: BoardColumn[];
   project?: Project | null;
+  isLead?: boolean;
   accentColor?: string;
   theme: Theme;
   initialColumn?: number | null;
 }
 
-export function CreateTaskModal({ open, onClose, onCreate, loading, members, columns, accentColor = '#6366F1', theme, initialColumn }: CreateTaskModalProps) {
-  const [form, setForm] = useState({ title: '', urgency: 'medium', assignee_id: '' as number | '', deadline: '', column_id: initialColumn ?? (columns[0]?.id || '') });
+export function CreateTaskModal({ open, onClose, onCreate, loading, members, columns, project, isLead = false, accentColor = '#6366F1', theme, initialColumn }: CreateTaskModalProps) {
+  const [form, setForm] = useState<{ title: string; urgency: string; assignee_id: number | ''; deadline: string; column_id: number | ''; tag_ids: number[] }>({ title: '', urgency: 'medium', assignee_id: '', deadline: '', column_id: initialColumn ?? (columns[0]?.id || ''), tag_ids: [] });
+  const [projectTags, setProjectTags] = useState<Tag[]>([]);
 
   useEffect(() => {
-    if (open) setForm(f => ({ ...f, column_id: initialColumn ?? (columns[0]?.id || '') }));
-  }, [open, initialColumn, columns]);
+    if (open) {
+      setForm(f => ({ ...f, column_id: initialColumn ?? (columns[0]?.id || ''), title: '', tag_ids: [] }));
+      if (project?.id) {
+        fetchProjectTags(project.id).then(setProjectTags).catch(() => setProjectTags([]));
+      }
+    }
+  }, [open, initialColumn, columns, project?.id]);
+
   const th  = theme;
   const acc = accentColor;
+
+  const selectedTags = projectTags.filter(t => form.tag_ids.includes(t.id));
+
+  const toggleTag = useCallback((tag: Tag) => {
+    setForm(f => {
+      const has = f.tag_ids.includes(tag.id);
+      const tag_ids = has ? f.tag_ids.filter(id => id !== tag.id) : [...f.tag_ids, tag.id];
+      return { ...f, tag_ids };
+    });
+  }, []);
+
+  const handleCreateTag = useCallback(async (name: string, color: string): Promise<Tag | null> => {
+    if (!isLead || !project?.id) return null;
+    try {
+      const tag = await createTag(project.id, { name, color });
+      setProjectTags(prev => [...prev, tag]);
+      return tag;
+    } catch {
+      return null;
+    }
+  }, [isLead, project?.id]);
+
+  const handleDeleteTag = useCallback(async (tagId: number) => {
+    if (!isLead) return;
+    try {
+      await deleteTag(tagId);
+      setProjectTags(prev => prev.filter(t => t.id !== tagId));
+      setForm(f => ({ ...f, tag_ids: f.tag_ids.filter(id => id !== tagId) }));
+    } catch {}
+  }, [isLead]);
 
   const sel: React.CSSProperties = {
     padding: '8px 12px', borderRadius: 8, border: `1px solid ${th.border}`,
@@ -42,8 +82,9 @@ export function CreateTaskModal({ open, onClose, onCreate, loading, members, col
       assignee_id: form.assignee_id !== '' ? Number(form.assignee_id) : undefined,
       deadline: form.deadline || undefined,
       column_id: form.column_id !== '' ? Number(form.column_id) : undefined,
+      tag_ids: form.tag_ids.length ? form.tag_ids : undefined,
     });
-    setForm({ title: '', urgency: 'medium', assignee_id: '', deadline: '', column_id: columns[0]?.id || '' });
+    setForm({ title: '', urgency: 'medium', assignee_id: '', deadline: '', column_id: columns[0]?.id || '', tag_ids: [] });
   }
 
   return (
@@ -107,6 +148,19 @@ export function CreateTaskModal({ open, onClose, onCreate, loading, members, col
             <label style={{ fontSize: 11.5, fontWeight: 600, color: th.textSecondary, display: 'block', marginBottom: 5 }}>Deadline</label>
             <DatePicker value={form.deadline || null} onChange={v => setForm({ ...form, deadline: v })} accent={acc} theme={th} placeholder="Pick a date" />
           </div>
+
+          <TagsSection
+            projectTags={projectTags}
+            selectedTags={selectedTags}
+            isLead={isLead}
+            canEditTags
+            onToggleTag={toggleTag}
+            onCreateTag={handleCreateTag}
+            onDeleteTag={handleDeleteTag}
+            theme={th}
+            accent={acc}
+            layout="compact"
+          />
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, marginTop: 22 }}>

@@ -11,6 +11,7 @@ from app.models.base import Base
 if TYPE_CHECKING:
     from app.models.board_column import BoardColumn
     from app.models.task import Task
+    from app.models.tag import Tag
     from app.models.user_project import UserProject
 
 
@@ -26,3 +27,4 @@ class Project(Base):
     user_links: Mapped[list[UserProject]] = relationship(back_populates="project")
     tasks: Mapped[list[Task]] = relationship(back_populates="project")
     columns: Mapped[list[BoardColumn]] = relationship(back_populates="project", cascade="all, delete-orphan", order_by="BoardColumn.order")
+    tags: Mapped[list[Tag]] = relationship(back_populates="project", cascade="all, delete-orphan")

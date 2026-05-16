@@ -87,6 +87,29 @@ export function MobileTaskCard({
           </span>
         )}
       </div>
+      
+      {/* Tags */}
+      {task.tags && task.tags.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          {task.tags.map(tag => (
+            <span key={tag.id} style={{
+              background: tag.color + '22',
+              color: tag.color,
+              padding: '2px 8px',
+              borderRadius: 6,
+              fontSize: 10.5,
+              fontWeight: 600,
+              maxWidth: '100%',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {tag.name}
+            </span>
+          ))}
+        </div>
+      )}
+
       <h3 className="mobile-card__title">{task.title}</h3>
       <div className="mobile-card__meta">
         {task.project && (

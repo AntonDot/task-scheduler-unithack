@@ -8,14 +8,14 @@ export function fetchTasks(projectId: number, assigneeId?: number): Promise<Task
 
 export function createTask(
   projectId: number,
-  body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string; column_id?: number },
+  body: { title: string; description?: string; assignee_id?: number; urgency?: string; deadline?: string; column_id?: number; tag_ids?: number[] },
 ): Promise<Task> {
   return api.post<Task>(`/projects/${projectId}/tasks`, body);
 }
 
 export function updateTask(
   taskId: number,
-  body: { title?: string; description?: string; assignee_id?: number | null; co_assignee_ids?: number[]; urgency?: string; deadline?: string | null },
+  body: { title?: string; description?: string; assignee_id?: number | null; co_assignee_ids?: number[]; urgency?: string; deadline?: string | null; tag_ids?: number[] },
 ): Promise<Task> {
   return api.patch<Task>(`/tasks/${taskId}`, body);
 }

@@ -39,6 +39,13 @@ export interface Project {
   color: string;
 }
 
+export interface Tag {
+  id: number;
+  project_id: number;
+  name: string;
+  color: string;
+}
+
 export interface Task {
   id: number;
   project_id: number;
@@ -54,4 +61,5 @@ export interface Task {
   project?: Project;
   assignee?: User;
   co_assignees?: User[];
+  tags?: Tag[];
 }

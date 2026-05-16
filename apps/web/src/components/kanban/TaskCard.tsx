@@ -4,6 +4,7 @@ import { getUrgencyMap, formatDeadline, isOverdue, apiUrgencyToDesign, createThe
 import type { Theme } from '@/theme/theme';
 import { Avatar } from './Avatar';
 import { IcoChat, IcoClip } from '@/components/ui/Icons';
+import { TaskTagList } from '@/components/tags/TaskTagList';
 
 interface TaskCardProps {
   task: Task;
@@ -69,6 +70,10 @@ export function TaskCard({ task, onSelect, onDragStart, onDragEnd, compact = fal
       }}>
         {task.title}
       </p>
+      
+      <div style={{ marginBottom: compact ? 8 : 10 }}>
+        <TaskTagList tags={task.tags} />
+      </div>
 
       {/* Footer */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>

@@ -1862,7 +1862,7 @@ function NotificationSheet({ notifications, open, onClose, onMarkAllRead, onMark
               return (
                 <div
                   key={n.id}
-                  onClick={() => { onMarkRead?.(n.id); onClose(); onOpenTask?.(n.task_id, section); }}
+                  onClick={() => { onMarkRead?.(n.id); onClose(); if (n.task_id != null) onOpenTask?.(n.task_id, section); }}
                   style={{
                     display: 'flex', gap: 12, padding: '13px 20px',
                     borderBottom: `1px solid ${th.border}`,

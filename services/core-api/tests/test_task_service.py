@@ -35,8 +35,14 @@ class TestListTasks:
     async def test_list_tasks_returns_all_for_project(self, db_session):
         owner, assignee, project, _, _, col = await _setup_project_data(db_session)
 
-        t1 = Task(project_id=project.id, creator_id=owner.id, assignee_id=assignee.id, title="Task A", column_id=col.id, urgency=Urgency.LOW)
-        t2 = Task(project_id=project.id, creator_id=owner.id, assignee_id=owner.id, title="Task B", column_id=col.id, urgency=Urgency.HIGH)
+        t1 = Task(
+            project_id=project.id, creator_id=owner.id, assignee_id=assignee.id,
+            title="Task A", column_id=col.id, urgency=Urgency.LOW,
+        )
+        t2 = Task(
+            project_id=project.id, creator_id=owner.id, assignee_id=owner.id,
+            title="Task B", column_id=col.id, urgency=Urgency.HIGH,
+        )
         db_session.add_all([t1, t2])
         await db_session.flush()
 
@@ -48,8 +54,14 @@ class TestListTasks:
     async def test_list_tasks_filters_by_assignee(self, db_session):
         owner, assignee, project, _, _, col = await _setup_project_data(db_session)
 
-        t1 = Task(project_id=project.id, creator_id=owner.id, assignee_id=assignee.id, title="Assigned", column_id=col.id, urgency=Urgency.LOW)
-        t2 = Task(project_id=project.id, creator_id=owner.id, assignee_id=owner.id, title="Owner task", column_id=col.id, urgency=Urgency.LOW)
+        t1 = Task(
+            project_id=project.id, creator_id=owner.id, assignee_id=assignee.id,
+            title="Assigned", column_id=col.id, urgency=Urgency.LOW,
+        )
+        t2 = Task(
+            project_id=project.id, creator_id=owner.id, assignee_id=owner.id,
+            title="Owner task", column_id=col.id, urgency=Urgency.LOW,
+        )
         db_session.add_all([t1, t2])
         await db_session.flush()
 
@@ -87,7 +99,10 @@ class TestChangeColumn:
         db_session.add(col2)
         await db_session.flush()
 
-        task = Task(project_id=project.id, creator_id=owner.id, title="Task", column_id=col.id, urgency=Urgency.MEDIUM)
+        task = Task(
+            project_id=project.id, creator_id=owner.id, title="Task",
+            column_id=col.id, urgency=Urgency.MEDIUM,
+        )
         db_session.add(task)
         await db_session.flush()
 
@@ -100,7 +115,10 @@ class TestChangeColumn:
         db_session.add(col2)
         await db_session.flush()
 
-        task = Task(project_id=project.id, creator_id=owner.id, assignee_id=owner.id, title="Owner's task", column_id=col.id, urgency=Urgency.MEDIUM)
+        task = Task(
+            project_id=project.id, creator_id=owner.id, assignee_id=owner.id,
+            title="Owner's task", column_id=col.id, urgency=Urgency.MEDIUM,
+        )
         db_session.add(task)
         await db_session.flush()
 
@@ -114,7 +132,10 @@ class TestChangeColumn:
         db_session.add(col2)
         await db_session.flush()
 
-        task = Task(project_id=project.id, creator_id=owner.id, assignee_id=assignee.id, title="Assignee task", column_id=col.id, urgency=Urgency.MEDIUM)
+        task = Task(
+            project_id=project.id, creator_id=owner.id, assignee_id=assignee.id,
+            title="Assignee task", column_id=col.id, urgency=Urgency.MEDIUM,
+        )
         db_session.add(task)
         await db_session.flush()
 
@@ -126,7 +147,10 @@ class TestSoftDelete:
     async def test_soft_deleted_task_not_visible(self, db_session):
         owner, _, project, owner_link, _, col = await _setup_project_data(db_session)
 
-        task = Task(project_id=project.id, creator_id=owner.id, title="To delete", column_id=col.id, urgency=Urgency.MEDIUM)
+        task = Task(
+            project_id=project.id, creator_id=owner.id,
+            title="To delete", column_id=col.id, urgency=Urgency.MEDIUM,
+        )
         db_session.add(task)
         await db_session.flush()
         task_id = task.id
@@ -161,7 +185,10 @@ class TestUpdateTask:
     async def test_assignee_cannot_reassign(self, db_session):
         owner, assignee, project, _, assignee_link, col = await _setup_project_data(db_session)
 
-        task = Task(project_id=project.id, creator_id=owner.id, assignee_id=assignee.id, title="Assigned task", column_id=col.id, urgency=Urgency.MEDIUM)
+        task = Task(
+            project_id=project.id, creator_id=owner.id, assignee_id=assignee.id,
+            title="Assigned task", column_id=col.id, urgency=Urgency.MEDIUM,
+        )
         db_session.add(task)
         await db_session.flush()
 
@@ -175,7 +202,10 @@ class TestDeleteTask:
     async def test_delete_task_owner_only(self, db_session):
         owner, assignee, project, _, assignee_link, col = await _setup_project_data(db_session)
 
-        task = Task(project_id=project.id, creator_id=owner.id, title="Delete me", column_id=col.id, urgency=Urgency.MEDIUM)
+        task = Task(
+            project_id=project.id, creator_id=owner.id,
+            title="Delete me", column_id=col.id, urgency=Urgency.MEDIUM,
+        )
         db_session.add(task)
         await db_session.flush()
 
@@ -186,7 +216,10 @@ class TestDeleteTask:
     async def test_delete_task_by_owner_succeeds(self, db_session):
         owner, _, project, owner_link, _, col = await _setup_project_data(db_session)
 
-        task = Task(project_id=project.id, creator_id=owner.id, title="Owner deletes", column_id=col.id, urgency=Urgency.MEDIUM)
+        task = Task(
+            project_id=project.id, creator_id=owner.id,
+            title="Owner deletes", column_id=col.id, urgency=Urgency.MEDIUM,
+        )
         db_session.add(task)
         await db_session.flush()
         task_id = task.id

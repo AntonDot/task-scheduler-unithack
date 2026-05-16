@@ -5,6 +5,7 @@ export interface ProjectMember {
   full_name: string;
   email: string;
   role: string;
+  avatar_data?: string | null;
 }
 
 export function fetchProjectMembers(projectId: number): Promise<ProjectMember[]> {

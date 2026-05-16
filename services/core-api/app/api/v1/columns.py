@@ -129,13 +129,16 @@ async def delete_column(
     if not target_col:
         raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Column not found")
 
+    if target_col.is_protected:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail="Cannot delete a protected column")
+
     # Find fallback column (first one that is not the target)
     fallback_col = next((c for c in columns if c.id != column_id), None)
 
-    # Move all tasks from target to fallback
+    # Move all non-deleted tasks from target to fallback
     await db.execute(
         Task.__table__.update()
-        .where(Task.column_id == column_id)
+        .where(Task.column_id == column_id, Task.is_deleted == False)
         .values(column_id=fallback_col.id)
     )
 

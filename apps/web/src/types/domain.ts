@@ -4,6 +4,7 @@ export interface BoardColumn {
   name: string;
   color: string;
   order: number;
+  is_protected?: boolean;
 }
 
 export const ProjectRole = {

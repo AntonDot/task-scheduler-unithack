@@ -25,6 +25,7 @@ class BoardColumnRead(BoardColumnBase):
     id: int
     project_id: int
     order: int
+    is_protected: bool = False
     created_at: datetime
     updated_at: datetime
 

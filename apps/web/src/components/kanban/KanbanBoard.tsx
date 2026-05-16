@@ -11,6 +11,7 @@ interface KanbanBoardProps {
   members: ProjectMember[];
   onColumnChange: (taskId: number, colId: number) => void;
   onUpdate: (task: Task) => void;
+  onDelete?: (taskId: number) => void;
   onAddTask?: (colId: number) => void;
   accent: string;
   compact: boolean;
@@ -22,7 +23,7 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({
-  tasks, columns, members, onColumnChange, onUpdate, onAddTask,
+  tasks, columns, members, onColumnChange, onUpdate, onDelete, onAddTask,
   accent, compact, colWidth, theme,
   openTaskId, openTaskSection, onTaskOpened,
 }: KanbanBoardProps) {
@@ -93,6 +94,7 @@ export function KanbanBoard({
         open={drawerOpen}
         onClose={() => { setDrawerOpen(false); setDrawerSection(undefined); }}
         onUpdate={handleTaskUpdate}
+        onDelete={onDelete}
         members={members}
         accentColor={accent}
         theme={theme}

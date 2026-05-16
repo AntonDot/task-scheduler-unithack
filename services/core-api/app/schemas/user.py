@@ -27,5 +27,6 @@ class ProjectMemberRead(BaseModel):
     full_name: str
     email: str
     role: str
+    avatar_data: str | None = None
 
     model_config = {"from_attributes": True}

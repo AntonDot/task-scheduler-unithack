@@ -108,7 +108,7 @@ async def get_project_analytics(
     db: AsyncSession = Depends(get_db),
 ):
     # Total tasks
-    total_result = await db.execute(select(func.count(Task.id)).where(Task.project_id == project_id))
+    total_result = await db.execute(select(func.count(Task.id)).where(Task.project_id == project_id, Task.is_deleted == False))
     total_tasks = total_result.scalar() or 0
 
     # Get all columns for the project ordered by order
@@ -119,7 +119,7 @@ async def get_project_analytics(
 
     # By status (column name)
     status_result = await db.execute(
-        select(BoardColumn.name, func.count(Task.id))
+        select(BoardColumn.name, func.count(Task.id).filter(Task.is_deleted == False))
         .join(Task, Task.column_id == BoardColumn.id, isouter=True)
         .where(BoardColumn.project_id == project_id)
         .group_by(BoardColumn.id)
@@ -128,7 +128,7 @@ async def get_project_analytics(
 
     # By urgency
     urgency_result = await db.execute(
-        select(Task.urgency, func.count(Task.id)).where(Task.project_id == project_id).group_by(Task.urgency)
+        select(Task.urgency, func.count(Task.id)).where(Task.project_id == project_id, Task.is_deleted == False).group_by(Task.urgency)
     )
     by_urgency = dict(urgency_result.all())
 
@@ -140,6 +140,7 @@ async def get_project_analytics(
             Task.deadline < now,
             Task.column_id != last_col_id,
             Task.deadline.isnot(None),
+            Task.is_deleted == False,
         )
     )
     overdue_count = overdue_result.scalar() or 0
@@ -149,6 +150,7 @@ async def get_project_analytics(
         select(Task.created_at, Task.updated_at).where(
             Task.project_id == project_id,
             Task.column_id == last_col_id,
+            Task.is_deleted == False,
         )
     )
     done_rows = done_result.all()
@@ -173,7 +175,7 @@ async def get_project_analytics(
             func.sum(case((Task.column_id.notin_([first_col_id, last_col_id]), 1), else_=0)).label("in_progress"),
         )
         .join(User, User.id == Task.assignee_id)
-        .where(Task.project_id == project_id, Task.assignee_id.isnot(None))
+        .where(Task.project_id == project_id, Task.assignee_id.isnot(None), Task.is_deleted == False)
         .group_by(Task.assignee_id, User.full_name)
     )
     assignee_load = [
@@ -209,7 +211,7 @@ async def export_project_tasks(
     from sqlalchemy.orm import selectinload
 
     result = await db.execute(
-        select(Task).where(Task.project_id == project_id).options(selectinload(Task.assignee), selectinload(Task.column)).order_by(Task.id)
+        select(Task).where(Task.project_id == project_id, Task.is_deleted == False).options(selectinload(Task.assignee), selectinload(Task.column)).order_by(Task.id)
     )
     tasks = result.scalars().all()
 

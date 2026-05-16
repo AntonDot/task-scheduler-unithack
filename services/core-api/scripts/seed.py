@@ -38,10 +38,10 @@ PROJECTS = [
 
 # Default columns created for every project
 DEFAULT_COLUMNS = [
-    {"name": "Backlog",     "color": "#9CA3AF", "order": 0},
-    {"name": "In Progress", "color": "#6366F1", "order": 1},
-    {"name": "Review",      "color": "#D97706", "order": 2},
-    {"name": "Done",        "color": "#059669", "order": 3},
+    {"name": "Backlog",     "color": "#9CA3AF", "order": 0, "is_protected": True},
+    {"name": "In Progress", "color": "#6366F1", "order": 1, "is_protected": True},
+    {"name": "Review",      "color": "#D97706", "order": 2, "is_protected": True},
+    {"name": "Done",        "color": "#059669", "order": 3, "is_protected": True},
 ]
 
 # Column order indexes for task placement

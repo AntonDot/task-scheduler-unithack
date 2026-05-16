@@ -4,6 +4,7 @@ import { fetchProjects } from '@/api/projects';
 import { fetchTasks, changeColumn, createTask } from '@/api/tasks';
 import { fetchColumns } from '@/api/columns';
 import { fetchProjectMembers } from '@/api/members';
+import { setAvatarUrl } from '@/components/kanban/Avatar';
 import { useAuthStore } from '@/store/authStore';
 import { useTheme } from '@/theme/ThemeContext';
 import { useToast } from '@/hooks/useToast';
@@ -90,6 +91,13 @@ function DesktopKanbanPage() {
     enabled: !!resolvedProjectId,
   });
 
+  // Seed avatar cache from member avatar_data returned by the server
+  useEffect(() => {
+    members.forEach(m => {
+      if (m.avatar_data) setAvatarUrl(m.id, m.avatar_data);
+    });
+  }, [members]);
+
   const { data: columns = [] } = useQuery({
     queryKey: ['columns', resolvedProjectId],
     queryFn: () => fetchColumns(resolvedProjectId!),
@@ -146,6 +154,10 @@ function DesktopKanbanPage() {
     );
   }, [queryClient, tasksKey]);
 
+  const handleTaskDelete = useCallback((taskId: number) => {
+    queryClient.setQueryData<Task[]>(tasksKey, old => (old ?? []).filter(t => t.id !== taskId));
+  }, [queryClient, tasksKey]);
+
   if (!user) return null;
 
   const activeProject = projects.find(p => p.id === resolvedProjectId) ?? null;
@@ -189,6 +201,7 @@ function DesktopKanbanPage() {
               members={members}
               onColumnChange={handleColumnChange}
               onUpdate={handleUpdate}
+              onDelete={handleTaskDelete}
               onAddTask={col => { setCreateColumn(col); setShowCreate(true); }}
               accent={accent}
               compact={compact}

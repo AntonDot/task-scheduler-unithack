@@ -12,12 +12,11 @@ interface AnalyticsViewProps {
 export function AnalyticsView({ tasks, columns = [], accent, theme }: AnalyticsViewProps) {
   const th = theme;
 
-  // Find column IDs for well-known semantic positions (fallback: positional)
+  // Find column IDs by name (with positional fallback)
   const sorted = [...columns].sort((a, b) => a.order - b.order);
-  const inProgressColId = sorted[1]?.id;
-  const reviewColId     = sorted[2]?.id;
-  // "done" is always the last column
-  const doneColId       = sorted[sorted.length - 1]?.id;
+  const inProgressColId = sorted.find(c => /in.?progress|в работе/i.test(c.name))?.id ?? sorted[1]?.id;
+  const reviewColId     = sorted.find(c => /review|ревью/i.test(c.name))?.id ?? sorted[2]?.id;
+  const doneColId       = sorted.find(c => /done|готово/i.test(c.name))?.id ?? sorted[sorted.length - 1]?.id;
 
   const stats = [
     { label: 'Total tasks',  value: tasks.length, color: accent },

@@ -20,7 +20,7 @@ async def _get_task_access(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> tuple[Task, UserProject]:
-    result = await db.execute(select(Task).where(Task.id == task_id))
+    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Task not found")

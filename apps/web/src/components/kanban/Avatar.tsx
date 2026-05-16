@@ -1,6 +1,9 @@
+const avatarMemCache = new Map<number, string>();
+
 interface AvatarUser {
   full_name: string;
   id?: number;
+  avatar_data?: string | null;
 }
 
 interface AvatarProps {
@@ -22,10 +25,17 @@ function avatarColor(user: AvatarUser): string {
 
 export function getAvatarUrl(userId: number | undefined): string | null {
   if (!userId) return null;
-  try { return localStorage.getItem(`vt_avatar_${userId}`); } catch { return null; }
+  if (avatarMemCache.has(userId)) return avatarMemCache.get(userId)!;
+  try {
+    const stored = localStorage.getItem(`vt_avatar_${userId}`);
+    if (stored) avatarMemCache.set(userId, stored);
+    return stored;
+  } catch { return null; }
 }
 
-export function setAvatarUrl(userId: number, dataUrl: string): void {
+export function setAvatarUrl(userId: number, dataUrl: string | null | undefined): void {
+  if (!dataUrl) return;
+  avatarMemCache.set(userId, dataUrl);
   try { localStorage.setItem(`vt_avatar_${userId}`, dataUrl); } catch {}
 }
 
@@ -34,7 +44,13 @@ export function Avatar({ user, size = 28, showOnline = false, online = false }: 
   const color    = avatarColor(user);
   const init     = initials(user.full_name);
   const dotSize  = Math.max(Math.round(size * 0.30), 8);
-  const imgUrl   = getAvatarUrl(user.id);
+
+  // Seed cache from avatar_data prop when available
+  if (user.id && user.avatar_data && !avatarMemCache.has(user.id)) {
+    avatarMemCache.set(user.id, user.avatar_data);
+  }
+
+  const imgUrl = user.avatar_data ?? getAvatarUrl(user.id);
 
   return (
     <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }} title={user.full_name}>

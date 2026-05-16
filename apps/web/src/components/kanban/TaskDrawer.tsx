@@ -8,7 +8,7 @@ import { DatePicker } from '@/components/ui/DatePicker';
 import { Avatar } from './Avatar';
 import { IcoX } from '@/components/ui/Icons';
 import type { ProjectMember } from '@/api/members';
-import { fetchTask, updateTask, changeColumn } from '@/api/tasks';
+import { fetchTask, updateTask, changeColumn, deleteTask } from '@/api/tasks';
 import { fetchComments, addComment } from '@/api/comments';
 import { fetchAuditLogs } from '@/api/audit';
 import type { Comment } from '@/api/comments';
@@ -26,6 +26,7 @@ interface TaskDrawerProps {
   open: boolean;
   onClose: () => void;
   onUpdate: (updated: Task) => void;
+  onDelete?: (taskId: number) => void;
   members: ProjectMember[];
   columns: BoardColumn[];
   accentColor: string;
@@ -33,7 +34,7 @@ interface TaskDrawerProps {
   scrollToSection?: 'comments' | 'description';
 }
 
-export function TaskDrawer({ task, open, onClose, onUpdate, members, columns, accentColor, theme, scrollToSection }: TaskDrawerProps) {
+export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, columns, accentColor, theme, scrollToSection }: TaskDrawerProps) {
   const [localTask, setLocalTask] = useState<Task | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openTaskIdRef = useRef<number | null>(null);
@@ -124,9 +125,28 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, columns, ac
     onUpdate(updated);
   }
 
+  async function handleDelete() {
+    if (!isLead && !isCreator) return;
+    if (!confirm('Delete this task permanently?')) return;
+    await deleteTask(display.id);
+    onDelete?.(display.id);
+    onClose();
+  }
+
   function handleColumnChange(columnId: number) {
     if (readonly) return;
     changeColumn(display.id, columnId).then(updated => {
+      setLocalTask(updated);
+      onUpdate(updated);
+    });
+  }
+
+  function handleUrgencyChange(urgency: Task['urgency']) {
+    if (readonly) return;
+    // Optimistic update
+    patch({ urgency });
+    // Persist to server so it survives column changes and page refreshes
+    updateTask(display.id, { urgency }).then(updated => {
       setLocalTask(updated);
       onUpdate(updated);
     });
@@ -387,16 +407,32 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, columns, ac
                 {display.title}
               </h2>
             </div>
-            <button onClick={onClose} style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: th.textMuted, padding: 4, borderRadius: 6, display: 'flex',
-              transition: 'color 0.1s, background 0.1s',
-            }}
-              onMouseEnter={e => { e.currentTarget.style.color = th.text; e.currentTarget.style.background = th.columnBg; }}
-              onMouseLeave={e => { e.currentTarget.style.color = th.textMuted; e.currentTarget.style.background = 'none'; }}
-            >
-              <IcoX size={20} />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              {(isLead || isCreator) && (
+                <button onClick={handleDelete} title="Delete task" style={{
+                  background: 'none', border: 'none', cursor: 'pointer',
+                  color: '#EF4444', padding: 4, borderRadius: 6, display: 'flex',
+                  transition: 'color 0.1s, background 0.1s',
+                }}
+                  onMouseEnter={e => { e.currentTarget.style.background = '#FEF2F2'; }}
+                  onMouseLeave={e => { e.currentTarget.style.background = 'none'; }}
+                >
+                  <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                  </svg>
+                </button>
+              )}
+              <button onClick={onClose} style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: th.textMuted, padding: 4, borderRadius: 6, display: 'flex',
+                transition: 'color 0.1s, background 0.1s',
+              }}
+                onMouseEnter={e => { e.currentTarget.style.color = th.text; e.currentTarget.style.background = th.columnBg; }}
+                onMouseLeave={e => { e.currentTarget.style.color = th.textMuted; e.currentTarget.style.background = 'none'; }}
+              >
+                <IcoX size={20} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -427,7 +463,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, columns, ac
               <span style={metaLabelStyle}>Urgency</span>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {Object.entries(urgMap).map(([key, u]) => (
-                  <button key={key} onClick={() => patch({ urgency: key.toUpperCase() as Task['urgency'] })} style={{
+                  <button key={key} onClick={() => handleUrgencyChange(key.toUpperCase() as Task['urgency'])} style={{
                     padding: '3px 10px', borderRadius: 6, border: 'none', cursor: readonly ? 'default' : 'pointer',
                     fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
                     background: urgKey === key ? u.bg : 'transparent',
@@ -452,7 +488,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, columns, ac
                       outline: selected ? `2px solid ${acc}` : '2px solid transparent',
                       outlineOffset: 2, transition: 'outline 0.1s', opacity: selected ? 1 : 0.45,
                     }}>
-                      <Avatar user={{ id: m.id, full_name: m.full_name }} size={26} />
+                      <Avatar user={{ id: m.id, full_name: m.full_name, avatar_data: m.avatar_data }} size={26} />
                     </button>
                   );
                 })}

@@ -11,7 +11,8 @@ import { runReviewScraper, type ReviewScrapeResult } from '@/api/automations';
 import { fetchComments, addComment, type Comment } from '@/api/comments';
 import { fetchAttachments, uploadAttachment, deleteAttachment, getDownloadUrl, type Attachment } from '@/api/attachments';
 import { fetchNotifications, type NotificationItem } from '@/api/notifications';
-import { getAvatarUrl } from '@/components/kanban/Avatar';
+import { updateProfile } from '@/api/auth';
+import { Avatar, getAvatarUrl, setAvatarUrl } from '@/components/kanban/Avatar';
 import { getPushStatus, getPushDiagnostics, enablePushNotifications, type PushStatus } from '@/api/push';
 import { fetchProjectTags, createTag, deleteTag } from '@/api/tags';
 import type { Task, BoardColumn, Tag } from '@/types/domain';
@@ -19,6 +20,7 @@ import {
   getUrgencyMap, formatDeadline, formatRelativeCreationDate, isOverdue, apiUrgencyToDesign
 } from '@/theme/theme';
 import { BlockEditor } from '@/components/editor/BlockEditor';
+import { ColumnsManagerModal } from '@/components/kanban/ColumnsManagerModal';
 import { TagsSection } from '@/components/tags/TagsSection';
 import { TaskTagList } from '@/components/tags/TaskTagList';
 
@@ -263,6 +265,7 @@ function BoardView({ tasks, columns, onTaskClick, onCreateTask, projects, active
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
   const [projOpen, setProjOpen] = useState(false);
+  const [showColumnsMgr, setShowColumnsMgr] = useState(false);
 
   const col = columns[colIdx] ?? columns[0];
   const colTasks = col ? tasks.filter(t =>
@@ -352,6 +355,16 @@ function BoardView({ tasks, columns, onTaskClick, onCreateTask, projects, active
                   background: '#EF4444', border: `1.5px solid ${th.surface}`,
                 }} />
               )}
+            </button>
+            {/* Columns manager */}
+            <button onClick={() => setShowColumnsMgr(true)} title="Manage columns" style={{
+              width: 36, height: 36, borderRadius: '50%',
+              background: th.columnBg,
+              border: 'none', cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: th.textSecondary,
+            }}>
+              <IcoBoard s={17} />
             </button>
             {/* Search */}
             <button onClick={() => setSearchOpen(o => !o)} style={{
@@ -461,6 +474,15 @@ function BoardView({ tasks, columns, onTaskClick, onCreateTask, projects, active
       >
         <IcoPlus s={26} />
       </button>
+
+      <ColumnsManagerModal
+        open={showColumnsMgr}
+        onClose={() => setShowColumnsMgr(false)}
+        projectId={activeProjectId ?? 0}
+        columns={columns}
+        theme={th}
+        accent={accent}
+      />
     </div>
   );
 }
@@ -978,13 +1000,7 @@ function TaskSheet({ task, columns, open, onClose, onColumnChange, onDescription
                         }}
                         onTouchStart={() => setMentionIdx(i)}
                       >
-                        <div style={{
-                          width: 22, height: 22, borderRadius: '50%',
-                          background: userColor(m.id), display: 'flex', alignItems: 'center',
-                          justifyContent: 'center', color: 'white', fontSize: 9, fontWeight: 700,
-                        }}>
-                          {getInitials(m.full_name)}
-                        </div>
+                        <Avatar user={{ id: m.id, full_name: m.full_name, avatar_data: (m as { avatar_data?: string | null }).avatar_data }} size={22} />
                         <span style={{ fontSize: 13, fontWeight: 600, color: th.text }}>{m.full_name}</span>
                       </div>
                     ))}
@@ -1449,8 +1465,32 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
   accent: string; th: ReturnType<typeof useTheme>['theme'];
   isDark: boolean; onToggleDark: () => void; onSetAccent: (c: string) => void;
 }) {
-  const { user, clearAuth } = useAuthStore();
+  const { user, clearAuth, setAuth, token } = useAuthStore();
   const [notifs, setNotifs] = useState({ task_assigned: true, comment: true, deadline: true, mention: true, status_change: false });
+  const [editingProfile, setEditingProfile] = useState(false);
+  const [profileName, setProfileName] = useState('');
+  const [profileEmail, setProfileEmail] = useState('');
+  const [profileError, setProfileError] = useState('');
+  const [profileSaving, setProfileSaving] = useState(false);
+  const mobileAvatarInputRef = useRef<HTMLInputElement>(null);
+  const [avatarKey, setAvatarKey] = useState(0);
+
+  async function handleMobileAvatarChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file || !user) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const dataUrl = reader.result as string;
+      setAvatarUrl(user.id, dataUrl);
+      setAvatarKey(k => k + 1);
+      try {
+        const updated = await updateProfile({ avatar_data: dataUrl });
+        if (token) setAuth({ ...user, avatar_data: updated.avatar_data ?? dataUrl }, token);
+      } catch {}
+    };
+    reader.readAsDataURL(file);
+    e.target.value = '';
+  }
 
   function Row({ label, sub, right, danger = false }: { label: string; sub?: string; right?: React.ReactNode; danger?: boolean }) {
     return (
@@ -1477,16 +1517,43 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
     );
   }
 
+  function openEditProfile() {
+    setProfileName(user?.full_name ?? '');
+    setProfileEmail(user?.email ?? '');
+    setProfileError('');
+    setEditingProfile(true);
+  }
+
+  async function saveProfile() {
+    if (!profileName.trim()) { setProfileError('Name is required'); return; }
+    if (!profileEmail.trim()) { setProfileError('Email is required'); return; }
+    setProfileSaving(true);
+    setProfileError('');
+    try {
+      const updated = await updateProfile({ full_name: profileName.trim(), email: profileEmail.trim() });
+      if (user && token) setAuth({ ...user, full_name: updated.full_name, email: updated.email }, token);
+      setEditingProfile(false);
+    } catch (e: unknown) {
+      setProfileError(e instanceof Error ? e.message : 'Failed to save');
+    } finally {
+      setProfileSaving(false);
+    }
+  }
+
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 'calc(var(--sat, 0px) + 20px) 16px 100px' }}>
       <h2 style={{ fontSize: 20, fontWeight: 700, color: th.text, marginBottom: 24 }}>Settings</h2>
 
       {user && (
-        <div style={{
-          background: th.surface, border: `1px solid ${th.border}`,
-          borderRadius: 16, padding: 16, marginBottom: 24,
-          display: 'flex', alignItems: 'center', gap: 14,
-        }}>
+        <div
+          onClick={openEditProfile}
+          style={{
+            background: th.surface, border: `1px solid ${th.border}`,
+            borderRadius: 16, padding: 16, marginBottom: 24,
+            display: 'flex', alignItems: 'center', gap: 14,
+            cursor: 'pointer',
+          }}
+        >
           {(() => {
             const av = getAvatarUrl(user.id);
             return (
@@ -1509,6 +1576,105 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
           </div>
           <IcoChevR s={18} />
         </div>
+      )}
+
+      {/* Inline profile edit modal */}
+      {editingProfile && createPortal(
+        <>
+          <div onClick={() => setEditingProfile(false)} style={{ position: 'fixed', inset: 0, background: 'rgba(15,23,42,0.5)', zIndex: 700, backdropFilter: 'blur(2px)' }} />
+          <div style={{
+            position: 'fixed', left: 16, right: 16, top: '50%', transform: 'translateY(-50%)',
+            background: th.surface, borderRadius: 20, padding: '24px 20px',
+            zIndex: 710, boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ fontSize: 17, fontWeight: 700, color: th.text, margin: 0 }}>Edit Profile</h3>
+              <button onClick={() => setEditingProfile(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: th.textMuted, padding: 4 }}>
+                <IcoX s={18} />
+              </button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {/* Avatar upload section */}
+              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: 16 }}>
+                {(() => {
+                  const av = user ? getAvatarUrl(user.id) : null;
+                  return (
+                    <div
+                      onClick={() => mobileAvatarInputRef.current?.click()}
+                      style={{
+                        width: 72, height: 72, borderRadius: '50%',
+                        background: av ? 'transparent' : accent,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        color: 'white', fontSize: 24, fontWeight: 700,
+                        overflow: 'hidden', cursor: 'pointer', position: 'relative',
+                      }}
+                    >
+                      {av
+                        ? <img key={avatarKey} src={av} alt="avatar" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : (user ? getInitials(user.full_name) : '')}
+                      <div style={{
+                        position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.3)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        borderRadius: '50%',
+                      }}>
+                        <svg width={20} height={20} viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                          <circle cx="12" cy="13" r="4"/>
+                        </svg>
+                      </div>
+                    </div>
+                  );
+                })()}
+                <p style={{ fontSize: 11.5, color: th.textMuted, marginTop: 8 }}>Tap to change photo</p>
+                <input ref={mobileAvatarInputRef} type="file" accept="image/*" onChange={handleMobileAvatarChange} style={{ display: 'none' }} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11.5, fontWeight: 600, color: th.textMuted, display: 'block', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Full name</label>
+                <input
+                  value={profileName}
+                  onChange={e => setProfileName(e.target.value)}
+                  placeholder="Your name"
+                  style={{
+                    width: '100%', padding: '11px 14px', borderRadius: 12,
+                    border: `1px solid ${th.border}`, background: th.inputBg,
+                    color: th.text, fontSize: 15, outline: 'none', fontFamily: 'inherit',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              <div>
+                <label style={{ fontSize: 11.5, fontWeight: 600, color: th.textMuted, display: 'block', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Email</label>
+                <input
+                  value={profileEmail}
+                  onChange={e => setProfileEmail(e.target.value)}
+                  placeholder="your@email.com"
+                  type="email"
+                  style={{
+                    width: '100%', padding: '11px 14px', borderRadius: 12,
+                    border: `1px solid ${th.border}`, background: th.inputBg,
+                    color: th.text, fontSize: 15, outline: 'none', fontFamily: 'inherit',
+                    boxSizing: 'border-box',
+                  }}
+                />
+              </div>
+              {profileError && <p style={{ fontSize: 12.5, color: '#DC2626', margin: 0 }}>{profileError}</p>}
+              <button
+                onClick={saveProfile}
+                disabled={profileSaving}
+                style={{
+                  padding: '13px', borderRadius: 12, border: 'none',
+                  background: profileSaving ? th.columnBg : accent,
+                  color: profileSaving ? th.textMuted : 'white',
+                  fontSize: 15, fontWeight: 700, cursor: profileSaving ? 'default' : 'pointer',
+                  fontFamily: 'inherit', transition: 'all 0.15s',
+                }}
+              >
+                {profileSaving ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </>,
+        document.body,
       )}
 
       <Section title="Notifications">
@@ -1762,6 +1928,13 @@ export function MobileApp() {
     queryFn: () => fetchProjectMembers(resolvedProjectId!),
     enabled: !!resolvedProjectId,
   });
+
+  // Seed avatar cache from member avatar_data returned by the server
+  useEffect(() => {
+    members.forEach(m => {
+      if (m.avatar_data) setAvatarUrl(m.id, m.avatar_data);
+    });
+  }, [members]);
 
   const { data: columns = [] } = useQuery({
     queryKey: ['columns', resolvedProjectId],

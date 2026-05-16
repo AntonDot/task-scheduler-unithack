@@ -259,6 +259,8 @@ function DesktopKanbanPage() {
           onClose={() => setShowColumnsManager(false)}
           projectId={resolvedProjectId}
           columns={columns}
+          tasks={tasks} // Pass tasks for deletion check
+          addToast={addToast}
           theme={theme}
           accent={accent}
         />

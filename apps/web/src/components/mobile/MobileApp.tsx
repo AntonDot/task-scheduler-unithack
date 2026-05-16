@@ -258,12 +258,13 @@ const IcoBell = ({ s = 22 }) => (
   </svg>
 );
 
-function BoardView({ tasks, columns, onTaskClick, onCreateTask, projects, activeProjectId, onProjectChange, accent, th, notifications, onBellOpen }: {
+function BoardView({ tasks, columns, onTaskClick, onCreateTask, projects, activeProjectId, onProjectChange, accent, th, notifications, onBellOpen, addToast }: {
   tasks: Task[]; columns: BoardColumn[]; onTaskClick: (t: Task) => void; onCreateTask: () => void;
   projects: Array<{ id: number; name: string; color: string }>;
   activeProjectId: number | null; onProjectChange: (id: number) => void;
   accent: string; th: ReturnType<typeof useTheme>['theme'];
   notifications: (NotificationItem & { read?: boolean })[]; onBellOpen: () => void;
+  addToast: (message: string, type: 'info' | 'success' | 'warning' | 'error') => void;
 }) {
   const [colIdx, setColIdx] = useState(0);
   const [search, setSearch] = useState('');
@@ -484,9 +485,12 @@ function BoardView({ tasks, columns, onTaskClick, onCreateTask, projects, active
         onClose={() => setShowColumnsMgr(false)}
         projectId={activeProjectId ?? 0}
         columns={columns}
+        tasks={tasks} // Pass tasks for deletion check
+        addToast={addToast}
         theme={th}
         accent={accent}
       />
+
     </div>
   );
 }
@@ -2246,16 +2250,18 @@ export function MobileApp() {
       }}>
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
           {view === 'kanban' && (
-            <BoardView
-              tasks={tasks} columns={columns} onTaskClick={handleTaskClick}
-              onCreateTask={() => setCreateOpen(true)}
-              projects={projects} activeProjectId={resolvedProjectId}
-              onProjectChange={id => setActiveProjectId(id)}
-              accent={accent} th={th}
-              notifications={notifications}
-              onBellOpen={() => setBellOpen(true)}
-            />
+           <BoardView
+             tasks={tasks} columns={columns} onTaskClick={handleTaskClick}
+             onCreateTask={() => setCreateOpen(true)}
+             projects={projects} activeProjectId={resolvedProjectId}
+             onProjectChange={id => setActiveProjectId(id)}
+             accent={accent} th={th}
+             notifications={notifications}
+             onBellOpen={() => setBellOpen(true)}
+             addToast={addToast}
+           />
           )}
+
           {view === 'automations' && <AutomationsMobileView accent={accent} th={th} />}
           {view === 'team' && <TeamMobileView tasks={tasks} members={members} accent={accent} th={th} doneColumnId={columns[columns.length - 1]?.id} />}
           {view === 'settings' && (

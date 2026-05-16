@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import type { BoardColumn } from '@/types/domain';
+import type { BoardColumn, Task } from '@/types/domain';
 import { createColumn, updateColumn, deleteColumn, reorderColumns } from '@/api/columns';
 import { IcoX, IcoPlus } from '@/components/ui/Icons';
 import type { Theme } from '@/theme/theme';
@@ -10,11 +10,14 @@ interface ColumnsManagerModalProps {
   onClose: () => void;
   projectId: number;
   columns: BoardColumn[];
+  tasks: Task[];
+  addToast: (message: string, type: 'info' | 'success' | 'warning' | 'error') => void;
   theme: Theme;
   accent: string;
 }
 
-export function ColumnsManagerModal({ open, onClose, projectId, columns, theme: th, accent }: ColumnsManagerModalProps) {
+// Modal component to manage kanban columns
+export function ColumnsManagerModal({ open, onClose, projectId, columns, tasks, addToast, theme: th, accent }: ColumnsManagerModalProps) {
   const queryClient = useQueryClient();
   const [cols, setCols] = useState<BoardColumn[]>([]);
 
@@ -98,8 +101,13 @@ export function ColumnsManagerModal({ open, onClose, projectId, columns, theme: 
   function handleDelete(id: number) {
     const col = cols.find(c => c.id === id);
     if (col?.is_protected) return;
-    if (cols.filter(c => !c.is_protected).length <= 1) return;
-    if (confirm('Delete this column? Tasks will be moved to the first column.')) {
+
+    if (confirm('Delete this column?')) {
+      const hasTasks = tasks.some(t => t.column_id === id);
+      if (hasTasks) {
+        addToast("Нельзя удалять колонки, в которых есть задачи. Переместите задачи в другие колонки или удалите их, и повторите попытку.", "warning");
+        return;
+      }
       deleteMut.mutate(id);
     }
   }
@@ -265,7 +273,6 @@ export function ColumnsManagerModal({ open, onClose, projectId, columns, theme: 
                     }}
                   />
                 </label>
-
 
                 {/* Name input — readOnly for protected columns */}
                 <input

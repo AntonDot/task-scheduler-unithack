@@ -61,6 +61,7 @@ class TestAuditLogOnColumnChange:
         assert len(column_logs) >= 1
         log = column_logs[-1]
         import json
+
         old = json.loads(log["old_value"])
         new = json.loads(log["new_value"])
         assert old["column_id"] == seed_data["todo_col"].id

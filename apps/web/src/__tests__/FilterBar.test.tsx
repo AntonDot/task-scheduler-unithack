@@ -63,8 +63,8 @@ describe("FilterBar", () => {
     const onStatusChange = vi.fn();
     renderFilterBar({ onStatusChange });
     const statusSelect = screen.getByTestId("status-filter");
-    fireEvent.change(statusSelect, { target: { value: "TODO" } });
-    expect(onStatusChange).toHaveBeenCalledWith("TODO");
+    fireEvent.change(statusSelect, { target: { value: "backlog" } });
+    expect(onStatusChange).toHaveBeenCalledWith("backlog");
   });
 
   it("displays current search value", () => {

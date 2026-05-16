@@ -34,18 +34,19 @@ class TestAuditLogOnTaskCreate:
 
 
 @pytest.mark.asyncio
-class TestAuditLogOnStatusChange:
-    async def test_audit_log_on_status_change(self, client, seed_data, get_token):
+class TestAuditLogOnColumnChange:
+    async def test_audit_log_on_column_change(self, client, seed_data, get_token):
         tid = seed_data["todo_task"].id
         specialist = seed_data["specialist"]
         manager = seed_data["manager"]
         token = get_token(specialist.id)
         manager_token = get_token(manager.id)
+        review_col_id = seed_data["review_col"].id
 
         with patch("app.api.v1.tasks.ws_manager.broadcast", new_callable=AsyncMock):
             resp = await client.patch(
-                f"/api/v1/tasks/{tid}/status",
-                json={"status": "IN_PROGRESS"},
+                f"/api/v1/tasks/{tid}/column",
+                json={"column_id": review_col_id},
                 headers={"Authorization": f"Bearer {token}"},
             )
         assert resp.status_code == 200
@@ -56,13 +57,15 @@ class TestAuditLogOnStatusChange:
         )
         assert resp2.status_code == 200
         logs = resp2.json()
-        status_logs = [lg for lg in logs if lg["action"] == "status_changed"]
-        assert len(status_logs) >= 1
-        log = status_logs[-1]
-        assert log["old_value"] is not None
-        assert log["new_value"] is not None
-        assert "TODO" in log["old_value"]
-        assert "IN_PROGRESS" in log["new_value"]
+        column_logs = [lg for lg in logs if lg["action"] == "column_changed"]
+        assert len(column_logs) >= 1
+        log = column_logs[-1]
+        import json
+
+        old = json.loads(log["old_value"])
+        new = json.loads(log["new_value"])
+        assert old["column_id"] == seed_data["todo_col"].id
+        assert new["column_id"] == review_col_id
 
 
 @pytest.mark.asyncio

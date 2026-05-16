@@ -229,16 +229,22 @@ async def delete_attachment(
     if link is None:
         raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="No access to project")
 
-    # Only OWNER role can delete
-    if link.role != "OWNER":
+    # Project OWNER, task creator, or attachment uploader can delete
+    is_owner = link.role == "OWNER"
+    is_task_creator = task.creator_id == current_user.id
+    is_uploader = attachment.user_id == current_user.id
+
+    if not (is_owner or is_task_creator or is_uploader):
         raise HTTPException(
             status_code=http_status.HTTP_403_FORBIDDEN,
-            detail="Only project owners can delete attachments",
+            detail="You do not have permission to delete this attachment",
         )
 
     # Remove file from disk
     if os.path.exists(attachment.stored_path):
         os.remove(attachment.stored_path)
+
+    await log_action(db, task.id, current_user.id, "attachment_removed", old_value=attachment.filename)
 
     await db.delete(attachment)
     await db.commit()

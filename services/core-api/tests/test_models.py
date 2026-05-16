@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 
 from app.domain import ProjectRole, TaskStatus, Urgency
 from app.models import Project, Task, User, UserProject
+from app.models.board_column import BoardColumn
 
 
 async def _create_user(session, email="test@example.com", full_name="Test User"):
@@ -76,19 +77,22 @@ class TestTaskModel:
     async def test_create_task(self, db_session):
         user = await _create_user(db_session)
         project = await _create_project(db_session)
+        col = BoardColumn(name="TODO", project_id=project.id, order=0)
+        db_session.add(col)
+        await db_session.flush()
 
         task = Task(
             project_id=project.id,
             creator_id=user.id,
             title="Test task",
-            status=TaskStatus.TODO,
+            column_id=col.id,
             urgency=Urgency.HIGH,
         )
         db_session.add(task)
         await db_session.flush()
 
         assert task.id is not None
-        assert task.status == "TODO"
+        assert task.column_id == col.id
         assert task.urgency == "HIGH"
         assert task.assignee_id is None
 
@@ -96,13 +100,16 @@ class TestTaskModel:
         creator = await _create_user(db_session, email="creator@example.com")
         assignee = await _create_user(db_session, email="assignee@example.com")
         project = await _create_project(db_session)
+        col = BoardColumn(name="TODO", project_id=project.id, order=0)
+        db_session.add(col)
+        await db_session.flush()
 
         task = Task(
             project_id=project.id,
             creator_id=creator.id,
             assignee_id=assignee.id,
             title="Assigned task",
-            status=TaskStatus.IN_PROGRESS,
+            column_id=col.id,
         )
         db_session.add(task)
         await db_session.flush()
@@ -125,8 +132,11 @@ class TestTaskModel:
     async def test_task_project_fk(self, db_session):
         user = await _create_user(db_session)
         project = await _create_project(db_session)
+        col = BoardColumn(name="TODO", project_id=project.id, order=0)
+        db_session.add(col)
+        await db_session.flush()
 
-        task = Task(project_id=project.id, creator_id=user.id, title="FK test")
+        task = Task(project_id=project.id, creator_id=user.id, title="FK test", column_id=col.id)
         db_session.add(task)
         await db_session.flush()
 

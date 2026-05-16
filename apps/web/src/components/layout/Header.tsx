@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import type { Theme } from '@/theme/theme';
 import type { AppView } from './Sidebar';
 import { Avatar } from '@/components/kanban/Avatar';
@@ -33,28 +34,47 @@ interface HeaderProps {
   onToggleDark: () => void;
   members: ProjectMember[];
   onOpenTask?: (taskId: number, section?: 'comments' | 'description') => void;
+  onManageColumns?: () => void;
 }
 
-export function Header({ view, search, setSearch, onAddTask, accent, theme, darkMode, onToggleDark, members, onOpenTask }: HeaderProps) {
+import { useAuthStore } from '@/store/authStore';
+
+export function Header({ view, search, setSearch, onAddTask, accent, theme, darkMode, onToggleDark, members, onOpenTask, onManageColumns }: HeaderProps) {
   const th = theme;
   const titles: Record<AppView, string> = {
     kanban: 'Board', automations: 'Automations', analytics: 'Analytics',
     team: 'Team', settings: 'Settings',
   };
 
+  const { user } = useAuthStore();
   const [darkHover, setDarkHover] = useState(false);
   const [bellOpen,  setBellOpen]  = useState(false);
-  const [allNotifs,   setAllNotifs]   = useState<NotificationItem[]>([]);
-  const [readIds,     setReadIds]     = useState<Set<string>>(new Set());
+  const NOTIF_READ_KEY = `vt_read_notifs_${user?.id || 'default'}`;
+  const [readIds, setReadIds] = useState<Set<string>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(NOTIF_READ_KEY) ?? '[]') as string[]); }
+    catch { return new Set<string>(); }
+  });
   const bellRef = useRef<HTMLButtonElement>(null);
   const dropRef = useRef<HTMLDivElement>(null);
 
-  // Fetch real notifications
+  // Re-initialize when user changes
   useEffect(() => {
-    fetchNotifications().then(setAllNotifs).catch(() => {});
-    const id = setInterval(() => fetchNotifications().then(setAllNotifs).catch(() => {}), 60000);
-    return () => clearInterval(id);
-  }, []);
+    try { setReadIds(new Set(JSON.parse(localStorage.getItem(NOTIF_READ_KEY) ?? '[]') as string[])); }
+    catch { setReadIds(new Set()); }
+  }, [NOTIF_READ_KEY]);
+
+  // Persist read IDs to localStorage
+  useEffect(() => {
+    localStorage.setItem(NOTIF_READ_KEY, JSON.stringify([...readIds]));
+  }, [readIds, NOTIF_READ_KEY]);
+
+  // Fetch notifications via React Query — invalidated by WS events for instant updates
+  const { data: allNotifs = [] } = useQuery<NotificationItem[]>({
+    queryKey: ['notifications'],
+    queryFn: fetchNotifications,
+    refetchInterval: 60_000,
+    staleTime: 10_000,
+  });
 
   // Filter by user's notification preferences
   const prefs = loadNotifPrefs();
@@ -65,7 +85,7 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
   const notifs = allNotifs.filter(n => {
     const enabled = prefs[n.type] ?? defaultEnabled[n.type] ?? true;
     return enabled;
-  });
+  }).slice(0, 20);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -158,7 +178,7 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
       <div style={{ position: 'relative' }}>
         <button
           ref={bellRef}
-          onClick={() => { setBellOpen(o => !o); setReadIds(new Set(notifs.map(n => n.id))); }}
+          onClick={() => { setBellOpen(o => !o); }}
           style={{ ...iconBtn(bellOpen), position: 'relative' }}
         >
           <IcoBell size={18} />
@@ -180,13 +200,13 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
             boxShadow: '0 12px 40px rgba(0,0,0,0.14)',
             zIndex: 200, overflow: 'hidden', maxHeight: 440, display: 'flex', flexDirection: 'column',
           }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px 10px', borderBottom: `1px solid ${th.border}`, flexShrink: 0 }}>
-              <span style={{ fontSize: 13.5, fontWeight: 700, color: th.text }}>Уведомления</span>
-              <button onClick={() => setReadIds(new Set(notifs.map(n => n.id)))} style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 11.5, color: accent, fontWeight: 600, fontFamily: 'inherit' }}>
-                Прочитать все
-              </button>
+            <div style={{ padding: '12px 16px', borderBottom: `1px solid ${th.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: th.text }}>Уведомления</h4>
+              <button onClick={() => setReadIds(new Set(notifs.map(n => n.id)))} style={{
+                background: 'none', border: 'none', color: accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0
+              }}>Прочитать все</button>
             </div>
-            <div style={{ overflowY: 'auto', flex: 1 }}>
+            <div style={{ maxHeight: 380, overflowY: 'auto' }}>
               {notifs.length === 0 ? (
                 <div style={{ padding: '32px 16px', textAlign: 'center', color: th.textMuted, fontSize: 13 }}>
                   Нет уведомлений
@@ -201,7 +221,10 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
                       onClick={() => {
                         setBellOpen(false);
                         setReadIds(prev => new Set([...prev, n.id]));
-                        onOpenTask?.(n.task_id, section);
+                        // Taskless notifications (webhook/automation events) have no task to open
+                        if (n.task_id != null) {
+                          onOpenTask?.(n.task_id, section);
+                        }
                       }}
                       style={{
                         padding: '11px 16px', borderBottom: `1px solid ${th.border}`,
@@ -230,6 +253,23 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
           </div>
         )}
       </div>
+
+      {/* Manage Columns */}
+      {view === 'kanban' && onManageColumns && (
+        <button onClick={onManageColumns} style={{
+          display: 'flex', alignItems: 'center', gap: 6,
+          padding: '8px 12px', borderRadius: 9,
+          background: 'transparent', color: th.textSecondary, border: `1px solid ${th.border}`,
+          cursor: 'pointer', fontSize: 13.5, fontWeight: 600, whiteSpace: 'nowrap',
+          transition: 'background 0.12s',
+          fontFamily: 'inherit',
+        }}
+          onMouseEnter={e => (e.currentTarget.style.background = th.columnBg)}
+          onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+        >
+          Columns
+        </button>
+      )}
 
       {/* New task */}
       <button onClick={onAddTask} style={{

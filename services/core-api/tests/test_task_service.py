@@ -1,14 +1,15 @@
 import pytest
 from fastapi import HTTPException
 
-from app.domain import ProjectRole, TaskStatus, Urgency
+from app.domain import ProjectRole, Urgency
 from app.models import Project, Task, User, UserProject
+from app.models.board_column import BoardColumn
 from app.schemas import TaskCreate, TaskUpdate
 from app.services import task_service
 
 
 async def _setup_project_data(session):
-    """Create users, project, and membership for service-level tests."""
+    """Create users, project, membership, and a default column for service-level tests."""
     owner = User(full_name="Owner", email="owner@svc.com")
     assignee = User(full_name="Assignee", email="assignee@svc.com")
     session.add_all([owner, assignee])
@@ -23,19 +24,23 @@ async def _setup_project_data(session):
     session.add_all([owner_link, assignee_link])
     await session.flush()
 
-    return owner, assignee, project, owner_link, assignee_link
+    col = BoardColumn(name="TODO", project_id=project.id, order=0)
+    session.add(col)
+    await session.flush()
+
+    return owner, assignee, project, owner_link, assignee_link, col
 
 
 class TestListTasks:
     async def test_list_tasks_returns_all_for_project(self, db_session):
-        owner, assignee, project, _, _ = await _setup_project_data(db_session)
+        owner, assignee, project, _, _, col = await _setup_project_data(db_session)
 
         t1 = Task(
             project_id=project.id,
             creator_id=owner.id,
             assignee_id=assignee.id,
             title="Task A",
-            status=TaskStatus.TODO,
+            column_id=col.id,
             urgency=Urgency.LOW,
         )
         t2 = Task(
@@ -43,7 +48,7 @@ class TestListTasks:
             creator_id=owner.id,
             assignee_id=owner.id,
             title="Task B",
-            status=TaskStatus.IN_PROGRESS,
+            column_id=col.id,
             urgency=Urgency.HIGH,
         )
         db_session.add_all([t1, t2])
@@ -55,14 +60,14 @@ class TestListTasks:
         assert titles == {"Task A", "Task B"}
 
     async def test_list_tasks_filters_by_assignee(self, db_session):
-        owner, assignee, project, _, _ = await _setup_project_data(db_session)
+        owner, assignee, project, _, _, col = await _setup_project_data(db_session)
 
         t1 = Task(
             project_id=project.id,
             creator_id=owner.id,
             assignee_id=assignee.id,
             title="Assigned",
-            status=TaskStatus.TODO,
+            column_id=col.id,
             urgency=Urgency.LOW,
         )
         t2 = Task(
@@ -70,7 +75,7 @@ class TestListTasks:
             creator_id=owner.id,
             assignee_id=owner.id,
             title="Owner task",
-            status=TaskStatus.TODO,
+            column_id=col.id,
             urgency=Urgency.LOW,
         )
         db_session.add_all([t1, t2])
@@ -89,13 +94,13 @@ class TestGetTask:
 
 class TestCreateTask:
     async def test_create_task_sets_defaults(self, db_session):
-        owner, _, project, _, _ = await _setup_project_data(db_session)
+        owner, _, project, _, _, col = await _setup_project_data(db_session)
 
         data = TaskCreate(title="Default task")
         task = await task_service.create_task(db_session, project.id, owner.id, data)
 
         assert task.title == "Default task"
-        assert task.status == TaskStatus.TODO
+        assert task.column_id == col.id
         assert task.urgency == Urgency.MEDIUM
         assert task.assignee_id is None
         assert task.description is None
@@ -103,56 +108,91 @@ class TestCreateTask:
         assert task.creator_id == owner.id
 
 
-class TestChangeStatus:
-    async def test_change_status_invalid_transition(self, db_session):
-        owner, _, project, owner_link, _ = await _setup_project_data(db_session)
+class TestChangeColumn:
+    async def test_change_column_owner_succeeds(self, db_session):
+        owner, _, project, owner_link, _, col = await _setup_project_data(db_session)
+        col2 = BoardColumn(name="IN_PROGRESS", project_id=project.id, order=1)
+        db_session.add(col2)
+        await db_session.flush()
 
         task = Task(
             project_id=project.id,
             creator_id=owner.id,
-            title="Todo task",
-            status=TaskStatus.TODO,
+            title="Task",
+            column_id=col.id,
+            urgency=Urgency.MEDIUM,
+        )
+        db_session.add(task)
+        await db_session.flush()
+
+        result = await task_service.change_column(db_session, task.id, col2.id, owner_link)
+        assert result.column_id == col2.id
+
+    async def test_assignee_cannot_move_unassigned_task(self, db_session):
+        owner, assignee, project, owner_link, assignee_link, col = await _setup_project_data(db_session)
+        col2 = BoardColumn(name="DONE", project_id=project.id, order=1)
+        db_session.add(col2)
+        await db_session.flush()
+
+        task = Task(
+            project_id=project.id,
+            creator_id=owner.id,
+            assignee_id=owner.id,
+            title="Owner's task",
+            column_id=col.id,
             urgency=Urgency.MEDIUM,
         )
         db_session.add(task)
         await db_session.flush()
 
         with pytest.raises(HTTPException) as exc_info:
-            await task_service.change_status(db_session, task.id, TaskStatus.DONE, owner_link)
-        assert exc_info.value.status_code == 422
-
-
-class TestApproveDraft:
-    async def test_approve_draft_non_owner_raises(self, db_session):
-        _, _, project, _, assignee_link = await _setup_project_data(db_session)
-
-        with pytest.raises(HTTPException) as exc_info:
-            await task_service.approve_draft(db_session, 1, assignee_link)
+            await task_service.change_column(db_session, task.id, col2.id, assignee_link)
         assert exc_info.value.status_code == 403
 
-
-class TestDiscardDraft:
-    async def test_discard_draft_non_draft_raises(self, db_session):
-        owner, _, project, owner_link, _ = await _setup_project_data(db_session)
+    async def test_assignee_can_move_own_task(self, db_session):
+        owner, assignee, project, owner_link, assignee_link, col = await _setup_project_data(db_session)
+        col2 = BoardColumn(name="IN_PROGRESS", project_id=project.id, order=1)
+        db_session.add(col2)
+        await db_session.flush()
 
         task = Task(
             project_id=project.id,
             creator_id=owner.id,
-            title="Todo task",
-            status=TaskStatus.TODO,
+            assignee_id=assignee.id,
+            title="Assignee task",
+            column_id=col.id,
             urgency=Urgency.MEDIUM,
         )
         db_session.add(task)
         await db_session.flush()
 
-        with pytest.raises(HTTPException) as exc_info:
-            await task_service.discard_draft(db_session, task.id, owner_link)
-        assert exc_info.value.status_code == 422
+        result = await task_service.change_column(db_session, task.id, col2.id, assignee_link)
+        assert result.column_id == col2.id
+
+
+class TestSoftDelete:
+    async def test_soft_deleted_task_not_visible(self, db_session):
+        owner, _, project, owner_link, _, col = await _setup_project_data(db_session)
+
+        task = Task(
+            project_id=project.id,
+            creator_id=owner.id,
+            title="To delete",
+            column_id=col.id,
+            urgency=Urgency.MEDIUM,
+        )
+        db_session.add(task)
+        await db_session.flush()
+        task_id = task.id
+
+        await task_service.delete_task(db_session, task_id, owner_link)
+        result = await task_service.get_task(db_session, task_id)
+        assert result is None
 
 
 class TestUpdateTask:
     async def test_update_task_not_found_raises(self, db_session):
-        _, _, project, owner_link, _ = await _setup_project_data(db_session)
+        _, _, project, owner_link, _, col = await _setup_project_data(db_session)
 
         data = TaskUpdate(title="Nope")
         with pytest.raises(HTTPException) as exc_info:
@@ -160,7 +200,7 @@ class TestUpdateTask:
         assert exc_info.value.status_code == 404
 
     async def test_update_task_partial_update(self, db_session):
-        owner, _, project, owner_link, _ = await _setup_project_data(db_session)
+        owner, _, project, owner_link, _, col = await _setup_project_data(db_session)
 
         data = TaskCreate(title="Original", description="Original desc", urgency=Urgency.LOW)
         task = await task_service.create_task(db_session, project.id, owner.id, data)
@@ -173,14 +213,14 @@ class TestUpdateTask:
         assert updated.urgency == Urgency.LOW
 
     async def test_assignee_cannot_reassign(self, db_session):
-        owner, assignee, project, _, assignee_link = await _setup_project_data(db_session)
+        owner, assignee, project, _, assignee_link, col = await _setup_project_data(db_session)
 
         task = Task(
             project_id=project.id,
             creator_id=owner.id,
             assignee_id=assignee.id,
             title="Assigned task",
-            status=TaskStatus.TODO,
+            column_id=col.id,
             urgency=Urgency.MEDIUM,
         )
         db_session.add(task)
@@ -192,50 +232,15 @@ class TestUpdateTask:
         assert exc_info.value.status_code == 403
 
 
-class TestChangeStatusExtended:
-    async def test_change_status_valid_transition(self, db_session):
-        owner, _, project, owner_link, _ = await _setup_project_data(db_session)
-
-        task = Task(
-            project_id=project.id,
-            creator_id=owner.id,
-            title="Valid transition",
-            status=TaskStatus.TODO,
-            urgency=Urgency.MEDIUM,
-        )
-        db_session.add(task)
-        await db_session.flush()
-
-        result = await task_service.change_status(db_session, task.id, TaskStatus.IN_PROGRESS, owner_link)
-        assert result.status == TaskStatus.IN_PROGRESS
-
-    async def test_change_status_invalid_transition_todo_to_done(self, db_session):
-        owner, _, project, owner_link, _ = await _setup_project_data(db_session)
-
-        task = Task(
-            project_id=project.id,
-            creator_id=owner.id,
-            title="Invalid transition",
-            status=TaskStatus.TODO,
-            urgency=Urgency.MEDIUM,
-        )
-        db_session.add(task)
-        await db_session.flush()
-
-        with pytest.raises(HTTPException) as exc_info:
-            await task_service.change_status(db_session, task.id, TaskStatus.DONE, owner_link)
-        assert exc_info.value.status_code == 422
-
-
 class TestDeleteTask:
     async def test_delete_task_owner_only(self, db_session):
-        owner, assignee, project, _, assignee_link = await _setup_project_data(db_session)
+        owner, assignee, project, _, assignee_link, col = await _setup_project_data(db_session)
 
         task = Task(
             project_id=project.id,
             creator_id=owner.id,
             title="Delete me",
-            status=TaskStatus.TODO,
+            column_id=col.id,
             urgency=Urgency.MEDIUM,
         )
         db_session.add(task)
@@ -246,13 +251,13 @@ class TestDeleteTask:
         assert exc_info.value.status_code == 403
 
     async def test_delete_task_by_owner_succeeds(self, db_session):
-        owner, _, project, owner_link, _ = await _setup_project_data(db_session)
+        owner, _, project, owner_link, _, col = await _setup_project_data(db_session)
 
         task = Task(
             project_id=project.id,
             creator_id=owner.id,
             title="Owner deletes",
-            status=TaskStatus.TODO,
+            column_id=col.id,
             urgency=Urgency.MEDIUM,
         )
         db_session.add(task)

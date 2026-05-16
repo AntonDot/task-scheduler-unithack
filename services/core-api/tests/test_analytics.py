@@ -2,7 +2,7 @@ from datetime import UTC, datetime, timedelta
 
 import pytest
 
-from app.domain import TaskStatus, Urgency
+from app.domain import Urgency
 from app.models import Task
 
 
@@ -23,7 +23,7 @@ class TestAnalyticsBasic:
         assert data["total_tasks"] == 3  # seed_data has 3 tasks
 
     async def test_analytics_by_status_breakdown(self, client, seed_data, get_token):
-        """Analytics should return correct status breakdown."""
+        """Analytics should return correct column-based breakdown."""
         pid = seed_data["project"].id
         manager = seed_data["manager"]
         token = get_token(manager.id)
@@ -35,9 +35,8 @@ class TestAnalyticsBasic:
         assert resp.status_code == 200
         data = resp.json()
         by_status = data["by_status"]
-        # seed_data: AI_DRAFT=1, TODO=1, REVIEW=1
-        assert by_status.get("AI_DRAFT", 0) == 1
-        assert by_status.get("TODO", 0) == 1
+        # seed_data: draft_task and todo_task → TODO column, review_task → REVIEW column
+        assert by_status.get("TODO", 0) == 2
         assert by_status.get("REVIEW", 0) == 1
 
     async def test_analytics_by_urgency_breakdown(self, client, seed_data, get_token):
@@ -68,14 +67,16 @@ class TestAnalyticsOverdue:
         specialist = seed_data["specialist"]
         token = get_token(manager.id)
 
-        # Add tasks with past deadlines (not DONE status)
+        # Add tasks with past deadlines (not in the last/done column)
+        todo_col_id = seed_data["todo_col"].id
+        review_col_id = seed_data["review_col"].id  # last column = "done" equivalent
         async with session_factory() as session:  # type: AsyncSession
             overdue1 = Task(
                 project_id=pid,
                 creator_id=manager.id,
                 assignee_id=specialist.id,
                 title="Overdue Task 1",
-                status=TaskStatus.TODO,
+                column_id=todo_col_id,
                 urgency=Urgency.HIGH,
                 deadline=datetime.now(UTC) - timedelta(days=5),
             )
@@ -84,17 +85,17 @@ class TestAnalyticsOverdue:
                 creator_id=manager.id,
                 assignee_id=specialist.id,
                 title="Overdue Task 2",
-                status=TaskStatus.IN_PROGRESS,
+                column_id=todo_col_id,
                 urgency=Urgency.URGENT,
                 deadline=datetime.now(UTC) - timedelta(days=2),
             )
-            # This task is DONE so should NOT be counted as overdue
+            # This task is in the last column so should NOT be counted as overdue
             done_past = Task(
                 project_id=pid,
                 creator_id=manager.id,
                 assignee_id=specialist.id,
                 title="Done Past Deadline",
-                status=TaskStatus.DONE,
+                column_id=review_col_id,
                 urgency=Urgency.MEDIUM,
                 deadline=datetime.now(UTC) - timedelta(days=10),
             )

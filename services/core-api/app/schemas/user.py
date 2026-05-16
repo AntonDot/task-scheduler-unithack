@@ -9,6 +9,10 @@ class UserRead(BaseModel):
     email: str
     is_active: bool
     created_at: datetime
+    accent_color: str | None = None
+    is_dark: bool = False
+    last_notifications_read_at: datetime | None = None
+    avatar_data: str | None = None
 
     model_config = {"from_attributes": True}
 
@@ -23,5 +27,6 @@ class ProjectMemberRead(BaseModel):
     full_name: str
     email: str
     role: str
+    avatar_data: str | None = None
 
     model_config = {"from_attributes": True}

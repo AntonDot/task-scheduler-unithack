@@ -1,5 +1,3 @@
-from unittest.mock import AsyncMock, patch
-
 import pytest
 
 from app.config import settings
@@ -38,7 +36,7 @@ class TestProjects:
     async def test_create_task_by_slug_with_service_token(self, client, seed_data):
         resp = await client.post(
             "/api/v1/projects/by-slug/test-proj/tasks",
-            json={"title": "Webhook incident", "status": "TODO", "urgency": "URGENT"},
+            json={"title": "Webhook incident", "urgency": "URGENT"},
             headers={"Authorization": f"Bearer {settings.service_token}"},
         )
         assert resp.status_code == 201
@@ -188,58 +186,72 @@ class TestTasksCRUD:
 
 
 @pytest.mark.asyncio
-class TestStatusTransitions:
-    async def test_valid_transition(self, client, seed_data, get_token):
+class TestColumnTransitions:
+    async def test_valid_column_move(self, client, seed_data, get_token):
         tid = seed_data["todo_task"].id
+        review_col_id = seed_data["review_col"].id
         resp = await client.patch(
-            f"/api/v1/tasks/{tid}/status",
-            json={"status": "IN_PROGRESS"},
+            f"/api/v1/tasks/{tid}/column",
+            json={"column_id": review_col_id},
             headers={"Authorization": f"Bearer {get_token(seed_data['specialist'].id)}"},
         )
         assert resp.status_code == 200
-        assert resp.json()["status"] == "IN_PROGRESS"
+        assert resp.json()["column_id"] == review_col_id
 
-    async def test_invalid_status_transition_from_todo_to_done(self, client, seed_data, get_token):
-        tid = seed_data["todo_task"].id
-        resp = await client.patch(
-            f"/api/v1/tasks/{tid}/status",
-            json={"status": "DONE"},
+    async def test_assignee_cannot_move_unassigned_task(self, client, seed_data, get_token):
+        pid = seed_data["project"].id
+        review_col_id = seed_data["review_col"].id
+        # Create a task assigned to manager, not specialist
+        resp_create = await client.post(
+            f"/api/v1/projects/{pid}/tasks",
+            json={"title": "Manager-only task", "urgency": "LOW", "assignee_id": seed_data["manager"].id},
             headers={"Authorization": f"Bearer {get_token(seed_data['manager'].id)}"},
         )
-        assert resp.status_code == 422
+        assert resp_create.status_code == 201
+        new_tid = resp_create.json()["id"]
 
-    async def test_assignee_cannot_move_to_done(self, client, seed_data, get_token):
-        tid = seed_data["review_task"].id
         resp = await client.patch(
-            f"/api/v1/tasks/{tid}/status",
-            json={"status": "DONE"},
+            f"/api/v1/tasks/{new_tid}/column",
+            json={"column_id": review_col_id},
             headers={"Authorization": f"Bearer {get_token(seed_data['specialist'].id)}"},
         )
         assert resp.status_code == 403
 
-
-@pytest.mark.asyncio
-class TestApprove:
-    async def test_approve_by_owner(self, client, seed_data, get_token):
-        tid = seed_data["draft_task"].id
-        resp = await client.post(
-            f"/api/v1/tasks/{tid}/approve",
+    async def test_owner_can_move_any_task(self, client, seed_data, get_token):
+        tid = seed_data["review_task"].id
+        todo_col_id = seed_data["todo_col"].id
+        resp = await client.patch(
+            f"/api/v1/tasks/{tid}/column",
+            json={"column_id": todo_col_id},
             headers={"Authorization": f"Bearer {get_token(seed_data['manager'].id)}"},
         )
         assert resp.status_code == 200
-        assert resp.json()["status"] == "TODO"
+        assert resp.json()["column_id"] == todo_col_id
 
 
 @pytest.mark.asyncio
-class TestDiscard:
-    async def test_owner_can_discard_ai_draft(self, client, seed_data, get_token):
+class TestTaskDefaultColumn:
+    async def test_task_created_in_first_column(self, client, seed_data, get_token):
+        pid = seed_data["project"].id
+        todo_col_id = seed_data["todo_col"].id
+        resp = await client.post(
+            f"/api/v1/projects/{pid}/tasks",
+            json={"title": "Default column task", "urgency": "MEDIUM"},
+            headers={"Authorization": f"Bearer {get_token(seed_data['manager'].id)}"},
+        )
+        assert resp.status_code == 201
+        assert resp.json()["column_id"] == todo_col_id
+
+
+@pytest.mark.asyncio
+class TestDeleteTask:
+    async def test_owner_can_delete_task(self, client, seed_data, get_token):
         tid = seed_data["draft_task"].id
-        with patch("app.api.v1.tasks.ws_manager.broadcast", new_callable=AsyncMock):
-            resp = await client.delete(
-                f"/api/v1/tasks/{tid}",
-                headers={"Authorization": f"Bearer {get_token(seed_data['manager'].id)}"},
-            )
-            assert resp.status_code == 204
+        resp = await client.delete(
+            f"/api/v1/tasks/{tid}",
+            headers={"Authorization": f"Bearer {get_token(seed_data['manager'].id)}"},
+        )
+        assert resp.status_code == 204
 
     async def test_owner_can_delete_any_task(self, client, seed_data, get_token):
         tid = seed_data["todo_task"].id
@@ -249,8 +261,8 @@ class TestDiscard:
         )
         assert resp.status_code == 204
 
-    async def test_assignee_cannot_discard(self, client, seed_data, get_token):
-        tid = seed_data["draft_task"].id
+    async def test_assignee_cannot_delete(self, client, seed_data, get_token):
+        tid = seed_data["review_task"].id
         resp = await client.delete(
             f"/api/v1/tasks/{tid}",
             headers={"Authorization": f"Bearer {get_token(seed_data['specialist'].id)}"},

@@ -1,44 +1,52 @@
 import { useState, useEffect, useRef } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import type { Task } from '@/types/domain';
-import type { Theme, DesignColumn } from '@/theme/theme';
-import { getUrgencyMap, COLUMNS_DEF, apiUrgencyToDesign, statusToColumn, columnToStatus } from '@/theme/theme';
+import type { Theme } from '@/theme/theme';
+import { getUrgencyMap, apiUrgencyToDesign } from '@/theme/theme';
 import { BlockEditor } from '@/components/editor/BlockEditor';
 import { DatePicker } from '@/components/ui/DatePicker';
 import { Avatar } from './Avatar';
 import { IcoX } from '@/components/ui/Icons';
 import type { ProjectMember } from '@/api/members';
-import { fetchTask, updateTask, changeStatus } from '@/api/tasks';
+import { fetchTask, updateTask, changeColumn, deleteTask } from '@/api/tasks';
 import { fetchComments, addComment } from '@/api/comments';
 import { fetchAuditLogs } from '@/api/audit';
 import type { Comment } from '@/api/comments';
 import type { AuditLog } from '@/api/audit';
-import type { TaskStatus } from '@/types/domain';
+import type { BoardColumn } from '@/types/domain';
 import { useAuthStore } from '@/store/authStore';
 import { fetchAttachments, uploadAttachment, deleteAttachment, getDownloadUrl, type Attachment } from '@/api/attachments';
+import { fetchProjectTags, createTag, deleteTag } from '@/api/tags';
+import type { Tag } from '@/types/domain';
+import { formatRelativeCreationDate } from '@/theme/theme';
+import { TagsSection } from '@/components/tags/TagsSection';
 
 interface TaskDrawerProps {
   task: Task | null;
   open: boolean;
   onClose: () => void;
   onUpdate: (updated: Task) => void;
+  onDelete?: (taskId: number) => void;
   members: ProjectMember[];
+  columns: BoardColumn[];
   accentColor: string;
   theme: Theme;
   scrollToSection?: 'comments' | 'description';
 }
 
-export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor, theme, scrollToSection }: TaskDrawerProps) {
+export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, columns, accentColor, theme, scrollToSection }: TaskDrawerProps) {
   const [localTask, setLocalTask] = useState<Task | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openTaskIdRef = useRef<number | null>(null);
   const currentTaskIdRef = useRef<number | null>(null);
   const acc = accentColor;
-  const th  = theme;
+  const th = theme;
   const { user, projectRoles } = useAuthStore();
+  const queryClient = useQueryClient();
 
   // Scroll refs for notification deep-linking
-  const descriptionRef   = useRef<HTMLDivElement>(null);
-  const commentsRef      = useRef<HTMLDivElement>(null);
+  const descriptionRef = useRef<HTMLDivElement>(null);
+  const commentsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!open || !scrollToSection) return;
@@ -50,7 +58,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   }, [open, scrollToSection]);
 
   // Activity state
-  const [comments,  setComments]  = useState<Comment[]>([]);
+  const [comments, setComments] = useState<Comment[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
   const [commentText, setCommentText] = useState('');
   const [sendingComment, setSendingComment] = useState(false);
@@ -59,11 +67,14 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   // Attachment state
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [uploadingFile, setUploadingFile] = useState(false);
+  const [fileDragOver, setFileDragOver] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const [projectTags, setProjectTags] = useState<Tag[]>([]);
 
   // Mention state
   const [mentionQuery, setMentionQuery] = useState<string | null>(null);
-  const [mentionIdx, setMentionIdx]     = useState(0);
+  const [mentionIdx, setMentionIdx] = useState(0);
   const commentInputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -77,26 +88,34 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   }, [task?.id]);
 
   useEffect(() => {
-    if (!task || !open) return;
+    if (!open || !task) return;
     const id = task.id;
     openTaskIdRef.current = id;
-    fetchTask(id).then(t   => { if (openTaskIdRef.current === id) setLocalTask(t); }).catch(() => {});
-    fetchComments(id).then(cs => { if (openTaskIdRef.current === id) setComments(cs); }).catch(() => {});
-    fetchAuditLogs(id).then(ls => { if (openTaskIdRef.current === id) setAuditLogs(ls); }).catch(() => {});
-    fetchAttachments(id).then(as => { if (openTaskIdRef.current === id) setAttachments(as); }).catch(() => {});
+    fetchTask(id).then(t => { if (openTaskIdRef.current === id) setLocalTask(t); }).catch(() => { });
+    fetchComments(id).then(cs => { if (openTaskIdRef.current === id) setComments(cs); }).catch(() => { });
+    fetchAuditLogs(id).then(ls => { if (openTaskIdRef.current === id) setAuditLogs(ls); }).catch(() => { });
+    fetchAttachments(id).then(as => { if (openTaskIdRef.current === id) setAttachments(as); }).catch(() => { });
   }, [task?.id, open]);
+
+  useEffect(() => {
+    if (task?.project_id && open) {
+      fetchProjectTags(task.project_id).then(setProjectTags).catch(() => { });
+    }
+  }, [task?.project_id, open]);
 
   if (!task) return null;
   const display = localTask || task;
 
-  const urgKey  = apiUrgencyToDesign(display.urgency);
-  const col     = statusToColumn(display.status);
-  const urgMap  = getUrgencyMap(th.dark);
+  const urgKey = apiUrgencyToDesign(display.urgency);
+  const col = display.column_id;
+  const urgMap = getUrgencyMap(th.dark);
 
   const role = display.project_id ? projectRoles[display.project_id] : undefined;
   const isLead = role === 'OWNER';
+  const isCreator = display.creator_id === user?.id;
   const isAssignee = display.assignee_id === user?.id || display.co_assignees?.some(c => c.id === user?.id);
-  const canEdit = isLead || isAssignee;
+  const canEdit = isLead || isAssignee || isCreator;
+  const canEditTags = isLead || isCreator || isAssignee;
   const readonly = !canEdit;
 
   function patch(changes: Partial<Task>) {
@@ -106,10 +125,28 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
     onUpdate(updated);
   }
 
-  function handleStatusChange(column: DesignColumn) {
+  async function handleDelete() {
+    if (!isLead && !isCreator) return;
+    if (!confirm('Delete this task permanently?')) return;
+    await deleteTask(display.id);
+    onDelete?.(display.id);
+    onClose();
+  }
+
+  function handleColumnChange(columnId: number) {
     if (readonly) return;
-    const newStatus = columnToStatus(column) as TaskStatus;
-    changeStatus(display.id, newStatus).then(updated => {
+    changeColumn(display.id, columnId).then(updated => {
+      setLocalTask(updated);
+      onUpdate(updated);
+    });
+  }
+
+  function handleUrgencyChange(urgency: Task['urgency']) {
+    if (readonly) return;
+    // Optimistic update
+    patch({ urgency });
+    // Persist to server so it survives column changes and page refreshes
+    updateTask(display.id, { urgency }).then(updated => {
       setLocalTask(updated);
       onUpdate(updated);
     });
@@ -130,20 +167,43 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
     setLocalTask(prev => prev ? { ...prev, description: text } : prev);
   }
 
-  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement> | File) {
+    const isEvent = 'target' in e;
+    const file = isEvent ? (e as React.ChangeEvent<HTMLInputElement>).target.files?.[0] : (e as File);
     if (!file || !display) return;
-    e.target.value = '';
+    if (isEvent) (e as React.ChangeEvent<HTMLInputElement>).target.value = '';
     setUploadingFile(true);
     try {
       const att = await uploadAttachment(display.id, file);
       setAttachments(prev => [...prev, att]);
-    } catch {}
+    } catch { }
     finally { setUploadingFile(false); }
   }
 
+  function handleFileDrop(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileDragOver(false);
+    const droppedFile = e.dataTransfer.files?.[0];
+    if (droppedFile) {
+      handleFileUpload(droppedFile);
+    }
+  }
+
+  function handleFileDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileDragOver(true);
+  }
+
+  function handleFileDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setFileDragOver(false);
+  }
+
   async function handleDeleteAttachment(attId: number) {
-    await deleteAttachment(attId).catch(() => {});
+    await deleteAttachment(attId).catch(() => { });
     setAttachments(prev => prev.filter(a => a.id !== attId));
   }
 
@@ -170,11 +230,11 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
 
   function handleAssigneeClick(memberId: number) {
     if (readonly) return;
-    const primaryId   = display.assignee_id;
-    const coIds       = (display.co_assignees ?? []).map(u => u.id);
-    const isPrimary   = primaryId === memberId;
-    const isCo        = coIds.includes(memberId);
-    const isSelected  = isPrimary || isCo;
+    const primaryId = display.assignee_id;
+    const coIds = (display.co_assignees ?? []).map(u => u.id);
+    const isPrimary = primaryId === memberId;
+    const isCo = coIds.includes(memberId);
+    const isSelected = isPrimary || isCo;
 
     let newPrimaryId: number | null = primaryId;
     let newCoIds: number[] = coIds;
@@ -203,6 +263,65 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
     });
   }
 
+  function handleTagClick(tag: Tag) {
+    if (!canEditTags) return;
+    const currentTags = display.tags ?? [];
+    const hasTag = currentTags.some(t => t.id === tag.id);
+    let newTags: Tag[];
+    if (hasTag) {
+      newTags = currentTags.filter(t => t.id !== tag.id);
+    } else {
+      newTags = [...currentTags, tag];
+    }
+
+    // Optimistic update
+    const updatedWithTags = { ...display, tags: newTags };
+    setLocalTask(updatedWithTags);
+    onUpdate(updatedWithTags);
+
+    updateTask(display.id, { tag_ids: newTags.map(t => t.id) }).then(updated => {
+      setLocalTask(updated);
+      onUpdate(updated);
+    });
+  }
+
+  async function handleDeleteTag(tagId: number) {
+    if (!isLead) return;
+    try {
+      await deleteTag(tagId);
+      setProjectTags(prev => prev.filter(t => t.id !== tagId));
+
+      // Update current task
+      if ((display.tags ?? []).some(t => t.id === tagId)) {
+        const newTags = (display.tags ?? []).filter(t => t.id !== tagId);
+        const updated = { ...display, tags: newTags };
+        setLocalTask(updated);
+        onUpdate(updated);
+      }
+
+      // Update all tasks in query cache
+      if (display.project_id) {
+        queryClient.setQueryData<Task[]>(['tasks', display.project_id], old =>
+          (old ?? []).map(t => ({
+            ...t,
+            tags: (t.tags ?? []).filter(tag => tag.id !== tagId),
+          }))
+        );
+      }
+    } catch { }
+  }
+
+  async function handleCreateTag(name: string, color: string): Promise<Tag | null> {
+    if (!isLead || !display.project_id) return null;
+    try {
+      const tag = await createTag(display.project_id, { name, color });
+      setProjectTags(prev => [...prev, tag]);
+      return tag;
+    } catch {
+      return null;
+    }
+  }
+
   async function handleSendComment() {
     if (!commentText.trim()) return;
     setSendingComment(true);
@@ -224,7 +343,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
   const timeline: ActivityItem[] = [
     ...comments.map(c => ({ kind: 'comment' as const, ts: new Date(c.created_at).getTime(), data: c })),
     ...auditLogs
-      .filter(l => l.action !== 'comment_added' && l.action !== 'attachment_added')
+      .filter(l => l.action !== 'comment_added')
       .map(l => ({ kind: 'log' as const, ts: new Date(l.created_at).getTime(), data: l })),
   ].sort((a, b) => a.ts - b.ts);
 
@@ -239,11 +358,13 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
       updated: 'обновил задачу',
       status_changed: 'изменил статус',
       deleted: 'удалил задачу',
+      attachment_added: 'прикрепил файл',
+      attachment_removed: 'удалил файл',
     };
     return map[action] ?? action;
   }
 
-  const projectBg    = display.project?.color ? display.project.color + '20' : '#EEF2FF';
+  const projectBg = display.project?.color ? display.project.color + '20' : '#EEF2FF';
   const projectColor = display.project?.color || '#4338CA';
 
   const metaLabelStyle: React.CSSProperties = {
@@ -286,16 +407,19 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
                 {display.title}
               </h2>
             </div>
-            <button onClick={onClose} style={{
-              background: 'none', border: 'none', cursor: 'pointer',
-              color: th.textMuted, padding: 4, borderRadius: 6, display: 'flex',
-              transition: 'color 0.1s, background 0.1s',
-            }}
-              onMouseEnter={e => { e.currentTarget.style.color = th.text; e.currentTarget.style.background = th.columnBg; }}
-              onMouseLeave={e => { e.currentTarget.style.color = th.textMuted; e.currentTarget.style.background = 'none'; }}
-            >
-              <IcoX size={20} />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+
+              <button onClick={onClose} style={{
+                background: 'none', border: 'none', cursor: 'pointer',
+                color: th.textMuted, padding: 4, borderRadius: 6, display: 'flex',
+                transition: 'color 0.1s, background 0.1s',
+              }}
+                onMouseEnter={e => { e.currentTarget.style.color = th.text; e.currentTarget.style.background = th.columnBg; }}
+                onMouseLeave={e => { e.currentTarget.style.color = th.textMuted; e.currentTarget.style.background = 'none'; }}
+              >
+                <IcoX size={20} />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -307,8 +431,8 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
             <div style={{ ...metaRowStyle, borderBottom: `1px solid ${th.border}` }}>
               <span style={metaLabelStyle}>Status</span>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                {COLUMNS_DEF.map(c => (
-                  <button key={c.id} onClick={() => handleStatusChange(c.id)} style={{
+                {columns.map(c => (
+                  <button key={c.id} onClick={() => handleColumnChange(c.id)} style={{
                     padding: '3px 10px', borderRadius: 6, border: 'none', cursor: readonly ? 'default' : 'pointer',
                     fontFamily: 'inherit', fontSize: 11.5, fontWeight: 600,
                     background: col === c.id ? acc + '18' : 'transparent',
@@ -316,7 +440,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
                     outline: col === c.id ? `1.5px solid ${acc}` : 'none',
                     transition: 'all 0.12s',
                   }}>
-                    {c.label}
+                    {c.name}
                   </button>
                 ))}
               </div>
@@ -326,7 +450,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
               <span style={metaLabelStyle}>Urgency</span>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {Object.entries(urgMap).map(([key, u]) => (
-                  <button key={key} onClick={() => patch({ urgency: key.toUpperCase() as Task['urgency'] })} style={{
+                  <button key={key} onClick={() => handleUrgencyChange(key.toUpperCase() as Task['urgency'])} style={{
                     padding: '3px 10px', borderRadius: 6, border: 'none', cursor: readonly ? 'default' : 'pointer',
                     fontFamily: 'inherit', fontSize: 11, fontWeight: 600,
                     background: urgKey === key ? u.bg : 'transparent',
@@ -351,7 +475,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
                       outline: selected ? `2px solid ${acc}` : '2px solid transparent',
                       outlineOffset: 2, transition: 'outline 0.1s', opacity: selected ? 1 : 0.45,
                     }}>
-                      <Avatar user={{ id: m.id, full_name: m.full_name }} size={26} />
+                      <Avatar user={{ id: m.id, full_name: m.full_name, avatar_data: m.avatar_data }} size={26} />
                     </button>
                   );
                 })}
@@ -373,6 +497,13 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
                 readonly={readonly}
               />
             </div>
+            {/* Created At */}
+            <div style={{ ...metaRowStyle, borderBottom: `1px solid ${th.border}` }}>
+              <span style={metaLabelStyle}>Created</span>
+              <span style={{ fontSize: 12, color: th.textMuted }}>
+                {formatRelativeCreationDate(display.created_at)}
+              </span>
+            </div>
             {/* Project */}
             <div style={metaRowStyle}>
               <span style={metaLabelStyle}>Project</span>
@@ -383,6 +514,18 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
               )}
             </div>
           </div>
+
+          <TagsSection
+            projectTags={projectTags}
+            selectedTags={display.tags ?? []}
+            isLead={isLead}
+            canEditTags={!!canEditTags}
+            onToggleTag={handleTagClick}
+            onCreateTag={handleCreateTag}
+            onDeleteTag={handleDeleteTag}
+            theme={th}
+            accent={acc}
+          />
 
           {/* Description */}
           <div ref={descriptionRef} style={{ marginBottom: 24 }}>
@@ -401,7 +544,11 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
           </div>
 
           {/* Attachments */}
-          <div style={{ marginBottom: 24 }}>
+          <div style={{ marginBottom: 24 }}
+            onDrop={readonly ? undefined : handleFileDrop}
+            onDragOver={readonly ? undefined : handleFileDragOver}
+            onDragLeave={readonly ? undefined : handleFileDragLeave}
+          >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
                 Attachments {attachments.length > 0 && `(${attachments.length})`}
@@ -424,7 +571,17 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
               )}
             </div>
             {attachments.length > 0 && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, position: 'relative' }}>
+                {fileDragOver && !readonly && (
+                  <div style={{
+                    position: 'absolute', inset: 0, zIndex: 10,
+                    background: th.columnBg, opacity: 0.9, borderRadius: 9,
+                    border: `2px dashed ${acc}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    color: acc, fontWeight: 600, fontSize: 13, pointerEvents: 'none'
+                  }}>
+                    Drop to attach file
+                  </div>
+                )}
                 {attachments.map(att => {
                   const isImg = att.content_type.startsWith('image/');
                   const sizeKb = Math.round(att.size_bytes / 1024);
@@ -441,7 +598,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
                       }}>
                         {isImg
                           ? <img src={getDownloadUrl(att.id) + `?token=${localStorage.getItem('token') ?? ''}`}
-                              alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                           : att.filename.split('.').pop()?.toUpperCase().slice(0, 3) ?? 'FILE'
                         }
                       </div>
@@ -477,11 +634,13 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
               <div
                 onClick={() => fileInputRef.current?.click()}
                 style={{
-                  padding: '14px', borderRadius: 9, border: `1.5px dashed ${th.border}`,
-                  textAlign: 'center', cursor: 'pointer', color: th.textMuted, fontSize: 12.5,
+                  padding: '14px', borderRadius: 9, border: `1.5px dashed ${fileDragOver ? acc : th.border}`,
+                  background: fileDragOver ? acc + '11' : 'transparent',
+                  textAlign: 'center', cursor: 'pointer', color: fileDragOver ? acc : th.textMuted, fontSize: 12.5,
+                  transition: 'all 0.2s',
                 }}
               >
-                Drop files or click "+ Attach"
+                {fileDragOver ? 'Drop file here' : 'Drop files or click "+ Attach"'}
               </div>
             )}
           </div>
@@ -527,13 +686,19 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
                         background: th.columnBg, display: 'flex', alignItems: 'center', justifyContent: 'center',
                         fontSize: 11,
                       }}>
-                        {l.action === 'status_changed' ? '↔' : l.action === 'created' ? '✦' : '✎'}
+                        {l.action === 'column_changed' ? '↔' : l.action === 'created' ? '✦' : l.action.startsWith('attachment') ? '📎' : '✎'}
                       </div>
                       <span style={{ fontSize: 11.5, color: th.textSecondary }}>
                         <strong>{l.user?.full_name ?? 'System'}</strong> {actionLabel(l.action)}
-                        {l.action === 'status_changed' && l.new_value && (() => {
-                          try { const v = JSON.parse(l.new_value); return ` → ${v.status}`; } catch { return ''; }
+                        {l.action === 'column_changed' && l.new_value && (() => {
+                          try {
+                            const v = JSON.parse(l.new_value);
+                            const colName = columns.find(c => c.id === v.column_id)?.name || v.column_id;
+                            return ` → ${colName}`;
+                          } catch { return ''; }
                         })()}
+                        {l.action === 'attachment_added' && l.new_value && ` «${l.new_value}»`}
+                        {l.action === 'attachment_removed' && l.old_value && ` «${l.old_value}»`}
                       </span>
                       <span style={{ fontSize: 10.5, color: th.textMuted, marginLeft: 'auto', whiteSpace: 'nowrap' }}>{fmtTime(l.created_at)}</span>
                     </div>
@@ -567,7 +732,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
                           const pos = ta.selectionStart ?? commentText.length;
                           const atPos = commentText.lastIndexOf('@', pos - 1);
                           const before = commentText.slice(0, atPos);
-                          const after  = commentText.slice(pos);
+                          const after = commentText.slice(pos);
                           setCommentText(before + `@${m.full_name} ` + after);
                           setMentionQuery(null);
                           setTimeout(() => { ta.focus(); ta.setSelectionRange(before.length + m.full_name.length + 2, before.length + m.full_name.length + 2); }, 10);
@@ -586,75 +751,99 @@ export function TaskDrawer({ task, open, onClose, onUpdate, members, accentColor
                   </div>
                 );
               })()}
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-              <textarea
-                ref={commentInputRef}
-                value={commentText}
-                onChange={e => {
-                  const val = e.target.value;
-                  setCommentText(val);
-                  const pos = e.target.selectionStart ?? val.length;
-                  const atPos = val.lastIndexOf('@', pos - 1);
-                  if (atPos >= 0 && (atPos === 0 || val[atPos - 1] === ' ' || val[atPos - 1] === '\n')) {
-                    const query = val.slice(atPos + 1, pos);
-                    if (!query.includes(' ')) { setMentionQuery(query); setMentionIdx(0); return; }
-                  }
-                  setMentionQuery(null);
-                }}
-                onKeyDown={e => {
-                  if (mentionQuery !== null) {
-                    const filtered = members.filter(m => m.full_name.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 5);
-                    if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIdx(i => Math.min(i + 1, filtered.length - 1)); return; }
-                    if (e.key === 'ArrowUp')   { e.preventDefault(); setMentionIdx(i => Math.max(i - 1, 0)); return; }
-                    if (e.key === 'Enter' || e.key === 'Tab') {
-                      const m = filtered[mentionIdx];
-                      if (m) {
-                        e.preventDefault();
-                        const ta = commentInputRef.current;
-                        if (!ta) return;
-                        const pos = ta.selectionStart ?? commentText.length;
-                        const atPos = commentText.lastIndexOf('@', pos - 1);
-                        const before = commentText.slice(0, atPos);
-                        const after  = commentText.slice(pos);
-                        setCommentText(before + `@${m.full_name} ` + after);
-                        setMentionQuery(null);
-                        return;
-                      }
+              <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                <textarea
+                  ref={commentInputRef}
+                  value={commentText}
+                  onChange={e => {
+                    const val = e.target.value;
+                    setCommentText(val);
+                    const pos = e.target.selectionStart ?? val.length;
+                    const atPos = val.lastIndexOf('@', pos - 1);
+                    if (atPos >= 0 && (atPos === 0 || val[atPos - 1] === ' ' || val[atPos - 1] === '\n')) {
+                      const query = val.slice(atPos + 1, pos);
+                      if (!query.includes(' ')) { setMentionQuery(query); setMentionIdx(0); return; }
                     }
-                    if (e.key === 'Escape') { setMentionQuery(null); return; }
-                  }
-                  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendComment(); }
-                }}
-                placeholder="Написать комментарий… (@ для упоминания)"
-                rows={2}
-                style={{
-                  flex: 1, padding: '8px 11px', borderRadius: 10,
-                  border: `1px solid ${th.border}`, background: th.inputBg,
-                  color: th.text, fontSize: 13, fontFamily: 'inherit',
-                  resize: 'none', outline: 'none',
-                  transition: 'border-color 0.1s',
-                }}
-                onFocus={e => { e.currentTarget.style.borderColor = acc; }}
-                onBlur={e => { e.currentTarget.style.borderColor = th.border; }}
-              />
-              <button
-                onClick={handleSendComment}
-                disabled={!commentText.trim() || sendingComment}
-                style={{
-                  padding: '8px 16px', borderRadius: 10, border: 'none',
-                  background: commentText.trim() ? acc : th.columnBg,
-                  color: commentText.trim() ? 'white' : th.textMuted,
-                  cursor: commentText.trim() ? 'pointer' : 'default',
-                  fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
-                  transition: 'all 0.12s', flexShrink: 0,
-                }}
-              >
-                {sendingComment ? '…' : 'Отправить'}
-              </button>
+                    setMentionQuery(null);
+                  }}
+                  onKeyDown={e => {
+                    if (mentionQuery !== null) {
+                      const filtered = members.filter(m => m.full_name.toLowerCase().includes(mentionQuery.toLowerCase())).slice(0, 5);
+                      if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIdx(i => Math.min(i + 1, filtered.length - 1)); return; }
+                      if (e.key === 'ArrowUp') { e.preventDefault(); setMentionIdx(i => Math.max(i - 1, 0)); return; }
+                      if (e.key === 'Enter' || e.key === 'Tab') {
+                        const m = filtered[mentionIdx];
+                        if (m) {
+                          e.preventDefault();
+                          const ta = commentInputRef.current;
+                          if (!ta) return;
+                          const pos = ta.selectionStart ?? commentText.length;
+                          const atPos = commentText.lastIndexOf('@', pos - 1);
+                          const before = commentText.slice(0, atPos);
+                          const after = commentText.slice(pos);
+                          setCommentText(before + `@${m.full_name} ` + after);
+                          setMentionQuery(null);
+                          return;
+                        }
+                      }
+                      if (e.key === 'Escape') { setMentionQuery(null); return; }
+                    }
+                    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendComment(); }
+                  }}
+                  placeholder="Написать комментарий… (@ для упоминания)"
+                  rows={2}
+                  style={{
+                    flex: 1, padding: '8px 11px', borderRadius: 10,
+                    border: `1px solid ${th.border}`, background: th.inputBg,
+                    color: th.text, fontSize: 13, fontFamily: 'inherit',
+                    resize: 'none', outline: 'none',
+                    transition: 'border-color 0.1s',
+                  }}
+                  onFocus={e => { e.currentTarget.style.borderColor = acc; }}
+                  onBlur={e => { e.currentTarget.style.borderColor = th.border; }}
+                />
+                <button
+                  onClick={handleSendComment}
+                  disabled={!commentText.trim() || sendingComment}
+                  style={{
+                    padding: '8px 16px', borderRadius: 10, border: 'none',
+                    background: commentText.trim() ? acc : th.columnBg,
+                    color: commentText.trim() ? 'white' : th.textMuted,
+                    cursor: commentText.trim() ? 'pointer' : 'default',
+                    fontSize: 13, fontWeight: 600, fontFamily: 'inherit',
+                    transition: 'all 0.12s', flexShrink: 0,
+                  }}
+                >
+                  {sendingComment ? '…' : 'Отправить'}
+                </button>
+              </div>
+
+              {/* Delete button at the very bottom */}
+              {(isLead || isCreator) && (
+                <div style={{ marginTop: 40, borderTop: `1px solid ${th.border}`, paddingTop: 20 }}>
+                  <button
+                    onClick={handleDelete}
+                    style={{
+                      width: '100%', padding: '12px', borderRadius: 12,
+                      border: '1.5px solid #FCA5A5', background: '#FEF2F2',
+                      color: '#DC2626', fontSize: 14, fontWeight: 600,
+                      cursor: 'pointer', fontFamily: 'inherit',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = '#FEE2E2'; }}
+                    onMouseLeave={e => { e.currentTarget.style.background = '#FEF2F2'; }}
+                  >
+                    <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
+                    </svg>
+                    Delete Task
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
-      </div>
       </div>
     </>
   );

@@ -1,5 +1,7 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from "react";
 import { createTheme, type Theme } from "./theme";
+import { useAuthStore } from "@/store/authStore";
+import { updateProfile } from "@/api/auth";
 
 interface ThemeContextValue {
   theme: Theme;
@@ -12,15 +14,44 @@ interface ThemeContextValue {
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [isDark, setIsDark] = useState(false); // default: light mode
-  const [accentColor, setAccentColor] = useState("#6366F1");
+  const [isDark, setIsDark] = useState(false);
+  const [accentColor, setAccentColor] = useState("#0EA5E9");
+  const { user, token, setAuth } = useAuthStore();
+
+  // Sync accent color from user object when session changes
+  useEffect(() => {
+    setAccentColor(user?.accent_color ?? "#0EA5E9");
+  }, [user?.accent_color, user?.id]);
+
+  // Sync dark mode from user object when session changes
+  useEffect(() => {
+    setIsDark(user?.is_dark ?? false);
+  }, [user?.is_dark, user?.id]);
+
+  const handleSetAccentColor = useCallback((color: string) => {
+    setAccentColor(color);
+  }, []);
 
   const theme = createTheme(isDark);
 
-  const toggleTheme = useCallback(() => setIsDark((d) => !d), []);
+  // toggleTheme persists the preference to the server
+  const toggleTheme = useCallback(() => {
+    setIsDark((d) => {
+      const next = !d;
+      // Fire-and-forget persist to backend
+      if (user && token) {
+        updateProfile({ is_dark: next })
+          .then((updated) => {
+            setAuth({ ...user, is_dark: updated.is_dark }, token);
+          })
+          .catch(() => {/* silently ignore */});
+      }
+      return next;
+    });
+  }, [user, token, setAuth]);
 
   return (
-    <ThemeContext.Provider value={{ theme, isDark, accentColor, toggleTheme, setAccentColor }}>
+    <ThemeContext.Provider value={{ theme, isDark, accentColor, toggleTheme, setAccentColor: handleSetAccentColor }}>
       {children}
     </ThemeContext.Provider>
   );

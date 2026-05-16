@@ -1,21 +1,28 @@
-import type { Task } from '@/types/domain';
+import type { Task, BoardColumn } from '@/types/domain';
 import type { Theme } from '@/theme/theme';
-import { getUrgencyMap, statusToColumn } from '@/theme/theme';
+import { getUrgencyMap } from '@/theme/theme';
 
 interface AnalyticsViewProps {
   tasks: Task[];
+  columns?: BoardColumn[];
   accent: string;
   theme: Theme;
 }
 
-export function AnalyticsView({ tasks, accent, theme }: AnalyticsViewProps) {
+export function AnalyticsView({ tasks, columns = [], accent, theme }: AnalyticsViewProps) {
   const th = theme;
+
+  // Find column IDs by name (with positional fallback)
+  const sorted = [...columns].sort((a, b) => a.order - b.order);
+  const inProgressColId = sorted.find(c => /in.?progress|в работе/i.test(c.name))?.id ?? sorted[1]?.id;
+  const reviewColId     = sorted.find(c => /review|ревью/i.test(c.name))?.id ?? sorted[2]?.id;
+  const doneColId       = sorted.find(c => /done|готово/i.test(c.name))?.id ?? sorted[sorted.length - 1]?.id;
 
   const stats = [
     { label: 'Total tasks',  value: tasks.length, color: accent },
-    { label: 'In progress',  value: tasks.filter(t => statusToColumn(t.status) === 'in-progress').length, color: '#D97706' },
-    { label: 'In review',    value: tasks.filter(t => statusToColumn(t.status) === 'review').length, color: th.textSecondary },
-    { label: 'Completed',    value: tasks.filter(t => statusToColumn(t.status) === 'done').length, color: '#059669' },
+    { label: 'In progress',  value: inProgressColId ? tasks.filter(t => t.column_id === inProgressColId).length : 0, color: '#D97706' },
+    { label: 'In review',    value: reviewColId     ? tasks.filter(t => t.column_id === reviewColId).length     : 0, color: th.textSecondary },
+    { label: 'Completed',    value: doneColId       ? tasks.filter(t => t.column_id === doneColId).length       : 0, color: '#059669' },
   ];
 
   // Group by project
@@ -24,7 +31,7 @@ export function AnalyticsView({ tasks, accent, theme }: AnalyticsViewProps) {
     if (!t.project) return;
     const existing = projectMap.get(t.project.id) || { name: t.project.name, color: t.project.color || accent, total: 0, done: 0 };
     existing.total++;
-    if (statusToColumn(t.status) === 'done') existing.done++;
+    if (doneColId && t.column_id === doneColId) existing.done++;
     projectMap.set(t.project.id, existing);
   });
   const byProject = Array.from(projectMap.values());

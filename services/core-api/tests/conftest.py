@@ -2,12 +2,13 @@ import pytest
 from httpx import ASGITransport, AsyncClient
 from jose import jwt
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.pool import StaticPool
 
 from app.config import settings
 from app.database import get_db
-from app.domain import ProjectRole, TaskStatus, Urgency
+from app.domain import ProjectRole, Urgency
 from app.main import app
-from app.models import Base, Project, Task, User, UserProject
+from app.models import Base, BoardColumn, Project, Task, User, UserProject
 
 TEST_SECRET = "test-secret"  # noqa: S105
 TEST_SERVICE_TOKEN = "test-service-token"  # noqa: S105
@@ -24,9 +25,17 @@ def _set_test_settings():
     settings.service_token = original_service
 
 
+def _make_engine():
+    return create_async_engine(
+        "sqlite+aiosqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+
+
 @pytest.fixture
 async def db_session():
-    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    engine = _make_engine()
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
@@ -41,7 +50,7 @@ async def db_session():
 
 @pytest.fixture
 async def engine():
-    eng = create_async_engine("sqlite+aiosqlite:///:memory:")
+    eng = _make_engine()
     async with eng.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
     yield eng
@@ -89,12 +98,17 @@ async def seed_data(session_factory):
         )
         await session.flush()
 
+        todo_col = BoardColumn(name="TODO", project_id=project.id, order=0)
+        review_col = BoardColumn(name="REVIEW", project_id=project.id, order=1)
+        session.add_all([todo_col, review_col])
+        await session.flush()
+
         draft_task = Task(
             project_id=project.id,
             creator_id=manager.id,
             assignee_id=specialist.id,
             title="AI Draft Task",
-            status=TaskStatus.AI_DRAFT,
+            column_id=todo_col.id,
             urgency=Urgency.MEDIUM,
         )
         todo_task = Task(
@@ -102,7 +116,7 @@ async def seed_data(session_factory):
             creator_id=manager.id,
             assignee_id=specialist.id,
             title="Todo Task",
-            status=TaskStatus.TODO,
+            column_id=todo_col.id,
             urgency=Urgency.HIGH,
         )
         review_task = Task(
@@ -110,7 +124,7 @@ async def seed_data(session_factory):
             creator_id=manager.id,
             assignee_id=specialist.id,
             title="Review Task",
-            status=TaskStatus.REVIEW,
+            column_id=review_col.id,
             urgency=Urgency.LOW,
         )
         session.add_all([draft_task, todo_task, review_task])
@@ -121,6 +135,8 @@ async def seed_data(session_factory):
             "specialist": specialist,
             "outsider": outsider,
             "project": project,
+            "todo_col": todo_col,
+            "review_col": review_col,
             "draft_task": draft_task,
             "todo_task": todo_task,
             "review_task": review_task,

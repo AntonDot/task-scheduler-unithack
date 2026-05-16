@@ -22,6 +22,7 @@ _ACTION_LABELS: dict[str, str] = {
     "attachment_added": "Файл прикреплён",
     "task_created": "Задача создана",
     "task_approved": "Задача одобрена",
+    "automation_triggered": "Автоматизация сработала",
 }
 
 _ACTION_TYPES: dict[str, str] = {
@@ -31,6 +32,7 @@ _ACTION_TYPES: dict[str, str] = {
     "attachment_added": "comment",
     "task_created": "task_assigned",
     "task_approved": "status_change",
+    "automation_triggered": "task_assigned",
 }
 
 
@@ -39,7 +41,7 @@ class NotificationItem(BaseModel):
     type: str  # matches settings keys: task_assigned / comment / status_change / mention
     title: str
     body: str
-    task_id: int
+    task_id: int | None = None
     task_title: str
     created_at: datetime
     actor_name: str
@@ -52,32 +54,48 @@ async def get_notifications(
 ) -> list[NotificationItem]:
     since = datetime.now(UTC) - timedelta(days=14)
 
-    # Projects the user belongs to
-    proj_result = await db.execute(select(UserProject.project_id).where(UserProject.user_id == current_user.id))
-    project_ids = [r[0] for r in proj_result.all()]
-    if not project_ids:
+    # 1. Get all projects where the user is a member
+    proj_result = await db.execute(
+        select(UserProject.project_id, UserProject.role).where(UserProject.user_id == current_user.id)
+    )
+    project_memberships = proj_result.all()
+    if not project_memberships:
         return []
 
-    # Tasks where current user is assignee or co-assignee
+    project_ids = [r[0] for r in project_memberships]
+    # Use string comparison to be safe with DB representation
+    owner_project_ids = [r[0] for r in project_memberships if str(r[1]) == "OWNER"]
+
+    # 2. Identify relevant tasks:
+    # - Any task in a project where user is OWNER
+    # - Tasks where user is assignee or co-assignee
+
+    # Base subquery for tasks where user is co-assignee
+    co_assignee_task_ids = select(task_assignees.c.task_id).where(task_assignees.c.user_id == current_user.id)
+
+    criteria = [Task.assignee_id == current_user.id, Task.id.in_(co_assignee_task_ids)]
+    if owner_project_ids:
+        criteria.append(Task.project_id.in_(owner_project_ids))
+
     tasks_result = await db.execute(
         select(Task.id).where(
             Task.project_id.in_(project_ids),
-            or_(
-                Task.assignee_id == current_user.id,
-                Task.id.in_(select(task_assignees.c.task_id).where(task_assignees.c.user_id == current_user.id)),
-            ),
+            or_(*criteria),
         )
     )
     my_task_ids = {r[0] for r in tasks_result.all()}
 
     notifications: list[NotificationItem] = []
 
+    if not my_task_ids:
+        return []
+
     # --- Audit log notifications ---
     audit_result = await db.execute(
         select(AuditLog)
         .where(
             AuditLog.task_id.in_(my_task_ids),
-            AuditLog.user_id != current_user.id,
+            or_(AuditLog.user_id != current_user.id, AuditLog.action == "automation_triggered"),
             AuditLog.action.in_(list(_ACTION_LABELS.keys())),
             AuditLog.created_at >= since,
         )
@@ -104,6 +122,8 @@ async def get_notifications(
         body = f"{actor} — {task_title}"
         if log.action == "status_changed" and log.new_value:
             body = f"{actor} изменил(а) статус на «{log.new_value}» — {task_title}"
+        elif log.action == "automation_triggered" and log.new_value:
+            body = f"{log.new_value} — {task_title}"
         notifications.append(
             NotificationItem(
                 id=f"audit-{log.id}",
@@ -121,7 +141,7 @@ async def get_notifications(
     mention_result = await db.execute(
         select(Comment)
         .where(
-            Comment.task_id.in_(my_task_ids),
+            Comment.task_id.in_(select(Task.id).where(Task.project_id.in_(project_ids))),
             Comment.user_id != current_user.id,
             Comment.text.ilike(f"%@{current_user.full_name}%"),
             Comment.created_at >= since,
@@ -142,6 +162,65 @@ async def get_notifications(
                 task_id=c.task_id,
                 task_title=f"Task #{c.task_id}",
                 created_at=c.created_at,
+                actor_name=actor,
+            )
+        )
+
+    # --- Mention notifications (tasks description containing @current_user.full_name) ---
+    task_mention_result = await db.execute(
+        select(Task)
+        .where(
+            Task.project_id.in_(project_ids),
+            Task.description.ilike(f"%@{current_user.full_name}%"),
+            Task.updated_at >= since,
+        )
+        .options(joinedload(Task.creator))
+        .order_by(Task.updated_at.desc())
+        .limit(10)
+    )
+    task_mentions = list(task_mention_result.scalars().unique().all())
+    for t in task_mentions:
+        if not t.description:
+            continue
+        actor = t.creator.full_name if t.creator else "Кто-то"
+        notifications.append(
+            NotificationItem(
+                id=f"mention-task-{t.id}",
+                type="mention",
+                title="Вас упомянули в описании",
+                body=f"{actor}: {t.description[:80]}{'…' if len(t.description) > 80 else ''}",
+                task_id=t.id,
+                task_title=t.title,
+                created_at=t.updated_at,
+                actor_name=actor,
+            )
+        )
+
+    # --- Taskless automation notifications (webhook/review events, no specific task) ---
+    taskless_result = await db.execute(
+        select(AuditLog)
+        .where(
+            AuditLog.task_id.is_(None),
+            AuditLog.project_id.in_(project_ids),
+            AuditLog.action == "automation_triggered",
+            AuditLog.created_at >= since,
+        )
+        .options(joinedload(AuditLog.user))
+        .order_by(AuditLog.created_at.desc())
+        .limit(10)
+    )
+    taskless_logs = list(taskless_result.scalars().unique().all())
+    for log in taskless_logs:
+        actor = log.user.full_name if log.user else "Система"
+        notifications.append(
+            NotificationItem(
+                id=f"audit-{log.id}",
+                type="task_assigned",
+                title="Автоматизация сработала",
+                body=log.new_value or "Automation triggered",
+                task_id=None,
+                task_title="—",
+                created_at=log.created_at,
                 actor_name=actor,
             )
         )

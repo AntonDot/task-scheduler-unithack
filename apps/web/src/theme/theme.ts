@@ -51,21 +51,7 @@ export function createTheme(dark: boolean): Theme {
   };
 }
 
-// Design column definitions (4 columns map from 5 API statuses)
-export type DesignColumn = 'backlog' | 'in-progress' | 'review' | 'done';
 
-export interface ColumnDef {
-  id: DesignColumn;
-  label: string;
-  dotColor: string;
-}
-
-export const COLUMNS_DEF: ColumnDef[] = [
-  { id: 'backlog',     label: 'Backlog',     dotColor: '#9CA3AF' },
-  { id: 'in-progress', label: 'In Progress', dotColor: '#6366F1' },
-  { id: 'review',      label: 'In Review',   dotColor: '#D97706' },
-  { id: 'done',        label: 'Done',        dotColor: '#059669' },
-];
 
 export interface UrgencyDef {
   label: string;
@@ -93,41 +79,7 @@ export function getUrgencyMap(dark: boolean): Record<string, UrgencyDef> {
 
 export const URGENCY_MAP: Record<string, UrgencyDef> = getUrgencyMap(false);
 
-export interface StatusDef {
-  label: string;
-  color: string;
-  bg: string;
-}
 
-export const STATUS_MAP: Record<string, StatusDef> = {
-  backlog:       { label: 'Backlog',     color: '#6B7280', bg: '#F9FAFB' },
-  'in-progress': { label: 'In Progress', color: '#4338CA', bg: '#EEF2FF' },
-  review:        { label: 'In Review',   color: '#92400E', bg: '#FFFBEB' },
-  done:          { label: 'Done',        color: '#065F46', bg: '#ECFDF5' },
-};
-
-// Map API status → design column
-export function statusToColumn(apiStatus: string): DesignColumn {
-  switch (apiStatus) {
-    case 'AI_DRAFT': return 'backlog';
-    case 'TODO':     return 'backlog';
-    case 'IN_PROGRESS': return 'in-progress';
-    case 'REVIEW':   return 'review';
-    case 'DONE':     return 'done';
-    default:         return 'backlog';
-  }
-}
-
-// Map design column → API status (for drag-drop)
-export function columnToStatus(col: DesignColumn): string {
-  switch (col) {
-    case 'backlog':     return 'TODO';
-    case 'in-progress': return 'IN_PROGRESS';
-    case 'review':      return 'REVIEW';
-    case 'done':        return 'DONE';
-    default:            return 'TODO';
-  }
-}
 
 // Map API urgency (uppercase) → design key (lowercase)
 export function apiUrgencyToDesign(apiUrgency: string): string {
@@ -147,8 +99,27 @@ export function formatDeadline(dateStr: string | null): string {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
-export function isOverdue(dateStr: string | null, column?: string): boolean {
-  if (!dateStr || column === 'done') return false;
+export function formatRelativeCreationDate(dateStr: string | null): string {
+  if (!dateStr) return '';
+  const d = new Date(dateStr);
+  const now = new Date();
+  
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const dateObj = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  
+  const diffDays = Math.round((today.getTime() - dateObj.getTime()) / (1000 * 60 * 60 * 24));
+  
+  const timeStr = d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: false });
+  
+  if (diffDays === 0) return `today at ${timeStr}`;
+  if (diffDays === 1) return `yesterday at ${timeStr}`;
+  if (diffDays > 1 && diffDays <= 7) return `${diffDays} days ago at ${timeStr}`;
+  
+  return `${d.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric' })} at ${timeStr}`;
+}
+
+export function isOverdue(dateStr: string | null, isDone: boolean = false): boolean {
+  if (!dateStr || isDone) return false;
   const d = new Date(dateStr.includes('T') ? dateStr : dateStr + 'T00:00:00');
   return d < new Date();
 }

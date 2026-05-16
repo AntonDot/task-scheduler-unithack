@@ -24,6 +24,7 @@ export function useTasksRealtime(
 
     ws.onmessage = (event) => {
       queryClient.invalidateQueries({ queryKey: ["tasks", projectId] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
 
       if (addToast && typeof event.data === "string") {
         try {

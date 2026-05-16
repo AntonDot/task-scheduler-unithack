@@ -1,6 +1,5 @@
 import { useRef, useCallback } from "react";
 import type { Task, ProjectRole } from "@/types/domain";
-import { TaskStatus } from "@/types/domain";
 import { Avatar } from "../kanban/Avatar";
 import { getDeadlineStatus, formatRelativeDeadline } from "@/utils/deadline";
 
@@ -9,7 +8,6 @@ interface MobileTaskCardProps {
   role: ProjectRole | undefined;
   onApprove: (taskId: number) => void;
   onDelete: (taskId: number) => void;
-  onStatusChange: (taskId: number, status: TaskStatus) => void;
   onLongPress?: () => void;
 }
 
@@ -27,11 +25,9 @@ export function MobileTaskCard({
   role,
   onApprove,
   onDelete,
-  onStatusChange,
   onLongPress,
 }: MobileTaskCardProps) {
   const isOwner = role === "OWNER";
-  const isDraft = task.status === TaskStatus.AI_DRAFT;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const longPressTriggered = useRef(false);
 
@@ -91,6 +87,29 @@ export function MobileTaskCard({
           </span>
         )}
       </div>
+      
+      {/* Tags */}
+      {task.tags && task.tags.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          {task.tags.map(tag => (
+            <span key={tag.id} style={{
+              background: tag.color + '22',
+              color: tag.color,
+              padding: '2px 8px',
+              borderRadius: 6,
+              fontSize: 10.5,
+              fontWeight: 600,
+              maxWidth: '100%',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap'
+            }}>
+              {tag.name}
+            </span>
+          ))}
+        </div>
+      )}
+
       <h3 className="mobile-card__title">{task.title}</h3>
       <div className="mobile-card__meta">
         {task.project && (
@@ -100,51 +119,24 @@ export function MobileTaskCard({
         )}
         {task.assignee && <Avatar user={{ full_name: task.assignee.full_name, id: task.assignee.id }} size={24} />}
       </div>
-      <div className="mobile-card__actions">
-        {isDraft && isOwner && (
-          <>
-            <button
-              className="btn btn--primary mobile-action-btn"
-              onClick={() => onApprove(task.id)}
-              data-testid={`mobile-approve-${task.id}`}
-            >
-              Взять в работу
-            </button>
-            <button
-              className="btn btn--danger mobile-action-btn"
-              onClick={() => onDelete(task.id)}
-              data-testid={`mobile-discard-${task.id}`}
-            >
-              Отклонить
-            </button>
-          </>
-        )}
-        {task.status === TaskStatus.TODO && (
+      {isOwner && (
+        <div className="mobile-card__actions">
+          <button
+            className="btn btn--danger mobile-action-btn"
+            onClick={() => onDelete(task.id)}
+            data-testid={`mobile-discard-${task.id}`}
+          >
+            Удалить
+          </button>
           <button
             className="btn btn--primary mobile-action-btn"
-            onClick={() => onStatusChange(task.id, TaskStatus.IN_PROGRESS)}
-            data-testid={`mobile-start-${task.id}`}
+            onClick={() => onApprove(task.id)}
+            data-testid={`mobile-approve-${task.id}`}
           >
-            Начать
+            Одобрить
           </button>
-        )}
-        {task.status === TaskStatus.IN_PROGRESS && (
-          <button
-            className="btn btn--secondary mobile-action-btn"
-            onClick={() => onStatusChange(task.id, TaskStatus.REVIEW)}
-          >
-            На проверку
-          </button>
-        )}
-        {task.status === TaskStatus.REVIEW && isOwner && (
-          <button
-            className="btn btn--primary mobile-action-btn"
-            onClick={() => onStatusChange(task.id, TaskStatus.DONE)}
-          >
-            Завершить
-          </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

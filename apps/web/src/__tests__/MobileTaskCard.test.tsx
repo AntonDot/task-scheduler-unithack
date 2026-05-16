@@ -1,7 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { MobileTaskCard } from "@/components/mobile/MobileTaskCard";
-import { TaskStatus } from "@/types/domain";
 import type { Task } from "@/types/domain";
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -12,7 +11,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     assignee_id: 2,
     title: "Mobile task title",
     description: null,
-    status: TaskStatus.TODO,
+    column_id: 1,
     urgency: "HIGH",
     deadline: "2025-06-15T00:00:00",
     created_at: "2025-05-01T00:00:00",
@@ -29,7 +28,6 @@ function renderCard(
     role: "OWNER" | "ASSIGNEE" | undefined;
     onApprove: ReturnType<typeof vi.fn>;
     onDelete: ReturnType<typeof vi.fn>;
-    onStatusChange: ReturnType<typeof vi.fn>;
     onLongPress: ReturnType<typeof vi.fn>;
   }> = {},
 ) {
@@ -38,7 +36,6 @@ function renderCard(
     role: overrides.role ?? ("OWNER" as const),
     onApprove: overrides.onApprove ?? vi.fn(),
     onDelete: overrides.onDelete ?? vi.fn(),
-    onStatusChange: overrides.onStatusChange ?? vi.fn(),
     onLongPress: overrides.onLongPress ?? vi.fn(),
   };
   return render(<MobileTaskCard {...props} />);
@@ -71,76 +68,33 @@ describe("MobileTaskCard", () => {
     expect(screen.getByText("Низкий")).toBeInTheDocument();
   });
 
-  it("shows start button for TODO tasks", () => {
-    const onStatusChange = vi.fn();
-    renderCard(makeTask({ status: TaskStatus.TODO }), { onStatusChange });
-    const btn = screen.getByTestId("mobile-start-10");
-    expect(btn).toHaveTextContent("Начать");
-  });
-
-  it("calls onStatusChange with IN_PROGRESS when start button clicked", () => {
-    const onStatusChange = vi.fn();
-    renderCard(makeTask({ status: TaskStatus.TODO }), { onStatusChange });
-    fireEvent.click(screen.getByTestId("mobile-start-10"));
-    expect(onStatusChange).toHaveBeenCalledWith(10, TaskStatus.IN_PROGRESS);
-  });
-
-  it("shows review button for IN_PROGRESS tasks", () => {
-    renderCard(makeTask({ status: TaskStatus.IN_PROGRESS }));
-    expect(screen.getByText("На проверку")).toBeInTheDocument();
-  });
-
-  it("calls onStatusChange with REVIEW when review button clicked", () => {
-    const onStatusChange = vi.fn();
-    renderCard(makeTask({ status: TaskStatus.IN_PROGRESS }), { onStatusChange });
-    fireEvent.click(screen.getByText("На проверку"));
-    expect(onStatusChange).toHaveBeenCalledWith(10, TaskStatus.REVIEW);
-  });
-
-  it("shows complete button for REVIEW tasks when owner", () => {
-    renderCard(makeTask({ status: TaskStatus.REVIEW }), { role: "OWNER" });
-    expect(screen.getByText("Завершить")).toBeInTheDocument();
-  });
-
-  it("hides complete button for REVIEW tasks when assignee", () => {
-    renderCard(makeTask({ status: TaskStatus.REVIEW }), { role: "ASSIGNEE" });
-    expect(screen.queryByText("Завершить")).not.toBeInTheDocument();
-  });
-
-  it("shows discard button for owner on AI_DRAFT", () => {
+  it("shows discard button for owner", () => {
     const onDelete = vi.fn();
-    renderCard(makeTask({ status: TaskStatus.AI_DRAFT }), { role: "OWNER", onDelete });
+    renderCard(makeTask(), { role: "OWNER", onDelete });
     const btn = screen.getByTestId("mobile-discard-10");
-    expect(btn).toHaveTextContent("Отклонить");
+    expect(btn).toBeInTheDocument();
   });
 
   it("calls onDelete when discard button clicked", () => {
     const onDelete = vi.fn();
-    renderCard(makeTask({ status: TaskStatus.AI_DRAFT }), { role: "OWNER", onDelete });
+    renderCard(makeTask(), { role: "OWNER", onDelete });
     fireEvent.click(screen.getByTestId("mobile-discard-10"));
     expect(onDelete).toHaveBeenCalledWith(10);
   });
 
-  it("hides approve and discard buttons for assignee on AI_DRAFT", () => {
-    renderCard(makeTask({ status: TaskStatus.AI_DRAFT }), { role: "ASSIGNEE" });
-    expect(screen.queryByTestId("mobile-approve-10")).not.toBeInTheDocument();
-    expect(screen.queryByTestId("mobile-discard-10")).not.toBeInTheDocument();
-  });
-
-  it("shows approve button for owner on AI_DRAFT", () => {
+  it("shows approve button for owner", () => {
     const onApprove = vi.fn();
-    renderCard(makeTask({ status: TaskStatus.AI_DRAFT }), { role: "OWNER", onApprove });
+    renderCard(makeTask(), { role: "OWNER", onApprove });
     const btn = screen.getByTestId("mobile-approve-10");
-    expect(btn).toHaveTextContent("Взять в работу");
+    expect(btn).toBeInTheDocument();
     fireEvent.click(btn);
     expect(onApprove).toHaveBeenCalledWith(10);
   });
 
-  it("does not show any action buttons for DONE tasks", () => {
-    renderCard(makeTask({ status: TaskStatus.DONE }), { role: "OWNER" });
-    const card = screen.getByTestId("mobile-card-10");
-    const buttons = card.querySelectorAll(".mobile-action-btn");
-    expect(buttons.length).toBe(0);
+  it("hides action buttons for assignee", () => {
+    renderCard(makeTask(), { role: "ASSIGNEE" });
+    expect(screen.queryByTestId("mobile-approve-10")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("mobile-discard-10")).not.toBeInTheDocument();
   });
 
   it("shows project tag when project is present", () => {

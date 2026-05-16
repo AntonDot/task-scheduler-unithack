@@ -1,6 +1,5 @@
 import type { Task } from '@/types/domain';
 import type { Theme } from '@/theme/theme';
-import { statusToColumn } from '@/theme/theme';
 import { Avatar } from '@/components/kanban/Avatar';
 import type { ProjectMember } from '@/api/members';
 
@@ -9,9 +8,10 @@ interface TeamViewProps {
   members: ProjectMember[];
   accent: string;
   theme: Theme;
+  doneColumnId?: number;
 }
 
-export function TeamView({ tasks, members, accent, theme }: TeamViewProps) {
+export function TeamView({ tasks, members, accent, theme, doneColumnId }: TeamViewProps) {
   const th = theme;
 
   return (
@@ -20,7 +20,9 @@ export function TeamView({ tasks, members, accent, theme }: TeamViewProps) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
         {members.map(member => {
           const mt   = tasks.filter(t => t.assignee_id === member.id);
-          const done = mt.filter(t => statusToColumn(t.status) === 'done').length;
+          const done = doneColumnId
+            ? mt.filter(t => t.column_id === doneColumnId).length
+            : 0;
           return (
             <div key={member.id} style={{
               background: th.surface, border: `1px solid ${th.border}`,

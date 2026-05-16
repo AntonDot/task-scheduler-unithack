@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -6,14 +8,28 @@ from app.api.v1.attachments import router as attachments_router
 from app.api.v1.audit import router as audit_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.automations import router as automations_router
+from app.api.v1.columns import router as columns_router
 from app.api.v1.comments import router as comments_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.projects import router as projects_router
+from app.api.v1.push import router as push_router
 from app.api.v1.tasks import router as tasks_router
+from app.api.v1.webhooks import router as webhooks_router
 from app.config import settings
+from app.rabbitmq import rabbitmq_manager
 from app.websocket_manager import ws_manager
 
-app = FastAPI(title="Victory Group Task Scheduler", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    await rabbitmq_manager.start()
+    yield
+    # Shutdown
+    await rabbitmq_manager.stop()
+
+
+app = FastAPI(title="Victory Group Task Scheduler", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
@@ -30,8 +46,11 @@ app.include_router(audit_router)
 app.include_router(auth_router)
 app.include_router(automations_router)
 app.include_router(comments_router)
+app.include_router(columns_router)
 app.include_router(projects_router)
+app.include_router(push_router)
 app.include_router(tasks_router)
+app.include_router(webhooks_router)
 
 
 @app.get("/health")

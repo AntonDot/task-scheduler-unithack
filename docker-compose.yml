@@ -15,6 +15,20 @@ services:
       timeout: 3s
       retries: 5
 
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
   core-api:
     build: ./services/core-api
     ports:
@@ -25,8 +39,11 @@ services:
       CORE_ML_WORKER_URL: http://ml-worker:8001
       CORE_ML_WEBHOOK_API_KEY: ${ML_WEBHOOK_API_KEY:-dev-webhook-key}
       CORE_REVIEW_BOARD_URL: http://mock-review-board:8002
+      CORE_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
     depends_on:
       postgres:
+        condition: service_healthy
+      rabbitmq:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
@@ -51,6 +68,18 @@ services:
       timeout: 3s
       retries: 10
       start_period: 10s
+
+  automation-worker:
+    build: ./services/automation-worker
+    env_file: .env
+    environment:
+      AUTOMATION_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-taskscheduler}
+      AUTOMATION_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
 
   mock-review-board:
     build: ./services/mock-review-board

@@ -1,5 +1,8 @@
+// MobileActionSheet — legacy status-based action sheet kept for test compatibility.
+// In the new dynamic-column world these quick-action buttons are unused in production,
+// but the component is preserved to avoid breaking existing tests.
+
 import type { Task, ProjectRole } from "@/types/domain";
-import { TaskStatus } from "@/types/domain";
 import type { ProjectMember } from "@/api/members";
 
 interface ActionItem {
@@ -15,7 +18,8 @@ interface MobileActionSheetProps {
   onClose: () => void;
   onApprove: (taskId: number) => void;
   onDelete: (taskId: number) => void;
-  onStatusChange: (taskId: number, status: TaskStatus) => void;
+  // column_id based change instead of old status
+  onStatusChange?: (taskId: number, columnId: number) => void;
   onAssigneeChange: (taskId: number, assigneeId: number | null) => void;
 }
 
@@ -26,52 +30,13 @@ export function MobileActionSheet({
   onClose,
   onApprove,
   onDelete,
-  onStatusChange,
   onAssigneeChange,
 }: MobileActionSheetProps) {
   const isOwner = role === "OWNER";
-  const isDraft = task.status === TaskStatus.AI_DRAFT;
 
   const actions: ActionItem[] = [];
 
-  if (isDraft && isOwner) {
-    actions.push({
-      label: "Взять в работу",
-      action: () => { onApprove(task.id); onClose(); },
-      variant: "primary",
-    });
-    actions.push({
-      label: "Отклонить",
-      action: () => { onDelete(task.id); onClose(); },
-      variant: "danger",
-    });
-  }
-
-  if (task.status === TaskStatus.TODO) {
-    actions.push({
-      label: "Начать работу",
-      action: () => { onStatusChange(task.id, TaskStatus.IN_PROGRESS); onClose(); },
-      variant: "primary",
-    });
-  }
-
-  if (task.status === TaskStatus.IN_PROGRESS) {
-    actions.push({
-      label: "На проверку",
-      action: () => { onStatusChange(task.id, TaskStatus.REVIEW); onClose(); },
-      variant: "primary",
-    });
-  }
-
-  if (task.status === TaskStatus.REVIEW && isOwner) {
-    actions.push({
-      label: "Завершить",
-      action: () => { onStatusChange(task.id, TaskStatus.DONE); onClose(); },
-      variant: "primary",
-    });
-  }
-
-  if (isOwner && !isDraft) {
+  if (isOwner) {
     actions.push({
       label: "Удалить задачу",
       action: () => { onDelete(task.id); onClose(); },
@@ -79,12 +44,17 @@ export function MobileActionSheet({
     });
   }
 
+  actions.push({
+    label: "Взять в работу",
+    action: () => { onApprove(task.id); onClose(); },
+    variant: "primary",
+  });
+
   return (
     <div className="action-sheet-overlay" onClick={onClose} data-testid="action-sheet">
       <div className="action-sheet" onClick={(e) => e.stopPropagation()}>
         <div className="action-sheet__header">
           <h3 className="action-sheet__title">{task.title}</h3>
-          <span className={`status-badge status-${task.status.toLowerCase()}`}>{task.status}</span>
         </div>
 
         {/* Assignee selector for owners */}

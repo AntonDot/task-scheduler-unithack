@@ -2,6 +2,7 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import type { Theme } from '@/theme/theme';
 import { improveText, type ImproveResponse } from '@/api/ai';
+import { Avatar } from '@/components/kanban/Avatar';
 
 type MentionState = { blockId: string; query: string; top: number; left: number; idx: number } | null;
 
@@ -73,7 +74,7 @@ interface BlockEditorProps {
   theme?: Theme;
   readonly?: boolean;
   onAiResult?: (result: ImproveResponse) => void;
-  members?: { id: number; full_name: string }[];
+  members?: { id: number; full_name: string; avatar_data?: string | null }[];
 }
 
 function getNumberedPosition(blocks: Block[], currentIdx: number): number {
@@ -184,7 +185,7 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
     setTimeout(() => refs.current[blockId]?.focus(), 20);
   }
 
-  function insertMention(m: { id: number; full_name: string }, blockId: string) {
+  function insertMention(m: { id: number; full_name: string; avatar_data?: string | null }, blockId: string) {
     const block = blocks.find(b => b.id === blockId);
     if (!block) return;
     const ta = refs.current[blockId] as HTMLTextAreaElement | null;
@@ -462,13 +463,7 @@ export function BlockEditor({ value, onChange, accent = '#6366F1', theme, readon
                   background: mentionState.idx === i ? accent + '18' : 'transparent',
                 }}
               >
-                <span style={{
-                  width: 24, height: 24, borderRadius: '50%', background: accent + '22',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: 11, fontWeight: 700, color: accent, flexShrink: 0,
-                }}>
-                  {m.full_name.charAt(0).toUpperCase()}
-                </span>
+                <Avatar user={{ id: m.id, full_name: m.full_name, avatar_data: m.avatar_data }} size={22} />
                 <span style={{ fontSize: 13, fontWeight: 600, color: txt }}>{m.full_name}</span>
               </div>
             ))}

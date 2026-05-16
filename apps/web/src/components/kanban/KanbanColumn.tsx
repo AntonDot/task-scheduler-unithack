@@ -1,21 +1,21 @@
-import type { Task } from '@/types/domain';
-import type { Theme, DesignColumn } from '@/theme/theme';
+import type { Task, BoardColumn } from '@/types/domain';
+import type { Theme } from '@/theme/theme';
 import { TaskCard } from './TaskCard';
 import { IcoPlus } from '@/components/ui/Icons';
 
 interface KanbanColumnProps {
-  column: { id: DesignColumn; label: string; dotColor: string };
+  column: BoardColumn;
   tasks: Task[];
   onTaskClick: (task: Task) => void;
-  onDrop: (e: React.DragEvent, colId: DesignColumn) => void;
-  onDragOver: (colId: DesignColumn) => void;
+  onDrop: (e: React.DragEvent, colId: number) => void;
+  onDragOver: (colId: number) => void;
   onDragLeave: () => void;
   isDragOver: boolean;
   accent: string;
   compact: boolean;
   colWidth: number;
   theme: Theme;
-  onAddTask?: (col: DesignColumn) => void;
+  onAddTask?: (colId: number) => void;
 }
 
 export function KanbanColumn({
@@ -48,14 +48,14 @@ export function KanbanColumn({
       {/* Column header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <div style={{ width: 7, height: 7, borderRadius: '50%', background: column.dotColor }} />
+          <div style={{ width: 7, height: 7, borderRadius: '50%', background: column.color }} />
           <span style={{ fontSize: 11.5, fontWeight: 700, color: th.textSecondary, letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-            {column.label}
+            {column.name}
           </span>
           <span style={{
             fontSize: 11, fontWeight: 600,
-            color: tasks.length > 0 ? column.dotColor : th.textMuted,
-            background: tasks.length > 0 ? column.dotColor + '18' : th.border,
+            color: tasks.length > 0 ? column.color : th.textMuted,
+            background: tasks.length > 0 ? column.color + '18' : th.border,
             padding: '1px 7px', borderRadius: 20, minWidth: 20, textAlign: 'center',
           }}>
             {tasks.length}

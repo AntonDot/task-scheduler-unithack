@@ -1,7 +1,6 @@
 import { render, screen, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { MobileActionSheet } from "@/components/mobile/MobileActionSheet";
-import { TaskStatus } from "@/types/domain";
 import type { Task } from "@/types/domain";
 
 function makeTask(overrides: Partial<Task> = {}): Task {
@@ -12,7 +11,7 @@ function makeTask(overrides: Partial<Task> = {}): Task {
     assignee_id: 2,
     title: "Action sheet task",
     description: null,
-    status: TaskStatus.TODO,
+    column_id: 1,
     urgency: "HIGH",
     deadline: null,
     created_at: "2025-05-01T00:00:00",
@@ -27,7 +26,7 @@ const MEMBERS = [
 ];
 
 describe("MobileActionSheet", () => {
-  it("renders task title and status", () => {
+  it("renders task title", () => {
     render(
       <MobileActionSheet
         task={makeTask()}
@@ -36,46 +35,23 @@ describe("MobileActionSheet", () => {
         onClose={vi.fn()}
         onApprove={vi.fn()}
         onDelete={vi.fn()}
-        onStatusChange={vi.fn()}
         onAssigneeChange={vi.fn()}
       />,
     );
     expect(screen.getByText("Action sheet task")).toBeInTheDocument();
   });
 
-  it("shows start button for TODO task", () => {
-    const onStatusChange = vi.fn();
-    const onClose = vi.fn();
-    render(
-      <MobileActionSheet
-        task={makeTask({ status: TaskStatus.TODO })}
-        role="OWNER"
-        members={MEMBERS}
-        onClose={onClose}
-        onApprove={vi.fn()}
-        onDelete={vi.fn()}
-        onStatusChange={onStatusChange}
-        onAssigneeChange={vi.fn()}
-      />,
-    );
-    fireEvent.click(screen.getByText("Начать работу"));
-    expect(onStatusChange).toHaveBeenCalledWith(42, TaskStatus.IN_PROGRESS);
-    expect(onClose).toHaveBeenCalled();
-  });
-
-  it("shows approve and reject for AI_DRAFT when owner", () => {
+  it("shows approve button for owner", () => {
     const onApprove = vi.fn();
-    const onDelete = vi.fn();
     const onClose = vi.fn();
     render(
       <MobileActionSheet
-        task={makeTask({ status: TaskStatus.AI_DRAFT })}
+        task={makeTask()}
         role="OWNER"
         members={MEMBERS}
         onClose={onClose}
         onApprove={onApprove}
-        onDelete={onDelete}
-        onStatusChange={vi.fn()}
+        onDelete={vi.fn()}
         onAssigneeChange={vi.fn()}
       />,
     );
@@ -84,18 +60,17 @@ describe("MobileActionSheet", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("shows delete button for owner on non-draft tasks", () => {
+  it("shows delete button for owner", () => {
     const onDelete = vi.fn();
     const onClose = vi.fn();
     render(
       <MobileActionSheet
-        task={makeTask({ status: TaskStatus.IN_PROGRESS })}
+        task={makeTask()}
         role="OWNER"
         members={MEMBERS}
         onClose={onClose}
         onApprove={vi.fn()}
         onDelete={onDelete}
-        onStatusChange={vi.fn()}
         onAssigneeChange={vi.fn()}
       />,
     );
@@ -107,13 +82,12 @@ describe("MobileActionSheet", () => {
   it("hides delete for assignee", () => {
     render(
       <MobileActionSheet
-        task={makeTask({ status: TaskStatus.IN_PROGRESS })}
+        task={makeTask()}
         role="ASSIGNEE"
         members={MEMBERS}
         onClose={vi.fn()}
         onApprove={vi.fn()}
         onDelete={vi.fn()}
-        onStatusChange={vi.fn()}
         onAssigneeChange={vi.fn()}
       />,
     );
@@ -129,7 +103,6 @@ describe("MobileActionSheet", () => {
         onClose={vi.fn()}
         onApprove={vi.fn()}
         onDelete={vi.fn()}
-        onStatusChange={vi.fn()}
         onAssigneeChange={vi.fn()}
       />,
     );
@@ -145,7 +118,6 @@ describe("MobileActionSheet", () => {
         onClose={vi.fn()}
         onApprove={vi.fn()}
         onDelete={vi.fn()}
-        onStatusChange={vi.fn()}
         onAssigneeChange={vi.fn()}
       />,
     );
@@ -162,7 +134,6 @@ describe("MobileActionSheet", () => {
         onClose={vi.fn()}
         onApprove={vi.fn()}
         onDelete={vi.fn()}
-        onStatusChange={vi.fn()}
         onAssigneeChange={onAssigneeChange}
       />,
     );
@@ -181,7 +152,6 @@ describe("MobileActionSheet", () => {
         onClose={onClose}
         onApprove={vi.fn()}
         onDelete={vi.fn()}
-        onStatusChange={vi.fn()}
         onAssigneeChange={vi.fn()}
       />,
     );
@@ -199,28 +169,10 @@ describe("MobileActionSheet", () => {
         onClose={onClose}
         onApprove={vi.fn()}
         onDelete={vi.fn()}
-        onStatusChange={vi.fn()}
         onAssigneeChange={vi.fn()}
       />,
     );
     fireEvent.click(screen.getByTestId("action-sheet"));
     expect(onClose).toHaveBeenCalled();
-  });
-
-  it("shows review-to-done for owner on REVIEW", () => {
-    const onStatusChange = vi.fn();
-    render(
-      <MobileActionSheet
-        task={makeTask({ status: TaskStatus.REVIEW })}
-        role="OWNER"
-        members={MEMBERS}
-        onClose={vi.fn()}
-        onApprove={vi.fn()}
-        onDelete={vi.fn()}
-        onStatusChange={onStatusChange}
-        onAssigneeChange={vi.fn()}
-      />,
-    );
-    expect(screen.getByText("Завершить")).toBeInTheDocument();
   });
 });

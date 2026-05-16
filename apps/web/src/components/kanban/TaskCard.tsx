@@ -4,6 +4,7 @@ import { getUrgencyMap, formatDeadline, isOverdue, apiUrgencyToDesign, createThe
 import type { Theme } from '@/theme/theme';
 import { Avatar } from './Avatar';
 import { IcoChat, IcoClip } from '@/components/ui/Icons';
+import { TaskTagList } from '@/components/tags/TaskTagList';
 
 interface TaskCardProps {
   task: Task;
@@ -24,7 +25,7 @@ export function TaskCard({ task, onSelect, onDragStart, onDragEnd, compact = fal
   const urgMap = getUrgencyMap(th.dark);
   const urgency = urgMap[urgKey] ?? DEFAULT_URGENCY;
 
-  const overdue = isOverdue(task.deadline, undefined);
+  const overdue = isOverdue(task.deadline, false);
   const deadlineStr = formatDeadline(task.deadline);
 
 
@@ -59,19 +60,6 @@ export function TaskCard({ task, onSelect, onDragStart, onDragEnd, compact = fal
         userSelect: 'none',
       }}
     >
-      {/* Top row: project tag + urgency badge is NOT here anymore in the new layout but tests want it */}
-      {/* Based on the failing test, I should restore the top row or put it somewhere visible */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 7 }}>
-        {task.project ? (
-          <span style={{
-            fontSize: 10, fontWeight: 700, padding: '2px 8px', borderRadius: 4,
-            border: `1px solid ${task.project.color}40`, color: task.project.color,
-            background: `${task.project.color}10`, textTransform: 'uppercase', letterSpacing: '0.05em'
-          }}>
-            {task.project.name}
-          </span>
-        ) : <span />}
-      </div>
 
       {/* Title */}
       <p style={{
@@ -82,6 +70,10 @@ export function TaskCard({ task, onSelect, onDragStart, onDragEnd, compact = fal
       }}>
         {task.title}
       </p>
+      
+      <div style={{ marginBottom: compact ? 8 : 10 }}>
+        <TaskTagList tags={task.tags} />
+      </div>
 
       {/* Footer */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 2 }}>

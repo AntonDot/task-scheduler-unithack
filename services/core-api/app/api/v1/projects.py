@@ -10,9 +10,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_project_access, verify_service_token
-from app.domain import ProjectRole, TaskStatus
-from app.models import Project, Task, User, UserProject
-from app.schemas import ProjectMemberRead, ProjectWithRole, TaskCreate, TaskRead, UserRead
+from app.domain import ProjectRole
+from app.models import BoardColumn, Project, Tag, Task, User, UserProject
+from app.schemas import ProjectMemberRead, ProjectWithRole, TagCreate, TagRead, TaskCreate, TaskRead, UserRead
 from app.schemas.analytics import AssigneeLoad, ProjectAnalytics
 from app.services import task_service
 from app.websocket_manager import ws_manager
@@ -108,38 +108,55 @@ async def get_project_analytics(
     db: AsyncSession = Depends(get_db),
 ):
     # Total tasks
-    total_result = await db.execute(select(func.count(Task.id)).where(Task.project_id == project_id))
+    total_result = await db.execute(
+        select(func.count(Task.id)).where(Task.project_id == project_id, not Task.is_deleted)
+    )
     total_tasks = total_result.scalar() or 0
 
-    # By status
+    # Get all columns for the project ordered by order
+    col_result = await db.execute(
+        select(BoardColumn).where(BoardColumn.project_id == project_id).order_by(BoardColumn.order)
+    )
+    columns = col_result.scalars().all()
+    first_col_id = columns[0].id if columns else -1
+    last_col_id = columns[-1].id if columns else -1
+
+    # By status (column name)
     status_result = await db.execute(
-        select(Task.status, func.count(Task.id)).where(Task.project_id == project_id).group_by(Task.status)
+        select(BoardColumn.name, func.count(Task.id).filter(not Task.is_deleted))
+        .join(Task, Task.column_id == BoardColumn.id, isouter=True)
+        .where(BoardColumn.project_id == project_id)
+        .group_by(BoardColumn.id)
     )
     by_status = dict(status_result.all())
 
     # By urgency
     urgency_result = await db.execute(
-        select(Task.urgency, func.count(Task.id)).where(Task.project_id == project_id).group_by(Task.urgency)
+        select(Task.urgency, func.count(Task.id))
+        .where(Task.project_id == project_id, not Task.is_deleted)
+        .group_by(Task.urgency)
     )
     by_urgency = dict(urgency_result.all())
 
-    # Overdue count: tasks with deadline in the past and not DONE
+    # Overdue count: tasks with deadline in the past and not in the last column
     now = datetime.now(UTC)
     overdue_result = await db.execute(
         select(func.count(Task.id)).where(
             Task.project_id == project_id,
             Task.deadline < now,
-            Task.status != TaskStatus.DONE,
+            Task.column_id != last_col_id,
             Task.deadline.isnot(None),
+            not Task.is_deleted,
         )
     )
     overdue_count = overdue_result.scalar() or 0
 
-    # Average completion hours (for DONE tasks that have created_at and updated_at)
+    # Average completion hours (for tasks in the last column that have created_at and updated_at)
     done_result = await db.execute(
         select(Task.created_at, Task.updated_at).where(
             Task.project_id == project_id,
-            Task.status == TaskStatus.DONE,
+            Task.column_id == last_col_id,
+            not Task.is_deleted,
         )
     )
     done_rows = done_result.all()
@@ -161,10 +178,10 @@ async def get_project_analytics(
             Task.assignee_id,
             User.full_name,
             func.count(Task.id).label("task_count"),
-            func.sum(case((Task.status == TaskStatus.IN_PROGRESS, 1), else_=0)).label("in_progress"),
+            func.sum(case((Task.column_id.notin_([first_col_id, last_col_id]), 1), else_=0)).label("in_progress"),
         )
         .join(User, User.id == Task.assignee_id)
-        .where(Task.project_id == project_id, Task.assignee_id.isnot(None))
+        .where(Task.project_id == project_id, Task.assignee_id.isnot(None), not Task.is_deleted)
         .group_by(Task.assignee_id, User.full_name)
     )
     assignee_load = [
@@ -200,7 +217,10 @@ async def export_project_tasks(
     from sqlalchemy.orm import selectinload
 
     result = await db.execute(
-        select(Task).where(Task.project_id == project_id).options(selectinload(Task.assignee)).order_by(Task.id)
+        select(Task)
+        .where(Task.project_id == project_id, not Task.is_deleted)
+        .options(selectinload(Task.assignee), selectinload(Task.column))
+        .order_by(Task.id)
     )
     tasks = result.scalars().all()
 
@@ -213,7 +233,7 @@ async def export_project_tasks(
             [
                 t.id,
                 t.title,
-                t.status,
+                t.column.name if t.column else "",
                 t.urgency,
                 assignee_name,
                 str(t.deadline) if t.deadline else "",
@@ -228,3 +248,59 @@ async def export_project_tasks(
         media_type="text/csv",
         headers={"Content-Disposition": f"attachment; filename=project_{project_id}_tasks.csv"},
     )
+
+
+@router.get("/projects/{project_id}/tags", response_model=list[TagRead])
+async def list_project_tags(
+    project_id: int,
+    _access: UserProject = Depends(require_project_access),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(Tag).where(Tag.project_id == project_id))
+    return list(result.scalars().all())
+
+
+@router.post("/projects/{project_id}/tags", response_model=TagRead, status_code=201)
+async def create_project_tag(
+    project_id: int,
+    body: TagCreate,
+    _access: UserProject = Depends(require_project_access),
+    db: AsyncSession = Depends(get_db),
+):
+    if _access.role != ProjectRole.OWNER:
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Only owner can manage tags")
+    tag = Tag(project_id=project_id, name=body.name, color=body.color)
+    db.add(tag)
+    await db.commit()
+    await db.refresh(tag)
+    return tag
+
+
+@router.delete("/tags/{tag_id}", status_code=204)
+async def delete_tag(
+    tag_id: int,
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # First get the tag and its project to verify access
+    result = await db.execute(select(Tag).where(Tag.id == tag_id))
+    tag = result.scalar_one_or_none()
+    if not tag:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Tag not found")
+
+    # Verify access to the project
+    access_result = await db.execute(
+        select(UserProject).where(
+            UserProject.user_id == current_user.id,
+            UserProject.project_id == tag.project_id,
+        )
+    )
+    access = access_result.scalar_one_or_none()
+    if not access:
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="No access to project")
+
+    if access.role != ProjectRole.OWNER:
+        raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="Only owner can manage tags")
+
+    await db.delete(tag)
+    await db.commit()

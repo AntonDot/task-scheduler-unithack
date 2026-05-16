@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
-import type { Task } from '@/types/domain';
-import type { Theme, DesignColumn } from '@/theme/theme';
-import { COLUMNS_DEF, statusToColumn } from '@/theme/theme';
+import type { Task, BoardColumn } from '@/types/domain';
+import type { Theme } from '@/theme/theme';
 import { KanbanColumn } from './KanbanColumn';
 import { TaskDrawer } from './TaskDrawer';
 import type { ProjectMember } from '@/api/members';
 
 interface KanbanBoardProps {
   tasks: Task[];
+  columns: BoardColumn[];
   members: ProjectMember[];
-  onStatusChange: (taskId: number, col: DesignColumn) => void;
+  onColumnChange: (taskId: number, colId: number) => void;
   onUpdate: (task: Task) => void;
-  onAddTask?: (col: DesignColumn) => void;
+  onDelete?: (taskId: number) => void;
+  onAddTask?: (colId: number) => void;
   accent: string;
   compact: boolean;
   colWidth: number;
@@ -22,11 +23,11 @@ interface KanbanBoardProps {
 }
 
 export function KanbanBoard({
-  tasks, members, onStatusChange, onUpdate, onAddTask,
+  tasks, columns, members, onColumnChange, onUpdate, onDelete, onAddTask,
   accent, compact, colWidth, theme,
   openTaskId, openTaskSection, onTaskOpened,
 }: KanbanBoardProps) {
-  const [dragOverCol, setDragOverCol] = useState<DesignColumn | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<number | null>(null);
   const [selTask, setSelTask] = useState<Task | null>(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerSection, setDrawerSection] = useState<'comments' | 'description' | undefined>(undefined);
@@ -43,10 +44,10 @@ export function KanbanBoard({
     }
   }, [openTaskId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleDrop(e: React.DragEvent, targetCol: DesignColumn) {
+  function handleDrop(e: React.DragEvent, targetColId: number) {
     const taskId = parseInt(e.dataTransfer.getData('taskId'), 10);
     if (!taskId) return;
-    onStatusChange(taskId, targetCol);
+    onColumnChange(taskId, targetColId);
     setDragOverCol(null);
   }
 
@@ -68,11 +69,11 @@ export function KanbanBoard({
         padding: '20px 20px 0',
         display: 'flex', alignItems: 'flex-start', gap: 14,
       }}>
-        {COLUMNS_DEF.map(col => (
+        {columns.map(col => (
           <KanbanColumn
             key={col.id}
             column={col}
-            tasks={tasks.filter(t => statusToColumn(t.status) === col.id)}
+            tasks={tasks.filter(t => t.column_id === col.id)}
             onTaskClick={handleTaskClick}
             onDrop={handleDrop}
             onDragOver={c => setDragOverCol(c)}
@@ -89,9 +90,11 @@ export function KanbanBoard({
 
       <TaskDrawer
         task={selTask}
+        columns={columns}
         open={drawerOpen}
         onClose={() => { setDrawerOpen(false); setDrawerSection(undefined); }}
         onUpdate={handleTaskUpdate}
+        onDelete={onDelete}
         members={members}
         accentColor={accent}
         theme={theme}

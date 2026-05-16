@@ -35,24 +35,53 @@ async def evaluate_condition(condition: dict, context: dict) -> bool:
         field = params.get("field")
         expected = params.get("value")
         payload = context.get("payload", {})
-        # task_created publishes fields flat; task_updated nests them under "changes"
+        
+        # Check all possible payload locations first
         if field in payload:
             actual = payload.get(field)
+        elif "changes" in payload and field in payload["changes"]:
+            actual = payload["changes"].get(field)
         else:
-            actual = payload.get("changes", {}).get(field)
-        return str(actual) == str(expected)
+            # Not in payload, must fetch from DB for accurate evaluation
+            task_id = payload.get("id") or payload.get("task_id")
+            if task_id:
+                async with SessionLocal() as db:
+                    from sqlalchemy import text
+                    # Note: field name is from config, usually title/urgency/etc.
+                    res = await db.execute(text(f"SELECT {field} FROM tasks WHERE id = :tid"), {"tid": task_id})
+                    actual = res.scalar()
+            else:
+                actual = None
+        
+        res_bool = str(actual) == str(expected)
+        logger.info("Evaluating field_value_equals: field=%s, actual=%s, expected=%s -> %s", field, actual, expected, res_bool)
+        return res_bool
     
     if c_type == "column_equals":
         expected = params.get("column_id")
         payload = context.get("payload", {})
-        # column_changed -> new_column_id; task_created -> column_id;
-        # task_updated -> column_id nested under "changes"
-        actual = (
-            payload.get("new_column_id")
-            or payload.get("column_id")
-            or payload.get("changes", {}).get("column_id")
-        )
-        return str(actual) == str(expected)
+        
+        # Check all possible payload locations
+        if "new_column_id" in payload:
+            actual = payload.get("new_column_id")
+        elif "column_id" in payload:
+            actual = payload.get("column_id")
+        elif "changes" in payload and "column_id" in payload["changes"]:
+            actual = payload["changes"].get("column_id")
+        else:
+            # Not in payload, must fetch from DB
+            task_id = payload.get("id") or payload.get("task_id")
+            if task_id:
+                async with SessionLocal() as db:
+                    from sqlalchemy import text
+                    res = await db.execute(text("SELECT column_id FROM tasks WHERE id = :tid"), {"tid": task_id})
+                    actual = res.scalar()
+            else:
+                actual = None
+        
+        res_bool = str(actual) == str(expected)
+        logger.info("Evaluating column_equals: actual=%s, expected=%s -> %s", actual, expected, res_bool)
+        return res_bool
 
     if c_type == "and":
         subs = params.get("conditions", [])
@@ -118,11 +147,20 @@ async def execute_action(action: dict, context: dict):
                 res = await db.execute(text("SELECT assignee_id FROM tasks WHERE id = :tid"), {"tid": task_id})
                 user_id = res.scalar()
             
-            if user_id:
-                logger.info("Automation sending notification to user %s: %s", user_id, message)
-                try:
-                    async with httpx.AsyncClient() as client:
-                        # 1. Trigger Push Notification
+            logger.info("Automation processing notification for task %s (targeted user: %s)", task_id, user_id)
+            try:
+                async with httpx.AsyncClient() as client:
+                    # 1. Trigger Audit Log and WS for UI Bell - ALWAYS DO THIS
+                    # This ensures co-assignees and the general task history are updated
+                    await client.post(
+                        f"{settings.core_api_url}/api/v1/tasks/internal/automation-event",
+                        json={"task_id": task_id, "action": "notification", "message": message},
+                        headers={"X-Service-Token": settings.service_token},
+                        timeout=5.0
+                    )
+
+                    # 2. Trigger Push Notification only if we have a specific recipient
+                    if user_id:
                         await client.post(
                             f"{settings.core_api_url}/api/v1/push/internal/notify",
                             json={
@@ -134,15 +172,8 @@ async def execute_action(action: dict, context: dict):
                             headers={"X-Service-Token": settings.service_token},
                             timeout=5.0
                         )
-                        # 2. Trigger Audit Log and WS for UI Bell
-                        await client.post(
-                            f"{settings.core_api_url}/api/v1/tasks/internal/automation-event",
-                            json={"task_id": task_id, "action": "notification", "message": message},
-                            headers={"X-Service-Token": settings.service_token},
-                            timeout=5.0
-                        )
-                except Exception as e:
-                    logger.error("Failed to send notification via core-api: %s", e)
+            except Exception as e:
+                logger.error("Failed to send notification via core-api: %s", e)
 
         await db.commit()
 

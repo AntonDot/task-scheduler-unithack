@@ -10,6 +10,7 @@ from sqlalchemy.orm import joinedload
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.domain import ProjectRole
 from app.models import AuditLog, Comment, Task, User, UserProject
 from app.models.task_assignee import task_assignees
 
@@ -54,25 +55,45 @@ async def get_notifications(
 ) -> list[NotificationItem]:
     since = datetime.now(UTC) - timedelta(days=14)
 
-    # Projects the user belongs to
-    proj_result = await db.execute(select(UserProject.project_id).where(UserProject.user_id == current_user.id))
-    project_ids = [r[0] for r in proj_result.all()]
-    if not project_ids:
+    # 1. Get all projects where the user is a member
+    proj_result = await db.execute(
+        select(UserProject.project_id, UserProject.role)
+        .where(UserProject.user_id == current_user.id)
+    )
+    project_memberships = proj_result.all()
+    if not project_memberships:
         return []
 
-    # Tasks where current user is assignee or co-assignee
+    project_ids = [r[0] for r in project_memberships]
+    # Use string comparison to be safe with DB representation
+    owner_project_ids = [r[0] for r in project_memberships if str(r[1]) == "OWNER"]
+
+    # 2. Identify relevant tasks:
+    # - Any task in a project where user is OWNER
+    # - Tasks where user is assignee or co-assignee
+    
+    # Base subquery for tasks where user is co-assignee
+    co_assignee_task_ids = select(task_assignees.c.task_id).where(task_assignees.c.user_id == current_user.id)
+    
+    criteria = [
+        Task.assignee_id == current_user.id,
+        Task.id.in_(co_assignee_task_ids)
+    ]
+    if owner_project_ids:
+        criteria.append(Task.project_id.in_(owner_project_ids))
+
     tasks_result = await db.execute(
         select(Task.id).where(
             Task.project_id.in_(project_ids),
-            or_(
-                Task.assignee_id == current_user.id,
-                Task.id.in_(select(task_assignees.c.task_id).where(task_assignees.c.user_id == current_user.id)),
-            ),
+            or_(*criteria),
         )
     )
     my_task_ids = {r[0] for r in tasks_result.all()}
 
     notifications: list[NotificationItem] = []
+
+    if not my_task_ids:
+        return []
 
     # --- Audit log notifications ---
     audit_result = await db.execute(

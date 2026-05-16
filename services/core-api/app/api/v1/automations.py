@@ -121,8 +121,7 @@ async def get_automation_catalog(_user: User = Depends(get_current_user)):
                 {
                     "name": "Negative review → Urgent task",
                     "description": (
-                        "When a 1-2 star review arrives, create an urgent task "
-                        "in the backlog with the review text."
+                        "When a 1-2 star review arrives, create an urgent task in the backlog with the review text."
                     ),
                     "config": {
                         "trigger": {

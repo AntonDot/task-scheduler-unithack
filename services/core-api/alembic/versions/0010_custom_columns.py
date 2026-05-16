@@ -111,7 +111,7 @@ def downgrade() -> None:
     conn.execute(
         sa.text(
             "UPDATE tasks SET status = 'IN_PROGRESS' "
-            "WHERE column_id IN (SELECT id FROM board_columns WHERE \"order\" = 1)"
+            'WHERE column_id IN (SELECT id FROM board_columns WHERE "order" = 1)'
         )
     )
     conn.execute(

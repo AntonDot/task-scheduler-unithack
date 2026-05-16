@@ -206,6 +206,23 @@ async def run_review_scraper(
     return await review_scraper_service.run_scrape(db)
 
 
+@router.get("/history", response_model=list[AutomationLogRead])
+async def get_project_automation_history(
+    project_id: int,
+    db: AsyncSession = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Get execution history for all automations in a project (last 100 entries)."""
+    result = await db.execute(
+        select(AutomationLog)
+        .join(Automation, AutomationLog.automation_id == Automation.id)
+        .where(Automation.project_id == project_id)
+        .order_by(AutomationLog.ran_at.desc())
+        .limit(100)
+    )
+    return result.scalars().all()
+
+
 @router.put("/{automation_id}", response_model=AutomationRead)
 async def update_automation(
     automation_id: uuid.UUID,

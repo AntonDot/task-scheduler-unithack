@@ -71,6 +71,10 @@ export function getAutomationHistory(id: string): Promise<AutomationLog[]> {
   return api.get<AutomationLog[]>(`/automations/${id}/history`);
 }
 
+export function getAllAutomationHistory(projectId: number): Promise<AutomationLog[]> {
+  return api.get<AutomationLog[]>(`/automations/history?project_id=${projectId}`);
+}
+
 export function getAutomationCatalog(): Promise<AutomationTemplate[]> {
   return api.get<AutomationTemplate[]>('/automations/catalog');
 }

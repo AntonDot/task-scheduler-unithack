@@ -9,6 +9,7 @@ import {
   createAutomation,
   deleteAutomation,
   getAutomationHistory,
+  getAllAutomationHistory,
   rotateWebhookToken,
   type Automation,
 } from '@/api/automations';
@@ -60,6 +61,24 @@ const NUMERIC_OPS = [
 const URGENCY_VALUES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT'];
 
 const EXTERNAL_TRIGGER_IDS = new Set(['review_received', 'github_event', 'webhook_generic']);
+
+const ALLOWED_CONDITION_TYPES: Record<string, Set<string>> = {
+  task_created:    new Set(['field_value_equals', 'column_equals', 'numeric_compare', 'contains', 'regex_match']),
+  task_updated:    new Set(['field_value_equals', 'column_equals', 'numeric_compare', 'contains', 'regex_match']),
+  column_changed:  new Set(['field_value_equals', 'column_equals', 'numeric_compare', 'contains', 'regex_match']),
+  review_received: new Set(['field_value_equals', 'numeric_compare', 'contains', 'regex_match']),
+  github_event:    new Set(['field_value_equals', 'numeric_compare', 'contains', 'regex_match']),
+  webhook_generic: new Set(['field_value_equals', 'numeric_compare', 'contains', 'regex_match']),
+};
+
+const ALLOWED_ACTION_TYPES: Record<string, Set<string>> = {
+  task_created:    new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
+  task_updated:    new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
+  column_changed:  new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
+  review_received: new Set(['send_notification', 'create_task']),
+  github_event:    new Set(['send_notification', 'create_task']),
+  webhook_generic: new Set(['send_notification', 'create_task']),
+};
 
 function buildWebhookUrl(token: string): string {
   const base = (import.meta as any).env?.VITE_API_BASE || `${window.location.origin}/api/v1`;
@@ -116,9 +135,11 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
   });
 
   const { data: history = [] } = useQuery({
-    queryKey: ['automations-history', selectedAutoForHistory],
-    queryFn: () => getAutomationHistory(selectedAutoForHistory!),
-    enabled: !!selectedAutoForHistory && activeTab === 'history',
+    queryKey: ['automations-history', projectId, selectedAutoForHistory],
+    queryFn: () => selectedAutoForHistory
+      ? getAutomationHistory(selectedAutoForHistory)
+      : getAllAutomationHistory(projectId),
+    enabled: activeTab === 'history',
   });
 
   const createMutation = useMutation({
@@ -440,7 +461,7 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
                 {history.length === 0 ? (
                   <tr>
                     <td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: th.textMuted }}>
-                      {selectedAutoForHistory ? 'No logs found.' : 'Select an automation to view history.'}
+                      {selectedAutoForHistory ? 'No logs found for this automation.' : 'No automation runs yet.'}
                     </td>
                   </tr>
                 ) : (
@@ -496,7 +517,17 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
               <div style={{ padding: '16px', background: th.bg, borderRadius: 12, border: `1px solid ${th.border}` }}>
                 <select
                   value={trigger.type}
-                  onChange={e => setTrigger({ type: e.target.value, filters: {} })}
+                  onChange={e => {
+                  const newType = e.target.value;
+                  const allowedConds = ALLOWED_CONDITION_TYPES[newType] ?? new Set<string>();
+                  const allowedActs  = ALLOWED_ACTION_TYPES[newType]    ?? new Set<string>();
+                  setTrigger({ type: newType, filters: {} });
+                  setConditions(prev => prev.filter(c => allowedConds.has(c.type)));
+                  setActions(prev => {
+                    const filtered = prev.filter(a => allowedActs.has(a.type));
+                    return filtered.length > 0 ? filtered : [{ type: [...allowedActs][0] ?? 'send_notification', params: {} }];
+                  });
+                }}
                   style={selectStyle}
                 >
                   <optgroup label="Internal">
@@ -559,7 +590,7 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
                         }}
                         style={selectStyle}
                       >
-                        {CONDITION_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                        {CONDITION_TYPES.filter(t => (ALLOWED_CONDITION_TYPES[trigger.type] ?? new Set()).has(t.id)).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                       </select>
                       
                       {cond.type === 'column_equals' && (
@@ -662,7 +693,11 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
                   </div>
                 ))}
                 <button 
-                  onClick={() => setConditions([...conditions, { type: 'column_equals', params: {} }])}
+                  onClick={() => {
+                    const allowed = ALLOWED_CONDITION_TYPES[trigger.type] ?? new Set<string>();
+                    const defaultType = allowed.has('column_equals') ? 'column_equals' : ([...allowed][0] ?? 'field_value_equals');
+                    setConditions([...conditions, { type: defaultType, params: {} }]);
+                  }}
                   style={{ padding: '12px', background: 'none', border: `1px dashed ${th.border}`, borderRadius: 12, color: th.textSecondary, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
                 >
                   + Add Condition
@@ -694,7 +729,7 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
                         }}
                         style={selectStyle}
                       >
-                        {ACTION_TYPES.map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
+                        {ACTION_TYPES.filter(t => (ALLOWED_ACTION_TYPES[trigger.type] ?? new Set()).has(t.id)).map(t => <option key={t.id} value={t.id}>{t.label}</option>)}
                       </select>
 
                       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>

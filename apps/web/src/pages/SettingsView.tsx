@@ -3,7 +3,7 @@ import type { Theme } from '@/theme/theme';
 import { Avatar, setAvatarUrl } from '@/components/kanban/Avatar';
 import { useAuthStore } from '@/store/authStore';
 import { updateProfile } from '@/api/auth';
-import { getPushStatus, getPushDiagnostics, enablePushNotifications, type PushStatus } from '@/api/push';
+import { getPushStatus, isIOSDevice, enablePushNotifications, type PushStatus } from '@/api/push';
 import { useT, useLangStore, type Language } from '@/i18n';
 
 interface SettingsViewProps {
@@ -59,8 +59,6 @@ function Toggle({ val, onChange, accent }: { val: boolean; onChange: (v: boolean
 function PushRow({ accent, theme: th, t }: { accent: string; theme: Theme; t: (key: string) => string }) {
   const [status, setStatus] = useState<PushStatus>('checking');
   const [loading, setLoading] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
-  const diag = getPushDiagnostics();
 
   useEffect(() => {
     getPushStatus().then(setStatus).catch(() => setStatus('unsupported'));
@@ -73,7 +71,7 @@ function PushRow({ accent, theme: th, t }: { accent: string; theme: Theme; t: (k
 
   const labels: Record<Exclude<PushStatus, 'checking'>, string> = {
     'no-https':   t('settings.pushHttpsRequired'),
-    unsupported:  diag.ios
+    unsupported:  isIOSDevice()
       ? t('settings.pushIosHint')
       : t('settings.pushNotSupported'),
     'needs-pwa':  t('settings.pushIosSafari'),
@@ -118,26 +116,6 @@ function PushRow({ accent, theme: th, t }: { accent: string; theme: Theme; t: (k
           </button>
         )}
       </div>
-      {/* Debug panel — tap to expand */}
-      {status !== 'checking' && status !== 'subscribed' && (
-        <div style={{ marginTop: 8 }}>
-          <button
-            onClick={() => setShowDebug(v => !v)}
-            style={{ fontSize: 13, color: th.textMuted, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
-          >
-            {showDebug ? '▾ hide debug' : '▸ debug info'}
-          </button>
-          {showDebug && (
-            <pre style={{
-              marginTop: 6, padding: '10px 14px', borderRadius: 10,
-              background: th.surface, border: `1px solid ${th.border}`,
-              fontSize: 12, color: th.textMuted, lineHeight: 1.6, overflowX: 'auto',
-            }}>
-              {JSON.stringify(diag, null, 2)}
-            </pre>
-          )}
-        </div>
-      )}
     </div>
   );
 }

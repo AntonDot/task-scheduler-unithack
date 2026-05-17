@@ -2190,7 +2190,7 @@ export function MobileApp() {
            />
           )}
 
-          {view === 'automations' && <AutomationsView projectId={resolvedProjectId ?? 0} accent={accent} theme={th} />}
+          {view === 'automations' && <AutomationsView projectId={resolvedProjectId ?? 0} accent={accent} theme={th} isMobile={true} />}
           {view === 'team' && <TeamMobileView tasks={tasks} members={members} accent={accent} th={th} doneColumnId={columns[columns.length - 1]?.id} />}
           {view === 'settings' && (
             <SettingsMobileView

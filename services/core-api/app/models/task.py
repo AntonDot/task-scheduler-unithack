@@ -50,3 +50,18 @@ class Task(Base):
         back_populates="task", cascade="all, delete-orphan", order_by="Attachment.created_at"
     )
     tags: Mapped[list[Tag]] = relationship(secondary=task_tags, back_populates="tasks", lazy="selectin")
+
+    @property
+    def status(self) -> str:
+        if not self.column:
+            return "TODO"
+        # Mapping based on order or name
+        if self.column.order == 0:
+            return "TODO"  # Or logic to distinguish AI_DRAFT if we had it
+        if self.column.order == 1:
+            return "IN_PROGRESS"
+        if self.column.order == 2:
+            return "REVIEW"
+        if self.column.order == 3:
+            return "DONE"
+        return "TODO"

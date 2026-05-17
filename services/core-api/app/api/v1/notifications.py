@@ -104,7 +104,7 @@ async def get_notifications(
             AuditLog.created_at >= since,
             # Recipient filter: for automation_triggered only show to the explicitly targeted user
             or_(
-                AuditLog.action != "automation_triggered",   # non-automation: no restriction
+                AuditLog.action != "automation_triggered",  # non-automation: no restriction
                 AuditLog.old_value == str(current_user.id),  # automation targeted at this user
             ),
         )

@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
-from app.domain import Urgency
+from app.domain import TaskStatus, Urgency
 from app.schemas.project import ProjectRead
 from app.schemas.tag import TagRead
 from app.schemas.user import UserRead
@@ -16,6 +16,7 @@ class TaskCreate(BaseModel):
     urgency: Urgency = Urgency.MEDIUM
     deadline: datetime | None = None
     column_id: int | None = None
+    status: TaskStatus | None = None
     tag_ids: list[int] = Field(default_factory=list)
 
 
@@ -41,6 +42,7 @@ class TaskRead(BaseModel):
     title: str
     description: str | None
     column_id: int
+    status: TaskStatus | None = None
     urgency: Urgency
     deadline: datetime | None
     created_at: datetime

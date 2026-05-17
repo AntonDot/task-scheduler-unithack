@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Theme } from '@/theme/theme';
-import { IcoChevronR, IcoPlus, IcoX, IcoTrash, IcoBolt, IcoEdit } from '@/components/ui/Icons';
+import { IcoChevronR, IcoPlus, IcoX, IcoTrash, IcoBolt, IcoEdit, IcoHelp } from '@/components/ui/Icons';
 import {
   listAutomations,
   updateAutomation,
@@ -71,6 +71,7 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>('my');
   const [showBuilder, setShowBuilder] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedAutoForHistory, setSelectedAutoForHistory] = useState<string | null>(null);
 
@@ -625,6 +626,71 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
       )}
 
       </div>{/* end scrollable content */}
+
+      {/* Help Button */}
+      <button
+        onClick={() => setShowHelp(true)}
+        style={{
+          position: 'fixed',
+          right: isMobile ? 20 : 32,
+          bottom: isMobile ? 90 : 32, // Above mobile nav if any
+          width: 48,
+          height: 48,
+          borderRadius: '50%',
+          background: th.surface,
+          border: `1px solid ${th.border}`,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          zIndex: 900,
+          color: accent,
+          transition: 'all 0.2s ease',
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = 'scale(1.08)';
+          e.currentTarget.style.borderColor = accent;
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = 'scale(1)';
+          e.currentTarget.style.borderColor = th.border;
+        }}
+      >
+        <IcoHelp size={24} />
+      </button>
+
+      {/* Help Modal */}
+      {showHelp && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', zIndex: 1001,
+        }} onClick={() => setShowHelp(false)}>
+          <div style={{
+            width: '100%', maxWidth: 450,
+            background: th.surface, borderRadius: isMobile ? '24px 24px 0 0' : 24, padding: isMobile ? '24px 20px' : '32px',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.2)',
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, margin: 0, color: th.text }}>{t('automations.help.title')}</h3>
+              <button onClick={() => setShowHelp(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: th.textMuted }}>
+                <IcoX size={20} />
+              </button>
+            </div>
+            <p style={{ fontSize: 15, color: th.textSecondary, lineHeight: 1.6, margin: 0 }}>
+              {t('automations.help.content')}
+            </p>
+            <button onClick={() => setShowHelp(false)} style={{
+              marginTop: 28, width: '100%', padding: '12px', borderRadius: 12, border: 'none',
+              background: accent, color: 'white', fontWeight: 700, cursor: 'pointer',
+              boxShadow: `0 4px 12px ${accent}44`
+            }}>
+              {t('common.close')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Builder Modal */}
       {showBuilder && (

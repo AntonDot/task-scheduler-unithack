@@ -304,6 +304,10 @@
         "name": "Generic webhook → Create task",
         "description": "Create a task from any external system that POSTs JSON to the webhook URL."
       }
+    },
+    "help": {
+      "title": "Automations Guide",
+      "content": "Automations allow you to streamline your workflow. You can create rules like: 'When a task is created, assign it to a member' or 'When a column changes, send a notification'. Use 'My Automations' to manage your rules, 'Templates' to quickly add common patterns, and 'Custom Triggers' for external integrations via webhooks."
     }
   },
   "team": {

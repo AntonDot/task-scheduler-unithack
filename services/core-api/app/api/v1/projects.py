@@ -7,6 +7,7 @@ from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_project_access, verify_service_token
@@ -213,8 +214,6 @@ async def export_project_tasks(
 ):
     if export_format != "csv":
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail="Only CSV format is supported")
-
-    from sqlalchemy.orm import selectinload
 
     result = await db.execute(
         select(Task)

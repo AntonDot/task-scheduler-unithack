@@ -37,7 +37,7 @@ async def handle_incident(payload: IncidentPayload) -> dict:
             "title": parsed.title,
             "description": parsed.description,
             "status": "AI_DRAFT",
-            "urgency": parsed.urgency,
+            "urgency": payload.urgency,
             "deadline": parsed.deadline,
         }
 

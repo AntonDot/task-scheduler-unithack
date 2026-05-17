@@ -199,7 +199,7 @@ async def receive_webhook(
     # is_duplicate_prohibited=true → bypass dedupe, always process even if seen before.
     # Useful for repeated manual triggers or idempotency-not-required integrations.
     # Default (false / absent) → dedupe is active via webhook_deliveries table.
-    allow_duplicates = bool(body_json.get("is_dublicated_prohibited", False))
+    allow_duplicates = bool(body_json.get("is_duplicate_prohibited", False))
 
     if not allow_duplicates:
         # Dedupe via UNIQUE(automation_id, external_event_id)

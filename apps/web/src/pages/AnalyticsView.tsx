@@ -1,6 +1,7 @@
 import type { Task, BoardColumn } from '@/types/domain';
 import type { Theme } from '@/theme/theme';
 import { getUrgencyMap } from '@/theme/theme';
+import { useT } from '@/i18n';
 
 interface AnalyticsViewProps {
   tasks: Task[];
@@ -11,6 +12,7 @@ interface AnalyticsViewProps {
 
 export function AnalyticsView({ tasks, columns = [], accent, theme }: AnalyticsViewProps) {
   const th = theme;
+  const t  = useT();
 
   // Find column IDs by name (with positional fallback)
   const sorted = [...columns].sort((a, b) => a.order - b.order);
@@ -19,10 +21,10 @@ export function AnalyticsView({ tasks, columns = [], accent, theme }: AnalyticsV
   const doneColId       = sorted.find(c => /done|готово/i.test(c.name))?.id ?? sorted[sorted.length - 1]?.id;
 
   const stats = [
-    { label: 'Total tasks',  value: tasks.length, color: accent },
-    { label: 'In progress',  value: inProgressColId ? tasks.filter(t => t.column_id === inProgressColId).length : 0, color: '#D97706' },
-    { label: 'In review',    value: reviewColId     ? tasks.filter(t => t.column_id === reviewColId).length     : 0, color: th.textSecondary },
-    { label: 'Completed',    value: doneColId       ? tasks.filter(t => t.column_id === doneColId).length       : 0, color: '#059669' },
+    { label: t('analytics.totalTasks'), value: tasks.length, color: accent },
+    { label: t('analytics.inProgress'), value: inProgressColId ? tasks.filter(t2 => t2.column_id === inProgressColId).length : 0, color: '#D97706' },
+    { label: t('analytics.inReview'),   value: reviewColId     ? tasks.filter(t2 => t2.column_id === reviewColId).length     : 0, color: th.textSecondary },
+    { label: t('analytics.completed'),  value: doneColId       ? tasks.filter(t2 => t2.column_id === doneColId).length       : 0, color: '#059669' },
   ];
 
   // Group by project
@@ -38,7 +40,7 @@ export function AnalyticsView({ tasks, columns = [], accent, theme }: AnalyticsV
 
   return (
     <div style={{ padding: '28px 32px', overflowY: 'auto', flex: 1, color: th.text }}>
-      <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, color: th.text }}>Analytics</h2>
+      <h2 style={{ fontSize: 20, fontWeight: 700, marginBottom: 24, color: th.text }}>{t('analytics.title')}</h2>
 
       {/* Stat cards */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 14, marginBottom: 24 }}>
@@ -53,10 +55,10 @@ export function AnalyticsView({ tasks, columns = [], accent, theme }: AnalyticsV
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 18 }}>
         {/* Progress by project */}
         <div style={{ background: th.surface, border: `1px solid ${th.border}`, borderRadius: 14, padding: '20px 22px' }}>
-          <p style={{ fontSize: 13.5, fontWeight: 600, color: th.text, marginBottom: 16 }}>Progress by project</p>
+          <p style={{ fontSize: 13.5, fontWeight: 600, color: th.text, marginBottom: 16 }}>{t('analytics.progressByProject')}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {byProject.length === 0 && (
-              <p style={{ fontSize: 13, color: th.textMuted, fontStyle: 'italic' }}>No project data</p>
+              <p style={{ fontSize: 13, color: th.textMuted, fontStyle: 'italic' }}>{t('analytics.noProjectData')}</p>
             )}
             {byProject.map(p => (
               <div key={p.name}>
@@ -78,7 +80,7 @@ export function AnalyticsView({ tasks, columns = [], accent, theme }: AnalyticsV
 
         {/* By urgency */}
         <div style={{ background: th.surface, border: `1px solid ${th.border}`, borderRadius: 14, padding: '20px 22px' }}>
-          <p style={{ fontSize: 13.5, fontWeight: 600, color: th.text, marginBottom: 16 }}>Tasks by urgency</p>
+          <p style={{ fontSize: 13.5, fontWeight: 600, color: th.text, marginBottom: 16 }}>{t('analytics.byUrgency')}</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {Object.entries(getUrgencyMap(theme.dark)).map(([id, u]) => {
               const count = tasks.filter(t => t.urgency.toLowerCase() === id).length;

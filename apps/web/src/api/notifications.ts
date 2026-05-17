@@ -2,7 +2,8 @@ import { api } from "./client";
 
 export interface NotificationItem {
   id: string;
-  type: string;   // task_assigned | comment | status_change | mention
+  type: string;       // task_assigned | comment | status_change | mention
+  action_key: string; // raw audit action key for frontend i18n lookup
   title: string;
   body: string;
   task_id: number | null;

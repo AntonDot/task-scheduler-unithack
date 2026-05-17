@@ -23,7 +23,7 @@ _TASK_OPTS = [
 
 
 async def list_tasks(db: AsyncSession, project_id: int, assignee_id: int | None = None) -> list[Task]:
-    stmt = select(Task).where(Task.project_id == project_id, not Task.is_deleted)
+    stmt = select(Task).where(Task.project_id == project_id, Task.is_deleted == False)
     if assignee_id is not None:
         stmt = stmt.where(Task.assignee_id == assignee_id)
     result = await db.execute(
@@ -33,7 +33,7 @@ async def list_tasks(db: AsyncSession, project_id: int, assignee_id: int | None 
 
 
 async def get_task(db: AsyncSession, task_id: int) -> Task | None:
-    result = await db.execute(select(Task).where(Task.id == task_id, not Task.is_deleted).options(*_TASK_OPTS))
+    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False).options(*_TASK_OPTS))
     return result.scalar_one_or_none()
 
 
@@ -46,7 +46,7 @@ async def _set_co_assignees(db: AsyncSession, task: Task, ids: list[int]) -> Non
 
 
 async def _reload_task(db: AsyncSession, task_id: int) -> Task:
-    result = await db.execute(select(Task).where(Task.id == task_id, not Task.is_deleted).options(*_TASK_OPTS))
+    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False).options(*_TASK_OPTS))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -138,7 +138,7 @@ async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: 
 
 
 async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_project: UserProject) -> Task:
-    result = await db.execute(select(Task).where(Task.id == task_id, not Task.is_deleted).options(*_TASK_OPTS))
+    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False).options(*_TASK_OPTS))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -172,6 +172,7 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
 
     co_assignee_ids = update_data.pop("co_assignee_ids", None)
     tag_ids = update_data.pop("tag_ids", None)
+    old_tag_ids = [tag.id for tag in task.tags]
 
     old_values = {field: getattr(task, field) for field in update_data}
 
@@ -237,11 +238,29 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
         },
     )
 
+    # Publish tag_changed event separately so tag-based automations fire
+    if tag_ids is not None:
+        new_tag_ids = [tag.id for tag in task.tags]
+        added = [tid for tid in new_tag_ids if tid not in set(old_tag_ids)]
+        removed = [tid for tid in old_tag_ids if tid not in set(new_tag_ids)]
+        if added or removed:
+            await rabbitmq_manager.publish_event(
+                "tag_changed",
+                {
+                    "id": task.id,
+                    "task_id": task.id,
+                    "project_id": task.project_id,
+                    "added_tag_ids": added,
+                    "removed_tag_ids": removed,
+                    "current_tag_ids": new_tag_ids,
+                },
+            )
+
     return task
 
 
 async def change_column(db: AsyncSession, task_id: int, new_column_id: int, user_project: UserProject) -> Task:
-    result = await db.execute(select(Task).where(Task.id == task_id, not Task.is_deleted).options(*_TASK_OPTS))
+    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False).options(*_TASK_OPTS))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")

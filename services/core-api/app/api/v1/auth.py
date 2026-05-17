@@ -38,6 +38,7 @@ class ProfileUpdate(BaseModel):
     accent_color: str | None = Field(default=None, max_length=7)
     is_dark: bool | None = Field(default=None)
     avatar_data: str | None = Field(default=None)  # base64 data URL
+    language: str | None = Field(default=None, max_length=10)  # "en" | "ru" | "he"
 
 
 @router.get("/mode", response_model=LoginMode)
@@ -92,6 +93,8 @@ async def update_me(
         current_user.is_dark = body.is_dark
     if body.avatar_data is not None:
         current_user.avatar_data = body.avatar_data
+    if body.language is not None:
+        current_user.language = body.language
     await db.commit()
     await db.refresh(current_user)
     return current_user

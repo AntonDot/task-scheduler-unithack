@@ -25,6 +25,6 @@ export function logout(): void {
   localStorage.removeItem("token");
 }
 
-export function updateProfile(body: { full_name?: string; email?: string; accent_color?: string; avatar_data?: string; is_dark?: boolean }): Promise<{ id: number; full_name: string; email: string; is_active: boolean; accent_color?: string; avatar_data?: string | null; is_dark: boolean }> {
+export function updateProfile(body: { full_name?: string; email?: string; accent_color?: string; avatar_data?: string; is_dark?: boolean; language?: string }): Promise<{ id: number; full_name: string; email: string; is_active: boolean; accent_color?: string; avatar_data?: string | null; is_dark: boolean; language: string }> {
   return api.patch('/auth/me', body);
 }

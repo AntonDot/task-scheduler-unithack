@@ -20,7 +20,7 @@ async def _get_task_access(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> tuple[Task, UserProject]:
-    result = await db.execute(select(Task).where(Task.id == task_id, not Task.is_deleted))
+    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -122,6 +122,7 @@ class InternalAutomationUpdate(BaseModel):
     project_id: int | None = None  # required when task_id is None (for webhook events)
     action: str  # task_updated, column_changed, notification
     message: str | None = None
+    recipient_user_id: int | None = None  # when set, bell only shown to this user
 
 
 @router.post("/api/v1/tasks/internal/automation-event", status_code=204)
@@ -162,6 +163,7 @@ async def internal_automation_event(
                 task_id=task.id,
                 action="automation_triggered",
                 new_value=body.message or f"Automation: {body.action}",
+                old_value=str(body.recipient_user_id) if body.recipient_user_id else None,
                 user_id=system_user_id,
             )
         )
@@ -187,6 +189,7 @@ async def internal_automation_event(
                 project_id=project_id,
                 action="automation_triggered",
                 new_value=body.message or f"Automation: {body.action}",
+                old_value=str(body.recipient_user_id) if body.recipient_user_id else None,
                 user_id=system_user_id,
             )
         )

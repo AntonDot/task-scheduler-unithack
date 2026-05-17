@@ -45,6 +45,7 @@ class NotificationItem(BaseModel):
     task_title: str
     created_at: datetime
     actor_name: str
+    action_key: str = "task_assigned"
 
 
 @router.get("/notifications", response_model=list[NotificationItem])
@@ -91,6 +92,9 @@ async def get_notifications(
         return []
 
     # --- Audit log notifications ---
+    # For automation_triggered: old_value stores the intended recipient_user_id.
+    # NULL means no recipient was resolved — these are never shown in the bell.
+    # Only entries where old_value == str(current_user.id) are shown.
     audit_result = await db.execute(
         select(AuditLog)
         .where(
@@ -98,6 +102,11 @@ async def get_notifications(
             or_(AuditLog.user_id != current_user.id, AuditLog.action == "automation_triggered"),
             AuditLog.action.in_(list(_ACTION_LABELS.keys())),
             AuditLog.created_at >= since,
+            # Recipient filter: for automation_triggered only show to the explicitly targeted user
+            or_(
+                AuditLog.action != "automation_triggered",   # non-automation: no restriction
+                AuditLog.old_value == str(current_user.id),  # automation targeted at this user
+            ),
         )
         .options(joinedload(AuditLog.user))
         .order_by(AuditLog.created_at.desc())
@@ -134,6 +143,7 @@ async def get_notifications(
                 task_title=task_title,
                 created_at=log.created_at,
                 actor_name=actor,
+                action_key=log.action,
             )
         )
 
@@ -163,6 +173,7 @@ async def get_notifications(
                 task_title=f"Task #{c.task_id}",
                 created_at=c.created_at,
                 actor_name=actor,
+                action_key="mentioned",
             )
         )
 
@@ -193,6 +204,7 @@ async def get_notifications(
                 task_title=t.title,
                 created_at=t.updated_at,
                 actor_name=actor,
+                action_key="mentioned_description",
             )
         )
 
@@ -204,6 +216,8 @@ async def get_notifications(
             AuditLog.project_id.in_(project_ids),
             AuditLog.action == "automation_triggered",
             AuditLog.created_at >= since,
+            # Only show to the explicitly targeted recipient (NULL = no recipient, hidden from all)
+            AuditLog.old_value == str(current_user.id),
         )
         .options(joinedload(AuditLog.user))
         .order_by(AuditLog.created_at.desc())
@@ -222,6 +236,7 @@ async def get_notifications(
                 task_title="—",
                 created_at=log.created_at,
                 actor_name=actor,
+                action_key="automation_triggered",
             )
         )
 

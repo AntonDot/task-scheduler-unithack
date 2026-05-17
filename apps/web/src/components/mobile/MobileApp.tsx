@@ -13,6 +13,7 @@ import { fetchComments, addComment, type Comment } from '@/api/comments';
 import { fetchAttachments, uploadAttachment, deleteAttachment, getDownloadUrl, type Attachment } from '@/api/attachments';
 import { fetchNotifications, type NotificationItem } from '@/api/notifications';
 import { updateProfile } from '@/api/auth';
+import { useT, useLangStore } from '@/i18n';
 import { Avatar, getAvatarUrl, setAvatarUrl } from '@/components/kanban/Avatar';
 import { getPushStatus, getPushDiagnostics, enablePushNotifications, type PushStatus } from '@/api/push';
 import { fetchProjectTags, createTag, deleteTag } from '@/api/tags';
@@ -266,6 +267,7 @@ function BoardView({ tasks, columns, onTaskClick, onCreateTask, projects, active
   notifications: (NotificationItem & { read?: boolean })[]; onBellOpen: () => void;
   addToast: (message: string, type: 'info' | 'success' | 'warning' | 'error') => void;
 }) {
+  const t = useT();
   const [colIdx, setColIdx] = useState(0);
   const [search, setSearch] = useState('');
   const [searchOpen, setSearchOpen] = useState(false);
@@ -390,7 +392,7 @@ function BoardView({ tasks, columns, onTaskClick, onCreateTask, projects, active
               <IcoSearch s={15} />
             </div>
             <input autoFocus value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search tasks…"
+              placeholder={t('common.search')}
               style={{
                 width: '100%', padding: '10px 14px 10px 36px',
                 border: `1px solid ${th.border}`, borderRadius: 12,
@@ -537,6 +539,7 @@ function TaskSheet({
   isLead: boolean;
   canEditTags: boolean;
 }) {
+  const t = useT();
   const { user } = useAuthStore();
   const dragY = useRef(0);
   const [dragging, setDragging] = useState(false);
@@ -667,7 +670,7 @@ function TaskSheet({
                 }}>{task.project.name}</span>
               )}
               <div style={{ fontSize: 12.5, color: th.textMuted, fontWeight: 500, marginBottom: 4 }}>
-                Created {formatRelativeCreationDate(task.created_at)}
+                {t('task.created')} {formatRelativeCreationDate(task.created_at)}
               </div>
               <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
                 <h2 style={{ fontSize: 18, fontWeight: 700, color: th.text, lineHeight: 1.3, margin: 0 }}>{task.title}</h2>
@@ -755,7 +758,7 @@ function TaskSheet({
           <div style={{ marginBottom: 20 }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
               <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
-                Assignees
+                {t('task.assignees')}
               </p>
               <button
                 onClick={() => setShowAssigneePicker(p => !p)}
@@ -857,7 +860,7 @@ function TaskSheet({
           {/* Description */}
           <div style={{ marginBottom: 20 }}>
             <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 10 }}>
-              Description
+              {t('task.description')}
             </p>
             <BlockEditor
               value={task.description ?? ''}
@@ -875,7 +878,7 @@ function TaskSheet({
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
               <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
-                Вложения {attachments.length > 0 && `(${attachments.length})`}
+                {t('task.attachments')} {attachments.length > 0 && `(${attachments.length})`}
               </p>
               <input ref={fileInputRef} type="file" style={{ display: 'none' }} onChange={handleFileUpload} />
               <button
@@ -887,7 +890,7 @@ function TaskSheet({
                   cursor: uploadingFile ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
                 }}
               >
-                {uploadingFile ? 'Загрузка…' : '+ Файл'}
+                {uploadingFile ? t('task.uploading') : t('task.attach')}
               </button>
             </div>
             {attachments.length > 0 ? (
@@ -899,7 +902,7 @@ function TaskSheet({
                     border: `2px dashed ${accent}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: accent, fontWeight: 600, fontSize: 13, pointerEvents: 'none'
                   }}>
-                    Отпустите для загрузки
+                    {t('task.dropToAttach')}
                   </div>
                 )}
                 {attachments.map(att => {
@@ -957,7 +960,7 @@ function TaskSheet({
                   transition: 'all 0.2s',
                 }}
               >
-                {fileDragOver ? 'Отпустите файл здесь' : 'Нажмите для загрузки файла'}
+                {fileDragOver ? t('task.dropToAttach') : t('task.dropFiles')}
               </div>
             )}
           </div>
@@ -1086,7 +1089,7 @@ function TaskSheet({
                     }
                     if (e.key === 'Enter') handleSendComment();
                   }}
-                  placeholder="Add a comment…"
+                  placeholder={t('task.comment.placeholder')}
                   style={{
                     flex: 1, padding: '10px 14px', borderRadius: 12,
                     border: `1px solid ${th.border}`, background: th.inputBg,
@@ -1097,7 +1100,7 @@ function TaskSheet({
                   padding: '10px 16px', borderRadius: 12, border: 'none',
                   background: accent, color: 'white', fontSize: 14, fontWeight: 600,
                   cursor: 'pointer', fontFamily: 'inherit',
-                }}>Send</button>
+                }}>{t('task.comment.send')}</button>
               </div>
             </div>
 
@@ -1121,7 +1124,7 @@ function TaskSheet({
                   <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                     <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
                   </svg>
-                  Удалить задачу
+                  {t('task.deleteTask')}
                 </button>
               </div>
             )}
@@ -1530,6 +1533,8 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
   accent: string; th: ReturnType<typeof useTheme>['theme'];
   isDark: boolean; onToggleDark: () => void; onSetAccent: (c: string) => void;
 }) {
+  const t = useT();
+  const { language, setLanguage } = useLangStore();
   const { user, clearAuth, setAuth, token } = useAuthStore();
   const [notifs, setNotifs] = useState({ task_assigned: true, comment: true, deadline: true, mention: true, status_change: false });
   const [editingProfile, setEditingProfile] = useState(false);
@@ -1607,7 +1612,7 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
 
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 'calc(var(--sat, 0px) + 20px) 16px 100px' }}>
-      <h2 style={{ fontSize: 20, fontWeight: 700, color: th.text, marginBottom: 24 }}>Settings</h2>
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: th.text, marginBottom: 24 }}>{t('settings.title')}</h2>
 
       {user && (
         <div
@@ -1653,7 +1658,7 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
             zIndex: 710, boxShadow: '0 20px 60px rgba(0,0,0,0.2)',
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h3 style={{ fontSize: 17, fontWeight: 700, color: th.text, margin: 0 }}>Edit Profile</h3>
+              <h3 style={{ fontSize: 17, fontWeight: 700, color: th.text, margin: 0 }}>{t('settings.editProfile')}</h3>
               <button onClick={() => setEditingProfile(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: th.textMuted, padding: 4 }}>
                 <IcoX s={18} />
               </button>
@@ -1694,11 +1699,11 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
                 <input ref={mobileAvatarInputRef} type="file" accept="image/*" onChange={handleMobileAvatarChange} style={{ display: 'none' }} />
               </div>
               <div>
-                <label style={{ fontSize: 11.5, fontWeight: 600, color: th.textMuted, display: 'block', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Full name</label>
+                <label style={{ fontSize: 11.5, fontWeight: 600, color: th.textMuted, display: 'block', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{t('settings.fullName')}</label>
                 <input
                   value={profileName}
                   onChange={e => setProfileName(e.target.value)}
-                  placeholder="Your name"
+                  placeholder={t('settings.yourName')}
                   style={{
                     width: '100%', padding: '11px 14px', borderRadius: 12,
                     border: `1px solid ${th.border}`, background: th.inputBg,
@@ -1708,7 +1713,7 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
                 />
               </div>
               <div>
-                <label style={{ fontSize: 11.5, fontWeight: 600, color: th.textMuted, display: 'block', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>Email</label>
+                <label style={{ fontSize: 11.5, fontWeight: 600, color: th.textMuted, display: 'block', marginBottom: 6, letterSpacing: '0.04em', textTransform: 'uppercase' }}>{t('settings.email')}</label>
                 <input
                   value={profileEmail}
                   onChange={e => setProfileEmail(e.target.value)}
@@ -1734,7 +1739,7 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
                   fontFamily: 'inherit', transition: 'all 0.15s',
                 }}
               >
-                {profileSaving ? 'Saving…' : 'Save'}
+                {profileSaving ? t('common.saving') : t('common.save')}
               </button>
             </div>
           </div>
@@ -1742,7 +1747,7 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
         document.body,
       )}
 
-      <Section title="Notifications">
+      <Section title={t('settings.notifications')}>
         <PushNotifRow accent={accent} th={th} />
         {[
           { key: 'task_assigned', label: 'Task assigned to me' },
@@ -1757,12 +1762,12 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
         ))}
       </Section>
 
-      <Section title="Appearance">
-        <Row label="Dark mode" sub="Switch to dark interface"
+      <Section title={t('settings.appearance')}>
+        <Row label={t('settings.darkMode')} sub="Switch to dark interface"
           right={<Toggle val={isDark} onChange={onToggleDark} accent={accent} />}
         />
         <div style={{ padding: '14px 16px' }}>
-          <p style={{ fontSize: 14, fontWeight: 500, color: th.text, marginBottom: 10 }}>Accent color</p>
+          <p style={{ fontSize: 14, fontWeight: 500, color: th.text, marginBottom: 10 }}>{t('settings.accentColor')}</p>
           <div style={{ display: 'flex', gap: 10 }}>
             {['#6366F1', '#7C3AED', '#059669', '#DC2626', '#D97706', '#0EA5E9'].map(c => (
               <div key={c} onClick={() => onSetAccent(c)} style={{
@@ -1770,6 +1775,29 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
                 border: accent === c ? `3px solid ${th.text}` : '3px solid transparent',
                 boxSizing: 'border-box', transition: 'border 0.12s',
               }} />
+            ))}
+          </div>
+        </div>
+        <div style={{ padding: '14px 20px', borderBottom: `1px solid ${th.border}` }}>
+          <p style={{ fontSize: 13, fontWeight: 600, color: th.text, margin: '0 0 8px' }}>{t('settings.language')}</p>
+          <div style={{ display: 'flex', gap: 8 }}>
+            {(['en', 'ru', 'he'] as const).map(lang => (
+              <button
+                key={lang}
+                onClick={() => {
+                  setLanguage(lang);
+                  updateProfile({ language: lang }).catch(() => {});
+                }}
+                style={{
+                  padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 500,
+                  border: `2px solid ${language === lang ? accent : th.border}`,
+                  background: language === lang ? accent + '18' : 'transparent',
+                  color: language === lang ? accent : th.textSecondary,
+                  cursor: 'pointer',
+                }}
+              >
+                {t(`languages.${lang}`)}
+              </button>
             ))}
           </div>
         </div>
@@ -1817,6 +1845,7 @@ function NotificationSheet({ notifications, open, onClose, onMarkAllRead, onMark
   onOpenTask?: (taskId: number, section?: 'comments' | 'description') => void;
   accent: string; th: ReturnType<typeof useTheme>['theme'];
 }) {
+  const t = useT();
   return createPortal(
     <>
       <div onClick={onClose} style={{
@@ -1838,12 +1867,12 @@ function NotificationSheet({ notifications, open, onClose, onMarkAllRead, onMark
         <div style={{ padding: '14px 20px 12px', borderBottom: `1px solid ${th.border}`, flexShrink: 0 }}>
           <div style={{ width: 40, height: 4, borderRadius: 2, background: th.border, margin: '0 auto 14px' }} />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <h3 style={{ fontSize: 17, fontWeight: 700, color: th.text }}>Уведомления</h3>
+            <h3 style={{ fontSize: 17, fontWeight: 700, color: th.text }}>{t('notifications.title')}</h3>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
               <button onClick={onMarkAllRead} style={{
                 background: 'none', border: 'none', cursor: 'pointer',
                 fontSize: 12.5, fontWeight: 600, color: accent, fontFamily: 'inherit',
-              }}>Прочитать все</button>
+              }}>{t('notifications.markAllRead')}</button>
               <button onClick={onClose} style={{
                 width: 30, height: 30, borderRadius: '50%', background: th.columnBg,
                 border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center',
@@ -1859,7 +1888,7 @@ function NotificationSheet({ notifications, open, onClose, onMarkAllRead, onMark
         <div style={{ flex: 1, overflowY: 'auto', paddingBottom: 12 }}>
           {notifications.length === 0 ? (
             <div style={{ padding: '48px 20px', textAlign: 'center', color: th.textMuted, fontSize: 14 }}>
-              Нет уведомлений
+              {t('notifications.empty')}
             </div>
           ) : (
             notifications.map(n => {
@@ -1881,7 +1910,9 @@ function NotificationSheet({ notifications, open, onClose, onMarkAllRead, onMark
                     background: unread ? accent : 'transparent',
                   }} />
                   <div style={{ flex: 1 }}>
-                    <p style={{ fontSize: 13.5, fontWeight: 600, color: th.text, marginBottom: 2 }}>{n.title}</p>
+                    <p style={{ fontSize: 13.5, fontWeight: 600, color: th.text, marginBottom: 2 }}>
+                      {n.action_key ? (t(`notifications.actionLabels.${n.action_key}`) || n.title) : n.title}
+                    </p>
                     <p style={{ fontSize: 12.5, color: th.textSecondary, lineHeight: 1.4, marginBottom: 3 }}>{n.body}</p>
                     <p style={{ fontSize: 11, color: th.textMuted }}>{timeAgoMbl(n.created_at)}</p>
                   </div>
@@ -1904,11 +1935,12 @@ function BottomNav({ view, setView, accent, th }: {
   view: MobileView; setView: (v: MobileView) => void;
   accent: string; th: ReturnType<typeof useTheme>['theme'];
 }) {
+  const t = useT();
   const tabs: Array<{ id: MobileView; label: string; Icon: ({ s }: { s: number }) => React.JSX.Element; dot?: boolean }> = [
-    { id: 'kanban', label: 'Board', Icon: IcoBoard },
-    { id: 'automations', label: 'Automate', Icon: IcoBolt, dot: true },
+    { id: 'kanban', label: t('nav.board'), Icon: IcoBoard },
+    { id: 'automations', label: t('nav.automations'), Icon: IcoBolt, dot: true },
     { id: 'team', label: 'Team', Icon: IcoUsers },
-    { id: 'settings', label: 'Settings', Icon: IcoCog },
+    { id: 'settings', label: t('settings.title'), Icon: IcoCog },
   ];
 
   return (

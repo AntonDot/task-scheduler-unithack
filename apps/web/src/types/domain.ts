@@ -31,6 +31,7 @@ export interface User {
   accent_color?: string;
   is_dark?: boolean;
   avatar_data?: string | null;
+  language?: string;
 }
 
 export interface Project {

@@ -174,6 +174,19 @@ async def evaluate_condition(condition: dict, context: dict) -> bool:
         except re.error:
             return False
 
+    if c_type == "tag_equals":
+        tag_id = params.get("tag_id")
+        payload = context.get("payload", {})
+        added_tag_ids = payload.get("added_tag_ids", [])
+        res_bool = str(tag_id) in [str(tid) for tid in added_tag_ids]
+        logger.info(
+            "Evaluating tag_equals: tag_id=%s, added_tag_ids=%s -> %s",
+            tag_id,
+            added_tag_ids,
+            res_bool,
+        )
+        return res_bool
+
     if c_type == "and":
         subs = params.get("conditions", [])
         for sub in subs:
@@ -317,6 +330,9 @@ async def execute_action(action: dict, context: dict):
                         event_body["task_id"] = task_id
                     if project_id:
                         event_body["project_id"] = int(project_id)
+                    # Pass the resolved recipient so the bell only shows to them
+                    if user_id:
+                        event_body["recipient_user_id"] = int(user_id)
                     await client.post(
                         f"{settings.core_api_url}/api/v1/tasks/internal/automation-event",
                         json=event_body,

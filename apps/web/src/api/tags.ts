@@ -1,8 +1,10 @@
 import type { Tag } from "@/types/domain";
 import { api } from "./client";
 
-export function fetchProjectTags(projectId: number): Promise<Tag[]> {
-  return api.get<Tag[]>(`/projects/${projectId}/tags`);
+export type ProjectTag = Tag;
+
+export function fetchProjectTags(projectId: number): Promise<ProjectTag[]> {
+  return api.get<ProjectTag[]>(`/projects/${projectId}/tags`);
 }
 
 export function createTag(

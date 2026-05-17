@@ -318,6 +318,7 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
           </button>
         </div>
 
+        {/* marginLeft/Right: -16 must equal the wrapper paddingLeft/Right: 16 to stay within overflow:hidden root */}
         <div style={{
           display: 'flex',
           gap: isMobile ? 12 : 20,

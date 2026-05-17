@@ -109,7 +109,10 @@ async def get_automation_catalog(_user: User = Depends(get_current_user)):
                             {"type": "field_value_equals", "params": {"field": "priority", "value": "High"}}
                         ],
                         "actions": [
-                            {"type": "send_notification", "params": {"message": "automations.catalog.high_priority_notif.message"}}
+                            {
+                                "type": "send_notification",
+                                "params": {"message": "automations.catalog.high_priority_notif.message"},
+                            }
                         ],
                     },
                 }

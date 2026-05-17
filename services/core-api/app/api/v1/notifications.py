@@ -18,21 +18,25 @@ router = APIRouter(prefix="/api/v1", tags=["notifications"])
 _ACTION_LABELS: dict[str, str] = {
     "task_assigned": "Задача назначена",
     "status_changed": "Статус изменён",
+    "column_changed": "Колонка изменена",
     "comment_added": "Новый комментарий",
     "attachment_added": "Файл прикреплён",
     "task_created": "Задача создана",
     "task_approved": "Задача одобрена",
     "automation_triggered": "Автоматизация сработала",
+    "deadline_approaching": "Срок задачи истекает",
 }
 
 _ACTION_TYPES: dict[str, str] = {
     "task_assigned": "task_assigned",
     "status_changed": "status_change",
+    "column_changed": "status_change",
     "comment_added": "comment",
     "attachment_added": "comment",
     "task_created": "task_assigned",
     "task_approved": "status_change",
     "automation_triggered": "task_assigned",
+    "deadline_approaching": "deadline",
 }
 
 
@@ -128,9 +132,23 @@ async def get_notifications(
         actor = log.user.full_name if log.user else "Кто-то"
         label = _ACTION_LABELS.get(log.action, log.action)
         notif_type = _ACTION_TYPES.get(log.action, "task_assigned")
+
+        # Skip if user has disabled this notification type
+        if current_user.notification_settings and current_user.notification_settings.get(notif_type) is False:
+            continue
+
         body = f"{actor} — {task_title}"
         if log.action == "status_changed" and log.new_value:
             body = f"{actor} изменил(а) статус на «{log.new_value}» — {task_title}"
+        elif log.action == "column_changed" and log.new_value:
+            try:
+                import json
+
+                json.loads(log.new_value)
+                # We don't have columns map here, but we can at least show it's a move
+                body = f"{actor} переместил(а) задачу — {task_title}"
+            except Exception:
+                body = f"{actor} изменил(а) колонку — {task_title}"
         elif log.action == "automation_triggered" and log.new_value:
             body = f"{log.new_value} — {task_title}"
         notifications.append(
@@ -162,6 +180,8 @@ async def get_notifications(
     )
     mentions = list(mention_result.scalars().unique().all())
     for c in mentions:
+        if current_user.notification_settings and current_user.notification_settings.get("mention") is False:
+            continue
         actor = c.user.full_name if c.user else "Кто-то"
         notifications.append(
             NotificationItem(
@@ -191,6 +211,8 @@ async def get_notifications(
     )
     task_mentions = list(task_mention_result.scalars().unique().all())
     for t in task_mentions:
+        if current_user.notification_settings and current_user.notification_settings.get("mention") is False:
+            continue
         if not t.description:
             continue
         actor = t.creator.full_name if t.creator else "Кто-то"
@@ -225,6 +247,8 @@ async def get_notifications(
     )
     taskless_logs = list(taskless_result.scalars().unique().all())
     for log in taskless_logs:
+        if current_user.notification_settings and current_user.notification_settings.get("task_assigned") is False:
+            continue
         actor = log.user.full_name if log.user else "Система"
         notifications.append(
             NotificationItem(

@@ -31,6 +31,7 @@ class Task(Base):
     column_id: Mapped[int] = mapped_column(ForeignKey("board_columns.id", ondelete="RESTRICT"), index=True)
     urgency: Mapped[str] = mapped_column(String(10), default="MEDIUM")
     deadline: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    deadline_reminder_sent: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

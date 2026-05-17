@@ -1406,7 +1406,31 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
   const t = useT();
   const { language, setLanguage } = useLangStore();
   const { user, clearAuth, setAuth, token } = useAuthStore();
-  const [notifs, setNotifs] = useState({ task_assigned: true, comment: true, deadline: true, mention: true, status_change: false });
+
+  const [notifs, setNotifs] = useState({
+    task_assigned: true,
+    comment: true,
+    deadline: true,
+    mention: true,
+    status_change: false,
+    ...user?.notification_settings
+  });
+
+  useEffect(() => {
+    if (user?.notification_settings) {
+      setNotifs(prev => ({ ...prev, ...user.notification_settings }));
+    }
+  }, [user?.notification_settings]);
+
+  const handleNotifToggle = async (key: string, val: boolean) => {
+    const next = { ...notifs, [key]: val };
+    setNotifs(next);
+    if (!user || !token) return;
+    try {
+      const updated = await updateProfile({ notification_settings: next });
+      setAuth(updated, token);
+    } catch { }
+  };
   const [editingProfile, setEditingProfile] = useState(false);
   const [profileName, setProfileName] = useState('');
   const [profileEmail, setProfileEmail] = useState('');
@@ -1627,7 +1651,7 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
           { key: 'status_change', label: t('settings.notifStatusChange') },
         ].map(item => (
           <Row key={item.key} label={item.label}
-            right={<Toggle val={notifs[item.key as keyof typeof notifs]} onChange={v => setNotifs(n => ({ ...n, [item.key]: v }))} accent={accent} />}
+            right={<Toggle val={notifs[item.key as keyof typeof notifs]} onChange={v => handleNotifToggle(item.key, v)} accent={accent} />}
           />
         ))}
       </Section>

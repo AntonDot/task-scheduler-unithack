@@ -144,6 +144,8 @@
       "task_assigned": "Задача назначена",
       "task_created": "Задача создана",
       "status_changed": "Статус изменён",
+      "column_changed": "Колонка изменена",
+      "deadline_approaching": "Срок задачи истекает",
       "comment_added": "Новый комментарий",
       "attachment_added": "Файл прикреплён",
       "task_approved": "Задача одобрена",

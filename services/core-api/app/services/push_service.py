@@ -44,8 +44,11 @@ async def send_push_to_user(
     title: str,
     body: str,
     url: str = "/",
+    notif_type: str | None = None,
 ) -> None:
-    """Send a Web Push notification to every subscription registered by `user_id`."""
+    """Send a Web Push notification to every subscription registered by `user_id`.
+    Respects user notification settings if notif_type is provided.
+    """
     if not settings.vapid_private_key or not settings.vapid_public_key:
         logger.debug("VAPID not configured — skipping push for user %d", user_id)
         return
@@ -54,6 +57,18 @@ async def send_push_to_user(
         from pywebpush import webpush  # noqa: PLC0415, F401 — verify import works
     except ImportError:
         logger.warning("pywebpush not installed — push notifications disabled")
+        return
+
+    # Check notification settings
+    from app.models.user import User
+
+    res = await db.execute(sa.select(User).where(User.id == user_id))
+    user = res.scalar_one_or_none()
+    if not user:
+        return
+
+    if notif_type and user.notification_settings and user.notification_settings.get(notif_type) is False:
+        logger.debug("Notification type %s disabled for user %d — skipping", notif_type, user_id)
         return
 
     result = await db.execute(select(PushSubscription).where(PushSubscription.user_id == user_id))

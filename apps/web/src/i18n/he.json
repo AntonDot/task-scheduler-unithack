@@ -144,6 +144,8 @@
       "task_assigned": "משימה הוקצתה",
       "task_created": "משימה נוצרה",
       "status_changed": "סטטוס שונה",
+      "column_changed": "עמודה שונתה",
+      "deadline_approaching": "מועד אחרון מתקרב",
       "comment_added": "תגובה חדשה",
       "attachment_added": "קובץ צורף",
       "task_approved": "משימה אושרה",

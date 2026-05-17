@@ -185,11 +185,11 @@ async def test_upload_too_large(client, seed_data, get_token, upload_dir):
     assert resp.status_code in (413, 422)
 
 
-# ── any content type is allowed ──────────────────────────────────────────────
+# ── disallowed content type ─────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_upload_executable_allowed(client, seed_data, get_token, upload_dir):
+async def test_upload_disallowed_type(client, seed_data, get_token, upload_dir):
     sd = seed_data
     token = get_token(sd["manager"].id)
     task_id = sd["todo_task"].id
@@ -199,6 +199,4 @@ async def test_upload_executable_allowed(client, seed_data, get_token, upload_di
         files={"file": ("evil.exe", b"MZ\x90", "application/x-executable")},
         headers={"Authorization": f"Bearer {token}"},
     )
-    assert resp.status_code == 201
-    assert resp.json()["filename"] == "evil.exe"
-    assert resp.json()["content_type"] == "application/x-executable"
+    assert resp.status_code == 422

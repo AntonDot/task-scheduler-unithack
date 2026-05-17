@@ -251,3 +251,81 @@ async def internal_create_task_from_automation(
     await db.commit()
     await ws_manager.broadcast(body.project_id, "task_created", {"task_id": task.id})
     return task
+
+
+@router.post("/api/v1/tasks/internal/check-deadlines", status_code=204)
+async def check_deadlines(
+    x_service_token: str | None = Header(None),
+    db: AsyncSession = Depends(get_db),
+):
+    """Internal endpoint to find tasks due in 24h and send reminders.
+    Usually called by a daily or hourly cron job.
+    """
+    if not settings.service_token or x_service_token != settings.service_token:
+        raise HTTPException(status_code=403, detail="Invalid service token")
+
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import and_
+    from sqlalchemy.orm import selectinload
+
+    from app.models import AuditLog, Task, User
+    from app.services.push_service import send_push_to_user
+
+    now = datetime.now(UTC)
+    tomorrow = now + timedelta(days=1)
+
+    # Find tasks due soon that haven't had a reminder sent
+    # Only tasks that are not 'Done' (this is a bit tricky since column names vary,
+    # but we can check if it's not in the last column of the project)
+    # For now, just check all tasks with deadline in [now, tomorrow]
+    result = await db.execute(
+        select(Task)
+        .where(
+            and_(
+                Task.deadline >= now,
+                Task.deadline <= tomorrow,
+                Task.deadline_reminder_sent.is_(False),
+                Task.is_deleted.is_(False),
+            )
+        )
+        .options(selectinload(Task.co_assignees))
+    )
+    tasks = result.scalars().all()
+
+    res = await db.execute(select(User.id).where(User.email == "system@victory.local"))
+    system_user_id = res.scalar()
+
+    for task in tasks:
+        recipients: set[int] = set()
+        if task.assignee_id:
+            recipients.add(task.assignee_id)
+        for co in task.co_assignees:
+            recipients.add(co.id)
+
+        for uid in recipients:
+            # 1. Audit log (for the bell) — old_value acts as target recipient
+            db.add(
+                AuditLog(
+                    task_id=task.id,
+                    action="deadline_approaching",
+                    new_value=f"Дедлайн через 24ч: {task.title}",
+                    old_value=str(uid),
+                    user_id=system_user_id,
+                )
+            )
+
+            # 2. Push notification
+            deadline_str = task.deadline.strftime("%H:%M %d.%m") if task.deadline else ""
+            await send_push_to_user(
+                db,
+                uid,
+                "Срок задачи истекает",
+                f"Задача «{task.title}» должна быть выполнена до {deadline_str}",
+                f"/tasks/{task.id}",
+                notif_type="deadline",
+            )
+
+        task.deadline_reminder_sent = True
+
+    await db.commit()

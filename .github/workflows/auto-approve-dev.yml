@@ -1,0 +1,23 @@
+name: Auto Approve to Dev
+
+on:
+  pull_request:
+    branches:
+      - dev
+    types: [opened, reopened, synchronize]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  auto-approve:
+    runs-on: ubuntu-latest
+    # Проверяем, что PR не имеет конфликтов (GitHub выставляет mergeable в true)
+    # Исключаем самого автора бота, чтобы не было бесконечного цикла
+    if: github.actor != 'github-actions[bot]'
+    
+    steps:
+      - name: Approve Pull Request
+        uses: hmarr/auto-approve-action@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}

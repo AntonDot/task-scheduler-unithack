@@ -1,0 +1,34 @@
+name: Auto Approve to Dev
+
+on:
+  pull_request_target:
+    branches:
+      - dev
+    types: [opened, reopened, synchronize]
+
+jobs:
+  auto-approve:
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
+      contents: write
+    
+    steps:
+      # Шаг 1: Одобряем пулл-реквест (это уже работает идеально)
+      - name: Approve PR
+        uses: hmarr/auto-approve-action@v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Шаг 2: Безопасное слияние через API
+      - name: Merge PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Используем флаг --admin для обхода ограничений и явный URL репозитория,
+          # чтобы утилита 'gh' не искала локальную папку .git
+          gh pr merge ${{ github.event.pull_request.number }} \
+            --merge \
+            --admin \
+            --delete-branch \
+            -R "${{ github.repository }}"

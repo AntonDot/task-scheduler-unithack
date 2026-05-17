@@ -219,7 +219,8 @@
       "nameRequired": "נא להזין שם אוטומציה",
       "githubHint": "בריפוזיטורי: Settings → Webhooks → Add → Payload URL: <url> → Content-type: application/json",
       "reviewHint": "הפעל דרך POST /api/v1/automations/run-review-scraper",
-      "genericHint": "שלח JSON כלשהו; event_type — שם האירוע, payload — הנתונים"
+      "genericHint": "שלח JSON כלשהו; event_type — שם האירוע, payload — הנתונים",
+      "enrichHint": "ה-AI יכתוב מחדש את כותרת המשימה ותיאורה באמצעות ה-ML worker."
     },
     "triggers": {
       "task_created": "משימה נוצרה",
@@ -242,7 +243,9 @@
       "change_column": "העבר לעמודה",
       "assign_user": "הקצה משתמש",
       "send_notification": "שלח התראה",
-      "create_task": "צור משימה"
+      "create_task": "צור משימה",
+      "add_tag": "הוסף תג",
+      "enrich_task": "העשרה עם AI"
     },
     "ops": {
       "gte": "≥",
@@ -254,9 +257,57 @@
     "customWebhooks": "Webhooks חיצוניים",
     "customWebhooksHint": "מערכות חיצוניות (GitHub, scrapers, אינטגרציות) שולחות בקשות POST לכתובות אלו.",
     "logs": "לוגים",
-    "rotate": "החלף"
-  },
-  "team": {
+    "rotate": "החלף",
+    "catalog": {
+      "categories": {
+        "tasks": "משימות",
+        "notifications": "התראות",
+        "reviews": "חיצוני: ביקורות",
+        "github": "חיצוני: GitHub",
+        "generic": "חיצוני: כללי"
+      },
+      "auto_assign": {
+        "name": "הקצאה אוטומטית בעת יצירה",
+        "description": "מקצה משתמש באופן אוטומטי בעת יצירת משימה."
+      },
+      "checklist_done": {
+        "name": "העבר ל'בוצע' כשרשימת הבדיקה הושלמה",
+        "description": "מעביר משימה לסטטוס 'בוצע' ברגע שכל פריטי רשימת הבדיקה מסומנים."
+      },
+      "high_priority_notif": {
+        "name": "התראה על עדיפות גבוהה",
+        "description": "שלח התראה כאשר עדיפות המשימה מוגדרת כ-'גבוהה'.",
+        "message": "זוהתה משימה בעדיפות גבוהה!"
+      },
+      "negative_review": {
+        "name": "ביקורת שלילית ← משימה דחופה",
+        "description": "כאשר מתקבלת ביקורת של 1-2 כוכבים, צור משימה דחופה בבקלוג עם טקסט הביקורת.",
+        "task_title": "תלונה {{review.rating}}★ מ-{{review.author}}",
+        "task_description": "{{review.text}}\n\n— {{review.business}} ({{review.date}})"
+      },
+      "pr_merged": {
+        "name": "PR ממוזג ← התראה",
+        "description": "שלח התראה בכל פעם ש-pull request ממוזג.",
+        "message": "PR #{{pr.number}} '{{pr.title}}' ממוזג על ידי {{pr.merged_by}}"
+      },
+      "issue_opened": {
+        "name": "Issue נפתח ← צור משימה",
+        "description": "צור משימה בבקלוג כאשר Issue ב-GitHub נפתח.",
+        "task_title": "Issue #{{issue.number}}: {{issue.title}}",
+        "task_description": "{{issue.body}}\n\n{{issue.html_url}}"
+      },
+      "generic_webhook": {
+        "name": "ווב-הוק כללי ← צור משימה",
+        "description": "צור משימה מכל מערכת חיצונית ששולחת JSON לכתובת ה-webhook."
+        }
+        },
+        "help": {
+        "title": "מדריך אוטומציות",
+        "content": "אוטומציות מאפשרות לך לייעל את תהליך העבודה שלך. ניתן ליצור כללים כגון: 'כאשר משימה נוצרת, הקצה אותה לחבר צוות' או 'כאשר עמודה משתנה, שלח התראה'. השתמש ב-'האוטומציות שלי' כדי לנהל את הכללים שלך, ב-'תבניות' כדי להוסיף במהירות דפוסים נפוצים, וב-'טריגרים מותאמים אישית' עבור אינטגרציות חיצוניות באמצעות וובהוקים."
+        }
+        },
+        "team": {
+
     "title": "צוות",
     "members": "חברים",
     "invite": "הזמן",

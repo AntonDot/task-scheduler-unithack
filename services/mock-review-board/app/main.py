@@ -10,6 +10,21 @@ from fastapi.templating import Jinja2Templates
 app = FastAPI(title="Mock Review Board", version="0.1.0")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
 
+TRANSLATIONS = {
+    "ru": {
+        "title": "Отзывы — Mock Review Board",
+        "header": "Отзывы клиентов",
+    },
+    "en": {
+        "title": "Reviews — Mock Review Board",
+        "header": "Customer Reviews",
+    },
+    "he": {
+        "title": "ביקורות — Mock Review Board",
+        "header": "ביקורות לקוחות",
+    },
+}
+
 REVIEWS: list[dict] = [
     {
         "id": "rev-001",
@@ -60,8 +75,13 @@ async def health():
 
 
 @app.get("/reviews", response_class=HTMLResponse)
-async def reviews_page(request: Request):
-    return templates.TemplateResponse(request, "reviews.html", context={"reviews": REVIEWS})
+async def reviews_page(request: Request, lang: str = "ru"):
+    t = TRANSLATIONS.get(lang, TRANSLATIONS["en"])
+    return templates.TemplateResponse(
+        request,
+        "reviews.html",
+        context={"reviews": REVIEWS, "t": t, "lang": lang},
+    )
 
 
 @app.get("/api/reviews")

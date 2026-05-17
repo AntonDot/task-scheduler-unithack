@@ -42,141 +42,140 @@ open http://localhost:3000
 | `column_changed` | Задача переведена в другую колонку | нет |
 | `review_received` | Новый отзыв из review-board | да |
 | `github_event` | GitHub PR / issue / push | да |
-| `webhook_generic` | Произвольный внешний вебхук | да |
+| `webhook_generic` | Произвольный внешн�### 🔧 Полное руководство: Использование внешних вебхуков (Webhooks FAQ)
 
-Автоматизации с внешним триггером (`review_received`, `github_event`, `webhook_generic`) получают уникальный **Webhook URL** автоматически при создании. Его можно скопировать во вкладке **Custom Triggers**.
+Все автоматизации с внешними триггерами (`webhook_generic`, `github_event`, `review_received`) при создании автоматически генерируют уникальный публичный URL-адрес вида:
+`http://localhost:8000/api/v1/webhooks/{webhook_token}`
 
----
-
-### Шаблоны — синтаксис `{{переменная}}`
-
-В полях `message`, `title`, `description` поддерживается подстановка значений из события.
-
-**Синтаксис:** `{{field}}` или `{{nested.field.subfield}}`
-
-Одинарные фигурные скобки `{field}` **не работают** — только двойные.
+Каждый входящий запрос к этому адресу проходит три этапа:
+1. **Дедупликация (Deduplication)**: Бэкенд проверяет уникальность запроса по его идентификатору (`external_event_id`). Повторный запрос с тем же ID вернет `200 {"status":"duplicate"}` и не вызовет автоматизацию повторно.
+2. **Нормализация (Normalization)**: Сырое тело JSON-запроса приводится к плоскому объекту payload.
+3. **Обработка (Processing)**: Событие публикуется в RabbitMQ, и `automation-worker` проверяет правила и выполняет заданные действия (Actions).
 
 ---
 
-### Переменные по типу триггера
+### 1. Как устроен запрос `webhook_generic` (Универсальный вебхук)
 
-#### `webhook_generic`
+Чтобы запустить автоматизацию с триггером `webhook_generic`, отправьте `POST`-запрос на полученный URL.
 
-Ты отправляешь запрос:
+**Структура запроса:**
 ```json
 {
   "event_type": "alert",
-  "external_event_id": "evt-001",
+  "external_event_id": "evt-postman-999",
+  "is_duplicate_prohibited": true,
   "payload": {
-    "title": "CPU spike",
-    "server": "prod-01",
-    "severity": "critical"
+    "title": "CPU spike detected",
+    "server": "prod-db-01",
+    "severity": "critical",
+    "details": {
+      "load_average": 8.5
+    }
   }
 }
 ```
 
-В шаблонах доступно:
+*   `event_type` (строка) — произвольный тип вашего события. Вы сможете использовать его для фильтрации в условиях автоматизации (доступно как `webhook_event_type`).
+*   `external_event_id` (строка, опционально) — уникальный ID транзакции для предотвращения дублирования. Если не передать — бэкенд сгенерирует SHA256 хэш от тела запроса.
+*   `is_duplicate_prohibited` (булево, опционально) — установите `true`, если хотите **обойти дедупликацию** (полезно при тестировании из Postman или curl, чтобы запросы выполнялись повторно без смены ID).
+*   `payload` (JSON-объект) — любые данные, которые вы хотите передать в автоматизацию. **Все поля внутри `payload` поднимаются на верхний уровень нормализованного объекта.**
 
-| Переменная | Значение | Пример |
-|------------|----------|--------|
-| `{{title}}` | из `payload.title` | `CPU spike` |
-| `{{server}}` | из `payload.server` | `prod-01` |
-| `{{severity}}` | из `payload.severity` | `critical` |
-| `{{webhook_event_type}}` | значение `event_type` из тела | `alert` |
-| `{{project_id}}` | id проекта автоматизации | `1` |
+---
 
-> **Важно:** поля берутся из объекта `payload` (не из корня запроса). `{{event_type}}` не сработает — используй `{{webhook_event_type}}`.
+### 2. Как обращаться к полям в условиях (Conditions)
 
-Пример action — `send_notification`:
+Когда `automation-worker` обрабатывает событие, он сопоставляет условия типа `field_value_equals` с полями вашего объекта `payload`.
+
+Так как поля из объекта `payload` в запросе поднимаются на верхний уровень, к ним нужно обращаться **напрямую по имени ключа**.
+
+| Вы хотите проверить | Какое поле указать в `field` (в UI или API) | Какое значение указать в `value` |
+|--------------------|---------------------------------------------|----------------------------------|
+| Тип события `event_type` | `webhook_event_type` | `alert` |
+| Кастомный параметр `severity` | `severity` | `critical` |
+| Имя сервера `server` | `server` | `prod-db-01` |
+| Вложенное свойство | `details.load_average` | `8.5` |
+
+**Пример конфигурации условия в JSON:**
+```json
+{
+  "type": "field_value_equals",
+  "params": {
+    "field": "severity",
+    "value": "critical"
+  }
+}
 ```
-Новый алерт: {{severity}} на {{server}} — {{title}}
+
+---
+
+### 3. Как подставлять поля в шаблонах (Templates)
+
+В действиях автоматизации (например, `send_notification` или `create_task`) в полях "Текст уведомления", "Заголовок задачи" и "Описание" вы можете использовать двойные фигурные скобки `{{переменная}}` для динамической подстановки данных из вебхука.
+
+#### Доступные переменные для `webhook_generic`:
+
+| Переменная | Описание | Пример вывода |
+|------------|----------|---------------|
+| `{{webhook_event_type}}` | Значение поля `event_type` из запроса | `alert` |
+| `{{title}}` | Поле `title` из `payload` | `CPU spike detected` |
+| `{{server}}` | Поле `server` из `payload` | `prod-db-01` |
+| `{{severity}}` | Поле `severity` из `payload` | `critical` |
+| `{{details.load_average}}` | Вложенные поля из `payload` | `8.5` |
+| `{{project_id}}` | ID проекта, в котором создана автоматизация | `1` |
+
+**Пример использования в экшене `send_notification`:**
+```text
+⚠️ Внимание! На сервере {{server}} произошел инцидент: {{title}} (Приоритет: {{severity}}).
 ```
+*Результат:* `⚠️ Внимание! На сервере prod-db-01 произошел инцидент: CPU spike detected (Приоритет: critical).`
 
-Пример action — `create_task`:
-- Title: `[{{severity}}] {{title}}`
-- Description: `Сервер: {{server}}`
-
----
-
-#### `review_received`
-
-Payload, доступный в шаблонах:
-
-| Переменная | Описание |
-|------------|----------|
-| `{{review.rating}}` | Оценка (1–5) |
-| `{{review.author}}` | Имя автора |
-| `{{review.text}}` | Текст отзыва |
-| `{{review.business}}` | Название объекта |
-| `{{review.date}}` | Дата |
-
-Пример condition — `numeric_compare`:
-- Field: `review.rating` / Op: `lte` / Value: `2`
-
-Пример action — `create_task`:
-- Title: `Жалоба {{review.rating}}★ от {{review.author}}`
-- Description: `{{review.text}}`
-- Urgency: `URGENT`
+**Пример использования в экшене `create_task`:**
+*   **Title:** `[{{severity}}] {{title}}` -> `[critical] CPU spike detected`
+*   **Description:** `Сервер: {{server}}. Средняя нагрузка: {{details.load_average}}` -> `Сервер: prod-db-01. Средняя нагрузка: 8.5`
 
 ---
 
-#### `github_event`
+### 4. Примеры curl для быстрого тестирования
 
-GitHub присылает PR/Issue/Push. После нормализации доступно:
+#### Тест A. Отправить произвольное событие (Generic Webhook)
 
-Тип конкретного события доступен как `{{github_event_type}}`:
+Отправьте этот запрос, заменив `<TOKEN>` на токен вашей автоматизации:
 
-| Значение | Когда |
-|----------|-------|
-| `github_pr_merged` | PR закрыт и смержен |
-| `github_pr_opened` | PR открыт |
-| `github_pr_closed` | PR закрыт без мержа |
-| `github_issue_opened` | Issue открыт |
-| `github_issue_closed` | Issue закрыт |
-| `github_push` | Пуш в ветку |
+```bash
+curl -X POST http://localhost:8000/api/v1/webhooks/<TOKEN> \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "alert",
+    "external_event_id": "evt-001",
+    "payload": {
+      "title": "CPU spike",
+      "server": "prod-01",
+      "severity": "critical"
+    }
+  }'
+```
+*   Первый запрос вернет `202 {"status":"accepted", ...}`.
+*   Повторный запрос с тем же `external_event_id` вернет `200 {"status":"duplicate"}` (защита от дублирования).
 
-Пример condition для фильтрации конкретного события:
-- Type: `field_value_equals` / Field: `github_event_type` / Value: `github_pr_merged`
+#### Тест B. Повторный запуск без смены ID (Игнорируя дедупликацию)
 
-**PR-события** (`github_pr_merged`, `github_pr_opened`, `github_pr_closed`):
+Передайте `"is_duplicate_prohibited": true` во время отладки, чтобы не менять `external_event_id` вручную при каждом вызове:
 
-| Переменная | Описание |
-|------------|----------|
-| `{{github_event_type}}` | Тип события (`github_pr_merged` и т.д.) |
-| `{{pr.number}}` | Номер PR |
-| `{{pr.title}}` | Название |
-| `{{pr.author}}` | Автор (GitHub login) |
-| `{{pr.merged_by}}` | Кто смержил |
-| `{{pr.base_branch}}` | Целевая ветка |
-| `{{pr.head_branch}}` | Ветка PR |
-| `{{pr.url}}` | Ссылка на PR |
-| `{{repo.full_name}}` | `org/repo` |
-| `{{sender.login}}` | Кто инициировал событие |
-
-**Issue-события** (`github_issue_opened`, `github_issue_closed`):
-
-| Переменная | Описание |
-|------------|----------|
-| `{{issue.number}}` | Номер issue |
-| `{{issue.title}}` | Заголовок |
-| `{{issue.body}}` | Описание |
-| `{{issue.author}}` | Автор |
-| `{{issue.html_url}}` | Ссылка |
-
-**Push** (`github_push`):
-
-| Переменная | Описание |
-|------------|----------|
-| `{{ref}}` | Ветка (`refs/heads/main`) |
-| `{{pusher}}` | Кто запушил |
-| `{{repo.full_name}}` | Репозиторий |
-
----
-
-#### Внутренние триггеры (`task_created`, `task_updated`, `column_changed`)
-
-| Переменная | Описание |
-|------------|----------|
+```bash
+curl -X POST http://localhost:8000/api/v1/webhooks/<TOKEN> \
+  -H "Content-Type: application/json" \
+  -d '{
+    "event_type": "alert",
+    "is_duplicate_prohibited": true,
+    "payload": {
+      "title": "CPU spike (Retest)",
+      "server": "prod-01",
+      "severity": "critical"
+    }
+  }'
+```
+→ Вернет `202 {"status":"accepted", "dedup":false}`, событие выполнится повторно!
+----|
 | `{{id}}` | ID задачи |
 | `{{title}}` | Название задачи |
 | `{{urgency}}` | Приоритет: `LOW / MEDIUM / HIGH / URGENT` |

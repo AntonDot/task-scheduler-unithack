@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Theme } from '@/theme/theme';
-import { IcoChevronR, IcoPlus, IcoX, IcoTrash, IcoBolt, IcoEdit } from '@/components/ui/Icons';
+import { IcoChevronR, IcoPlus, IcoX, IcoTrash, IcoBolt, IcoEdit, IcoHelp } from '@/components/ui/Icons';
 import {
   listAutomations,
   updateAutomation,
@@ -50,13 +50,13 @@ const ALLOWED_CONDITION_TYPES: Record<string, Set<string>> = {
 };
 
 const ALLOWED_ACTION_TYPES: Record<string, Set<string>> = {
-  task_created:    new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
-  task_updated:    new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
-  column_changed:  new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
-  tag_changed:     new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
-  review_received: new Set(['send_notification', 'create_task']),
-  github_event:    new Set(['send_notification', 'create_task']),
-  webhook_generic: new Set(['send_notification', 'create_task']),
+  task_created:    new Set(['change_column', 'assign_user', 'send_notification', 'create_task', 'add_tag', 'enrich_task']),
+  task_updated:    new Set(['change_column', 'assign_user', 'send_notification', 'create_task', 'add_tag', 'enrich_task']),
+  column_changed:  new Set(['change_column', 'assign_user', 'send_notification', 'create_task', 'add_tag', 'enrich_task']),
+  tag_changed:     new Set(['change_column', 'assign_user', 'send_notification', 'create_task', 'add_tag', 'enrich_task']),
+  review_received: new Set(['send_notification', 'create_task', 'add_tag', 'enrich_task']),
+  github_event:    new Set(['send_notification', 'create_task', 'add_tag', 'enrich_task']),
+  webhook_generic: new Set(['send_notification', 'create_task', 'add_tag', 'enrich_task']),
 };
 
 function buildWebhookUrl(token: string): string {
@@ -71,6 +71,7 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<Tab>('my');
   const [showBuilder, setShowBuilder] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [selectedAutoForHistory, setSelectedAutoForHistory] = useState<string | null>(null);
 
@@ -107,6 +108,8 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
     { id: 'assign_user',        label: t('automations.actions.assign_user') },
     { id: 'send_notification',  label: t('automations.actions.send_notification') },
     { id: 'create_task',        label: t('automations.actions.create_task') },
+    { id: 'add_tag',            label: t('automations.actions.add_tag') },
+    { id: 'enrich_task',        label: t('automations.actions.enrich_task') },
   ];
 
   function externalTriggerHint(triggerType: string): string | null {
@@ -425,21 +428,33 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
           {catalog.map(cat => (
             <div key={cat.category} style={{ gridColumn: '1 / -1' }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, marginTop: 10, marginBottom: 12, color: th.text }}>{cat.category}</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 700, marginTop: 10, marginBottom: 12, color: th.text }}>{t(cat.category)}</h3>
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
                 {cat.templates.map(tmpl => (
                   <div key={tmpl.name} style={{
                     background: th.surface, border: `1px solid ${th.border}`, borderRadius: 16, padding: '16px',
                     cursor: 'pointer', transition: 'transform 0.2s, box-shadow 0.2s',
                   }} onClick={() => {
-                    setNewName(tmpl.name);
+                    setNewName(t(tmpl.name));
                     setTrigger(tmpl.config.trigger);
                     setConditions(tmpl.config.conditions);
-                    setActions(tmpl.config.actions);
+                    
+                    // Translate common action fields that might be keys
+                    const translatedActions = tmpl.config.actions.map((a: { type: string; params: Record<string, unknown> }) => ({
+                      ...a,
+                      params: {
+                        ...a.params,
+                        ...(a.params.message ? { message: t(a.params.message as string) } : {}),
+                        ...(a.params.title ? { title: t(a.params.title as string) } : {}),
+                        ...(a.params.description ? { description: t(a.params.description as string) } : {}),
+                      }
+                    }));
+                    
+                    setActions(translatedActions);
                     setShowBuilder(true);
                   }}>
-                    <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: th.text }}>{tmpl.name}</p>
-                    <p style={{ fontSize: 12.5, color: th.textSecondary, lineHeight: 1.5, margin: 0 }}>{tmpl.description}</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: th.text }}>{t(tmpl.name)}</p>
+                    <p style={{ fontSize: 12.5, color: th.textSecondary, lineHeight: 1.5, margin: 0 }}>{t(tmpl.description)}</p>
                   </div>
                 ))}
               </div>
@@ -613,6 +628,71 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
       )}
 
       </div>{/* end scrollable content */}
+
+      {/* Help Button */}
+      <button
+        onClick={() => setShowHelp(true)}
+        style={{
+          position: 'fixed',
+          right: isMobile ? 20 : 32,
+          bottom: isMobile ? 90 : 32, // Above mobile nav if any
+          width: 48,
+          height: 48,
+          borderRadius: '50%',
+          background: th.surface,
+          border: `1px solid ${th.border}`,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          zIndex: 900,
+          color: accent,
+          transition: 'all 0.2s ease',
+        }}
+        onMouseEnter={e => {
+          e.currentTarget.style.transform = 'scale(1.08)';
+          e.currentTarget.style.borderColor = accent;
+        }}
+        onMouseLeave={e => {
+          e.currentTarget.style.transform = 'scale(1)';
+          e.currentTarget.style.borderColor = th.border;
+        }}
+      >
+        <IcoHelp size={24} />
+      </button>
+
+      {/* Help Modal */}
+      {showHelp && (
+        <div style={{
+          position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)',
+          display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', zIndex: 1001,
+        }} onClick={() => setShowHelp(false)}>
+          <div style={{
+            width: '100%', maxWidth: 450,
+            background: th.surface, borderRadius: isMobile ? '24px 24px 0 0' : 24, padding: isMobile ? '24px 20px' : '32px',
+            boxShadow: '0 20px 50px rgba(0,0,0,0.2)',
+          }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+              <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, margin: 0, color: th.text }}>{t('automations.help.title')}</h3>
+              <button onClick={() => setShowHelp(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: th.textMuted }}>
+                <IcoX size={20} />
+              </button>
+            </div>
+            <p style={{ fontSize: 15, color: th.textSecondary, lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>
+              {t('automations.help.content')}
+            </p>
+            <button onClick={() => setShowHelp(false)} style={{
+              marginTop: 28, width: '100%', padding: '12px', borderRadius: 12, border: 'none',
+              background: accent, color: 'white', fontWeight: 700, cursor: 'pointer',
+              boxShadow: `0 4px 12px ${accent}44`
+            }}>
+              {t('common.close')}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Builder Modal */}
       {showBuilder && (
@@ -956,7 +1036,7 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
                               onChange={e => { const n=[...actions]; n[idx].params={...n[idx].params, urgency: e.target.value}; setActions(n); }}
                               style={selectStyle}
                             >
-                              {URGENCY_VALUES.map(u => <option key={u} value={u}>{u}</option>)}
+                              {URGENCY_VALUES.map(u => <option key={u} value={u}>{t(`urgency.${u}`)}</option>)}
                             </select>
                             <input
                               placeholder={t('automations.builder.taskTitle')}
@@ -981,6 +1061,33 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
                             </select>
                             <p style={{ fontSize: 11, color: th.textMuted, gridColumn: isMobile ? 'auto' : '1 / -1', margin: 0, lineHeight: 1.4 }}>{t('automations.builder.tipPayload')}</p>
                           </>
+                        )}
+
+                        {act.type === 'add_tag' && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <select
+                              value={act.params.tag_id || ''}
+                              onChange={e => { const n=[...actions]; n[idx].params={ tag_id: Number(e.target.value) }; setActions(n); }}
+                              style={selectStyle}
+                            >
+                              <option value="">{t('automations.builder.selectTag')}</option>
+                              {projectTags.map(tag => (
+                                <option key={tag.id} value={tag.id}>{tag.name}</option>
+                              ))}
+                            </select>
+                            {act.params.tag_id && (() => {
+                              const selectedTag = projectTags.find(tag => tag.id === act.params.tag_id);
+                              return selectedTag ? (
+                                <div style={{ width: 12, height: 12, borderRadius: '50%', background: selectedTag.color, flexShrink: 0 }} />
+                              ) : null;
+                            })()}
+                          </div>
+                        )}
+
+                        {act.type === 'enrich_task' && (
+                          <p style={{ fontSize: 12, color: th.textMuted, gridColumn: isMobile ? 'auto' : '1 / -1', margin: 0, lineHeight: 1.5 }}>
+                            {t('automations.builder.enrichHint')}
+                          </p>
                         )}
                       </div>
                     </div>

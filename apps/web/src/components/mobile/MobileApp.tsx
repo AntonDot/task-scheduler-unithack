@@ -15,7 +15,8 @@ import { fetchNotifications, type NotificationItem } from '@/api/notifications';
 import { updateProfile } from '@/api/auth';
 import { useT, useLangStore } from '@/i18n';
 import { Avatar, getAvatarUrl, setAvatarUrl } from '@/components/kanban/Avatar';
-import { getPushStatus, getPushDiagnostics, enablePushNotifications, type PushStatus } from '@/api/push';
+import { Logo } from '@/components/ui/Logo';
+import { getPushStatus, isIOSDevice, enablePushNotifications, type PushStatus } from '@/api/push';
 import { fetchProjectTags, createTag, deleteTag } from '@/api/tags';
 import { useTasksRealtime } from '@/hooks/useTasksRealtime';
 import type { Task, BoardColumn, Tag } from '@/types/domain';
@@ -301,13 +302,7 @@ function BoardView({ tasks, columns, onTaskClick, onCreateTask, projects, active
               background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px 4px 4px',
               borderRadius: 10, fontFamily: 'inherit',
             }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: 9,
-                background: activeProject?.color ?? accent,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0,
-              }}>
-                <IcoBolt s={16} />
-              </div>
+              <Logo size={32} borderRadius={9} />
               <span style={{ fontSize: 17, fontWeight: 700, color: th.text, letterSpacing: '-0.02em', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {activeProject?.name ?? 'Victory'}
               </span>
@@ -1334,8 +1329,6 @@ function TeamMobileView({ tasks, members, accent, th, doneColumnId }: {
 function PushNotifRow({ accent, th }: { accent: string; th: ReturnType<typeof useTheme>['theme'] }) {
   const [status, setStatus] = useState<PushStatus>('checking');
   const [loading, setLoading] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
-  const diag = getPushDiagnostics();
 
   useEffect(() => {
     getPushStatus().then(setStatus).catch(() => setStatus('unsupported'));
@@ -1345,7 +1338,7 @@ function PushNotifRow({ accent, th }: { accent: string; th: ReturnType<typeof us
     'no-https': { label: 'No HTTPS', sub: 'App must be opened over HTTPS for push to work', color: '#EF4444' },
     unsupported: {
       label: 'Not supported',
-      sub: diag.ios
+      sub: isIOSDevice()
         ? 'Requires iOS 16.4+ — open the app from the Home Screen icon'
         : 'Push notifications are not supported in this browser',
       color: th.textMuted,
@@ -1400,27 +1393,6 @@ function PushNotifRow({ accent, th }: { accent: string; th: ReturnType<typeof us
           </button>
         )}
       </div>
-      {/* Collapsible debug panel */}
-      {status !== 'subscribed' && (
-        <div style={{ marginTop: 6 }}>
-          <button
-            onClick={() => setShowDebug(v => !v)}
-            style={{ fontSize: 11, color: th.textMuted, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
-          >
-            {showDebug ? '▾ debug' : '▸ debug'}
-          </button>
-          {showDebug && (
-            <pre style={{
-              marginTop: 4, padding: '8px 10px', borderRadius: 8,
-              background: th.columnBg, border: `1px solid ${th.border}`,
-              fontSize: 10, color: th.textMuted, lineHeight: 1.5,
-              overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-            }}>
-              {JSON.stringify(diag, null, 2)}
-            </pre>
-          )}
-        </div>
-      )}
     </div>
   );
 }
@@ -1682,9 +1654,12 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
             {(['en', 'ru', 'he'] as const).map(lang => (
               <button
                 key={lang}
-                onClick={() => {
+                onClick={async () => {
                   setLanguage(lang);
-                  updateProfile({ language: lang }).catch(() => {});
+                  try {
+                    const updated = await updateProfile({ language: lang });
+                    if (token) setAuth(updated, token);
+                  } catch { }
                 }}
                 style={{
                   padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 500,
@@ -1889,7 +1864,7 @@ export function MobileApp() {
   const [createOpen, setCreateOpen] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
   const [bellOpen, setBellOpen] = useState(false);
-  const { user, projectRoles } = useAuthStore();
+  const { user, token, setAuth, projectRoles } = useAuthStore();
   const { toasts, addToast, removeToast } = useToast();
   const NOTIF_READ_KEY = `vt_read_notifs_${user?.id || 'default'}`;
   const [readIds, setReadIds] = useState<Set<string>>(() => {
@@ -2165,6 +2140,15 @@ export function MobileApp() {
   }
 
 
+  const handleSetAccent = useCallback(async (c: string) => {
+    setAccentColor(c);
+    if (!user || !token) return;
+    try {
+      const updated = await updateProfile({ accent_color: c });
+      setAuth(updated, token);
+    } catch { }
+  }, [user, token, setAuth, setAccentColor]);
+
   return (
     <>
       <style>{`
@@ -2196,7 +2180,7 @@ export function MobileApp() {
             <SettingsMobileView
               accent={accent} th={th}
               isDark={isDark} onToggleDark={toggleTheme}
-              onSetAccent={setAccentColor}
+              onSetAccent={handleSetAccent}
             />
           )}
         </div>

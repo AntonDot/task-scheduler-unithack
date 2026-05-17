@@ -221,6 +221,7 @@
       "reviewHint": "Trigger via POST /api/v1/automations/run-review-scraper (or hit the webhook URL with your scraper)",
       "genericHint": "POST any JSON; use event_type to set the event name, payload for data",
       "tipPayload": "Tip: use {{vars}} for values from the event payload.",
+      "enrichHint": "AI will automatically rewrite the task title and description using the ML worker.",
       "removeAction": "Remove this action"
     },
     "triggers": {
@@ -244,7 +245,9 @@
       "change_column": "Move to column",
       "assign_user": "Assign user",
       "send_notification": "Send notification",
-      "create_task": "Create task"
+      "create_task": "Create task",
+      "add_tag": "Add tag",
+      "enrich_task": "Enrich with AI"
     },
     "ops": {
       "gte": "≥",
@@ -261,6 +264,53 @@
     "summary": {
       "when": "When:",
       "then": "Then:"
+    },
+    "catalog": {
+      "categories": {
+        "tasks": "Tasks",
+        "notifications": "Notifications",
+        "reviews": "External: Reviews",
+        "github": "External: GitHub",
+        "generic": "External: Generic"
+      },
+      "auto_assign": {
+        "name": "Auto-assign on creation",
+        "description": "Automatically assign a user when a task is created."
+      },
+      "checklist_done": {
+        "name": "Move to Done when checklist is complete",
+        "description": "Move task to 'Done' status once all checklist items are checked."
+      },
+      "high_priority_notif": {
+        "name": "Notify on high priority",
+        "description": "Send a notification when a task priority is set to 'High'.",
+        "message": "High priority task detected!"
+      },
+      "negative_review": {
+        "name": "Negative review → Urgent task",
+        "description": "When a 1-2 star review arrives, create an urgent task in the backlog with the review text.",
+        "task_title": "Complaint {{review.rating}}★ from {{review.author}}",
+        "task_description": "{{review.text}}\n\n— {{review.business}} ({{review.date}})"
+      },
+      "pr_merged": {
+        "name": "PR merged → Notify",
+        "description": "Send a notification whenever a pull request is merged.",
+        "message": "PR #{{pr.number}} '{{pr.title}}' merged by {{pr.merged_by}}"
+      },
+      "issue_opened": {
+        "name": "Issue opened → Create task",
+        "description": "Create a task in the backlog when a GitHub issue is opened.",
+        "task_title": "Issue #{{issue.number}}: {{issue.title}}",
+        "task_description": "{{issue.body}}\n\n{{issue.html_url}}"
+      },
+      "generic_webhook": {
+        "name": "Generic webhook → Create task",
+        "description": "Create a task from any external system that POSTs JSON to the webhook URL."
+      }
+    },
+    "help": {
+      "title": "Automations Guide",
+      "content": "Automations allow you to create rules: \"Trigger → Condition → Action\".\n\n🔗 External Webhooks\nTo integrate with external systems, create an automation with the \"GitHub\" or \"Generic Webhook\" trigger. After saving, you will receive a unique URL.\n\nRequest Format:\nMethod: POST / Content-Type: application/json.\nExample body:\n{ \"event_type\": \"my_event\", \"payload\": { \"user\": \"Ivan\", \"score\": 42 } }\n\n🔍 Using Fields in Conditions\nAddress fields directly (without 'payload.' prefix). Use dot notation for nested objects. For example:\n— user — extracts username from the example above.\n— score — extracts the numeric value.\n— repo.name — extracts repository name from GitHub events.\n\n📝 Variables in Actions\nYou can use variables in notification texts and task titles: {{user}}, {{task.title}}."
     }
   },
   "team": {

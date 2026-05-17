@@ -1,23 +1,22 @@
 name: Auto Approve to Dev
 
 on:
-  pull_request:
+  pull_request_target: # Изменили триггер
     branches:
       - dev
     types: [opened, reopened, synchronize]
 
-permissions:
-  pull-requests: write
-
 jobs:
   auto-approve:
     runs-on: ubuntu-latest
-    # Проверяем, что PR не имеет конфликтов (GitHub выставляет mergeable в true)
-    # Исключаем самого автора бота, чтобы не было бесконечного цикла
+    permissions:
+      pull-requests: write
+    # Исключаем апрув самого себя, если вы и есть автор PR
     if: github.actor != 'github-actions[bot]'
     
     steps:
-      - name: Approve Pull Request
-        uses: hmarr/auto-approve-action@v4
+      - uses: hmarr/auto-approve-action@v4
         with:
+          # По умолчанию используется встроенный токен, 
+          # теперь у него точно хватит прав благодаря pull_request_target
           github-token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,5 +1,6 @@
 import type { Theme } from '@/theme/theme';
 import { IcoBoard, IcoBolt, IcoChart, IcoUsers, IcoCog, IcoSync, IcoSidebarL, IcoLogout } from '@/components/ui/Icons';
+import { Logo } from '@/components/ui/Logo';
 import type { Project } from '@/types/domain';
 import { useT } from '@/i18n';
 
@@ -48,13 +49,7 @@ export function Sidebar({ view, setView, projects, activeProjectId, setActivePro
           padding: '10px 0 8px', borderBottom: `1px solid ${th.border}`,
           gap: 6, flexShrink: 0,
         }}>
-          <div style={{
-            width: 28, height: 28, borderRadius: 8,
-            background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: 'white',
-          }}>
-            <IcoBolt size={15} />
-          </div>
+          <Logo size={28} />
           <button
             onClick={onToggleCollapse}
             title={t('sidebar.expandSidebar')}
@@ -78,13 +73,7 @@ export function Sidebar({ view, setView, projects, activeProjectId, setActivePro
           gap: 8, flexShrink: 0, justifyContent: 'space-between',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-            <div style={{
-              width: 28, height: 28, borderRadius: 8,
-              background: accent, display: 'flex', alignItems: 'center', justifyContent: 'center',
-              flexShrink: 0, color: 'white',
-            }}>
-              <IcoBolt size={15} />
-            </div>
+            <Logo size={28} />
             <span style={{ fontSize: 15, fontWeight: 700, color: th.text, letterSpacing: '-0.02em', whiteSpace: 'nowrap' }}>
               Victory
             </span>

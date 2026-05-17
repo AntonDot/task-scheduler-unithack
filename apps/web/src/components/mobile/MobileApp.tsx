@@ -15,6 +15,7 @@ import { fetchNotifications, type NotificationItem } from '@/api/notifications';
 import { updateProfile } from '@/api/auth';
 import { useT, useLangStore } from '@/i18n';
 import { Avatar, getAvatarUrl, setAvatarUrl } from '@/components/kanban/Avatar';
+import { Logo } from '@/components/ui/Logo';
 import { getPushStatus, getPushDiagnostics, enablePushNotifications, type PushStatus } from '@/api/push';
 import { fetchProjectTags, createTag, deleteTag } from '@/api/tags';
 import { useTasksRealtime } from '@/hooks/useTasksRealtime';
@@ -301,13 +302,7 @@ function BoardView({ tasks, columns, onTaskClick, onCreateTask, projects, active
               background: 'none', border: 'none', cursor: 'pointer', padding: '4px 8px 4px 4px',
               borderRadius: 10, fontFamily: 'inherit',
             }}>
-              <div style={{
-                width: 32, height: 32, borderRadius: 9,
-                background: activeProject?.color ?? accent,
-                display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', flexShrink: 0,
-              }}>
-                <IcoBolt s={16} />
-              </div>
+              <Logo size={32} borderRadius={9} />
               <span style={{ fontSize: 17, fontWeight: 700, color: th.text, letterSpacing: '-0.02em', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {activeProject?.name ?? 'Victory'}
               </span>

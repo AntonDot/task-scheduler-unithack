@@ -438,7 +438,7 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
                     setConditions(tmpl.config.conditions);
                     
                     // Translate common action fields that might be keys
-                    const translatedActions = tmpl.config.actions.map(a => ({
+                    const translatedActions = tmpl.config.actions.map((a: { type: string; params: Record<string, unknown> }) => ({
                       ...a,
                       params: {
                         ...a.params,

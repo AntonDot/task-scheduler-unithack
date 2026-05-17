@@ -187,6 +187,7 @@
       "addAction": "+ Add Action",
       "selectColumn": "Select column...",
       "selectMember": "Select member...",
+      "selectTag": "Select tag...",
       "notifText": "Notification text (supports {{var}})",
       "assigneeDefault": "Assignee (default)",
       "firstColumnDefault": "First column (default)",
@@ -217,6 +218,7 @@
       "task_created": "Task created",
       "task_updated": "Task updated",
       "column_changed": "Column changed",
+      "tag_changed": "Tag changed",
       "review_received": "Review received",
       "github_event": "GitHub event",
       "webhook_generic": "Generic webhook"
@@ -226,7 +228,8 @@
       "column_equals": "Column equals",
       "numeric_compare": "Number compare",
       "contains": "Contains text",
-      "regex_match": "Regex match"
+      "regex_match": "Regex match",
+      "tag_equals": "Tag equals"
     },
     "actions": {
       "change_column": "Move to column",

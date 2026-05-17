@@ -187,6 +187,7 @@
       "addAction": "+ Добавить действие",
       "selectColumn": "Выберите колонку...",
       "selectMember": "Выберите участника...",
+      "selectTag": "Выберите тег...",
       "notifText": "Текст уведомления (поддерживает {{var}})",
       "assigneeDefault": "Исполнитель (по умолчанию)",
       "firstColumnDefault": "Первая колонка (по умолчанию)",
@@ -217,6 +218,7 @@
       "task_created": "Задача создана",
       "task_updated": "Задача обновлена",
       "column_changed": "Колонка изменена",
+      "tag_changed": "Тег изменён",
       "review_received": "Получен отзыв",
       "github_event": "GitHub событие",
       "webhook_generic": "Универсальный вебхук"
@@ -226,7 +228,8 @@
       "column_equals": "Колонка равна",
       "numeric_compare": "Числовое сравнение",
       "contains": "Содержит текст",
-      "regex_match": "Regex совпадение"
+      "regex_match": "Regex совпадение",
+      "tag_equals": "Тег равен"
     },
     "actions": {
       "change_column": "Переместить в колонку",

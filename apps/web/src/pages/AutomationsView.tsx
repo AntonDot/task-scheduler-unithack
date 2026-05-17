@@ -15,6 +15,7 @@ import {
 } from '@/api/automations';
 import { fetchProjectMembers } from '@/api/members';
 import { fetchColumns } from '@/api/columns';
+import { fetchProjectTags, type ProjectTag } from '@/api/tags';
 import { useT } from '@/i18n';
 
 type Tab = 'my' | 'catalog' | 'triggers' | 'history';
@@ -41,6 +42,7 @@ const ALLOWED_CONDITION_TYPES: Record<string, Set<string>> = {
   task_created:    new Set(['field_value_equals', 'column_equals', 'numeric_compare', 'contains', 'regex_match']),
   task_updated:    new Set(['field_value_equals', 'column_equals', 'numeric_compare', 'contains', 'regex_match']),
   column_changed:  new Set(['field_value_equals', 'column_equals', 'numeric_compare', 'contains', 'regex_match']),
+  tag_changed:     new Set(['tag_equals', 'field_value_equals']),
   review_received: new Set(['field_value_equals', 'numeric_compare', 'contains', 'regex_match']),
   github_event:    new Set(['field_value_equals', 'numeric_compare', 'contains', 'regex_match']),
   webhook_generic: new Set(['field_value_equals', 'numeric_compare', 'contains', 'regex_match']),
@@ -50,6 +52,7 @@ const ALLOWED_ACTION_TYPES: Record<string, Set<string>> = {
   task_created:    new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
   task_updated:    new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
   column_changed:  new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
+  tag_changed:     new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
   review_received: new Set(['send_notification', 'create_task']),
   github_event:    new Set(['send_notification', 'create_task']),
   webhook_generic: new Set(['send_notification', 'create_task']),
@@ -82,6 +85,7 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
     { id: 'task_created',    label: t('automations.triggers.task_created'),    category: 'internal' },
     { id: 'task_updated',    label: t('automations.triggers.task_updated'),    category: 'internal' },
     { id: 'column_changed',  label: t('automations.triggers.column_changed'),  category: 'internal' },
+    { id: 'tag_changed',    label: t('automations.triggers.tag_changed'),    category: 'internal' },
     // External (require webhook URL or scraper)
     { id: 'review_received', label: t('automations.triggers.review_received'), category: 'external' },
     { id: 'github_event',    label: t('automations.triggers.github_event'),    category: 'external' },
@@ -94,6 +98,7 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
     { id: 'numeric_compare',    label: t('automations.conditions.numeric_compare') },
     { id: 'contains',           label: t('automations.conditions.contains') },
     { id: 'regex_match',        label: t('automations.conditions.regex_match') },
+    { id: 'tag_equals',         label: t('automations.conditions.tag_equals') },
   ];
 
   const ACTION_TYPES = [
@@ -129,6 +134,11 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
   const { data: columns = [] } = useQuery({
     queryKey: ['columns', projectId],
     queryFn: () => fetchColumns(projectId),
+  });
+
+  const { data: projectTags = [] } = useQuery<ProjectTag[]>({
+    queryKey: ['tags', projectId],
+    queryFn: () => fetchProjectTags(projectId),
   });
 
   const { data: catalog = [] } = useQuery({
@@ -684,6 +694,27 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
                             style={selectStyle}
                           />
                         </>
+                      )}
+
+                      {cond.type === 'tag_equals' && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, gridColumn: 'span 1' }}>
+                          <select
+                            value={cond.params.tag_id ?? ''}
+                            onChange={e => { const n=[...conditions]; n[idx].params={tag_id: Number(e.target.value)}; setConditions(n); }}
+                            style={selectStyle}
+                          >
+                            <option value="">{t('automations.builder.selectTag')}</option>
+                            {projectTags.map(tag => (
+                              <option key={tag.id} value={tag.id}>{tag.name}</option>
+                            ))}
+                          </select>
+                          {cond.params.tag_id && (() => {
+                            const selectedTag = projectTags.find(tag => tag.id === cond.params.tag_id);
+                            return selectedTag ? (
+                              <div style={{ width: 12, height: 12, borderRadius: '50%', background: selectedTag.color, flexShrink: 0 }} />
+                            ) : null;
+                          })()}
+                        </div>
                       )}
                     </div>
                     <button

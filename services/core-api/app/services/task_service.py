@@ -172,6 +172,7 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
 
     co_assignee_ids = update_data.pop("co_assignee_ids", None)
     tag_ids = update_data.pop("tag_ids", None)
+    old_tag_ids = [tag.id for tag in task.tags]
 
     old_values = {field: getattr(task, field) for field in update_data}
 
@@ -236,6 +237,24 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
             "old_values": old_values,
         },
     )
+
+    # Publish tag_changed event separately so tag-based automations fire
+    if tag_ids is not None:
+        new_tag_ids = [tag.id for tag in task.tags]
+        added = [tid for tid in new_tag_ids if tid not in set(old_tag_ids)]
+        removed = [tid for tid in old_tag_ids if tid not in set(new_tag_ids)]
+        if added or removed:
+            await rabbitmq_manager.publish_event(
+                "tag_changed",
+                {
+                    "id": task.id,
+                    "task_id": task.id,
+                    "project_id": task.project_id,
+                    "added_tag_ids": added,
+                    "removed_tag_ids": removed,
+                    "current_tag_ids": new_tag_ids,
+                },
+            )
 
     return task
 

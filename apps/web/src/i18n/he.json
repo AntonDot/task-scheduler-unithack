@@ -187,6 +187,7 @@
       "addAction": "+ הוסף פעולה",
       "selectColumn": "בחר עמודה...",
       "selectMember": "בחר חבר...",
+      "selectTag": "בחר תג...",
       "notifText": "טקסט התראה (תומך ב-{{var}})",
       "assigneeDefault": "משויך (ברירת מחדל)",
       "firstColumnDefault": "עמודה ראשונה (ברירת מחדל)",
@@ -217,6 +218,7 @@
       "task_created": "משימה נוצרה",
       "task_updated": "משימה עודכנה",
       "column_changed": "עמודה שונתה",
+      "tag_changed": "תג שונה",
       "review_received": "ביקורת התקבלה",
       "github_event": "אירוע GitHub",
       "webhook_generic": "Webhook כללי"
@@ -226,7 +228,8 @@
       "column_equals": "עמודה שווה",
       "numeric_compare": "השוואה מספרית",
       "contains": "מכיל טקסט",
-      "regex_match": "התאמת Regex"
+      "regex_match": "התאמת Regex",
+      "tag_equals": "תג שווה"
     },
     "actions": {
       "change_column": "העבר לעמודה",

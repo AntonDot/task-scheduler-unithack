@@ -122,6 +122,7 @@ class InternalAutomationUpdate(BaseModel):
     project_id: int | None = None  # required when task_id is None (for webhook events)
     action: str  # task_updated, column_changed, notification
     message: str | None = None
+    recipient_user_id: int | None = None  # when set, bell only shown to this user
 
 
 @router.post("/api/v1/tasks/internal/automation-event", status_code=204)
@@ -162,6 +163,7 @@ async def internal_automation_event(
                 task_id=task.id,
                 action="automation_triggered",
                 new_value=body.message or f"Automation: {body.action}",
+                old_value=str(body.recipient_user_id) if body.recipient_user_id else None,
                 user_id=system_user_id,
             )
         )
@@ -187,6 +189,7 @@ async def internal_automation_event(
                 project_id=project_id,
                 action="automation_triggered",
                 new_value=body.message or f"Automation: {body.action}",
+                old_value=str(body.recipient_user_id) if body.recipient_user_id else None,
                 user_id=system_user_id,
             )
         )

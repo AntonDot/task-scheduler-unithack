@@ -92,6 +92,8 @@ async def get_notifications(
         return []
 
     # --- Audit log notifications ---
+    # For automation_triggered: old_value stores the intended recipient_user_id (or NULL = broadcast).
+    # Only show the entry to the designated recipient, or to everyone if no recipient was specified.
     audit_result = await db.execute(
         select(AuditLog)
         .where(
@@ -99,6 +101,12 @@ async def get_notifications(
             or_(AuditLog.user_id != current_user.id, AuditLog.action == "automation_triggered"),
             AuditLog.action.in_(list(_ACTION_LABELS.keys())),
             AuditLog.created_at >= since,
+            # Recipient filter: for automation_triggered only show to the intended user
+            or_(
+                AuditLog.action != "automation_triggered",   # non-automation: no restriction
+                AuditLog.old_value.is_(None),                 # automation broadcast (no specific recipient)
+                AuditLog.old_value == str(current_user.id),  # automation targeted at this user
+            ),
         )
         .options(joinedload(AuditLog.user))
         .order_by(AuditLog.created_at.desc())
@@ -208,6 +216,11 @@ async def get_notifications(
             AuditLog.project_id.in_(project_ids),
             AuditLog.action == "automation_triggered",
             AuditLog.created_at >= since,
+            # Same recipient filter as task-bound: NULL = broadcast, otherwise must match
+            or_(
+                AuditLog.old_value.is_(None),
+                AuditLog.old_value == str(current_user.id),
+            ),
         )
         .options(joinedload(AuditLog.user))
         .order_by(AuditLog.created_at.desc())

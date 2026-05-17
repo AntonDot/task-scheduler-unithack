@@ -254,7 +254,50 @@
     "customWebhooks": "Webhooks חיצוניים",
     "customWebhooksHint": "מערכות חיצוניות (GitHub, scrapers, אינטגרציות) שולחות בקשות POST לכתובות אלו.",
     "logs": "לוגים",
-    "rotate": "החלף"
+    "rotate": "החלף",
+    "catalog": {
+      "categories": {
+        "tasks": "משימות",
+        "notifications": "התראות",
+        "reviews": "חיצוני: ביקורות",
+        "github": "חיצוני: GitHub",
+        "generic": "חיצוני: כללי"
+      },
+      "auto_assign": {
+        "name": "הקצאה אוטומטית בעת יצירה",
+        "description": "מקצה משתמש באופן אוטומטי בעת יצירת משימה."
+      },
+      "checklist_done": {
+        "name": "העבר ל'בוצע' כשרשימת הבדיקה הושלמה",
+        "description": "מעביר משימה לסטטוס 'בוצע' ברגע שכל פריטי רשימת הבדיקה מסומנים."
+      },
+      "high_priority_notif": {
+        "name": "התראה על עדיפות גבוהה",
+        "description": "שלח התראה כאשר עדיפות המשימה מוגדרת כ-'גבוהה'.",
+        "message": "זוהתה משימה בעדיפות גבוהה!"
+      },
+      "negative_review": {
+        "name": "ביקורת שלילית ← משימה דחופה",
+        "description": "כאשר מתקבלת ביקורת של 1-2 כוכבים, צור משימה דחופה בבקלוג עם טקסט הביקורת.",
+        "task_title": "תלונה {{review.rating}}★ מ-{{review.author}}",
+        "task_description": "{{review.text}}\n\n— {{review.business}} ({{review.date}})"
+      },
+      "pr_merged": {
+        "name": "PR ממוזג ← התראה",
+        "description": "שלח התראה בכל פעם ש-pull request ממוזג.",
+        "message": "PR #{{pr.number}} '{{pr.title}}' ממוזג על ידי {{pr.merged_by}}"
+      },
+      "issue_opened": {
+        "name": "Issue נפתח ← צור משימה",
+        "description": "צור משימה בבקלוג כאשר Issue ב-GitHub נפתח.",
+        "task_title": "Issue #{{issue.number}}: {{issue.title}}",
+        "task_description": "{{issue.body}}\n\n{{issue.html_url}}"
+      },
+      "generic_webhook": {
+        "name": "ווב-הוק כללי ← צור משימה",
+        "description": "צור משימה מכל מערכת חיצונית ששולחת JSON לכתובת הווב-הוק."
+      }
+    }
   },
   "team": {
     "title": "צוות",

@@ -261,6 +261,49 @@
     "summary": {
       "when": "Когда:",
       "then": "Тогда:"
+    },
+    "catalog": {
+      "categories": {
+        "tasks": "Задачи",
+        "notifications": "Уведомления",
+        "reviews": "Внешние: Отзывы",
+        "github": "Внешние: GitHub",
+        "generic": "Внешние: Вебхуки"
+      },
+      "auto_assign": {
+        "name": "Автоназначение при создании",
+        "description": "Автоматически назначает исполнителя при создании задачи."
+      },
+      "checklist_done": {
+        "name": "В «Выполнено» при завершении чек-листа",
+        "description": "Переводит задачу в статус «Выполнено», когда все пункты чек-листа отмечены."
+      },
+      "high_priority_notif": {
+        "name": "Уведомление о высоком приоритете",
+        "description": "Отправляет уведомление, когда задаче устанавливается приоритет «Высокий».",
+        "message": "Обнаружена задача с высоким приоритетом!"
+      },
+      "negative_review": {
+        "name": "Плохой отзыв → Срочная задача",
+        "description": "При получении отзыва 1-2 звезды создает срочную задачу в бэклоге с текстом отзыва.",
+        "task_title": "Жалоба {{review.rating}}★ от {{review.author}}",
+        "task_description": "{{review.text}}\n\n— {{review.business}} ({{review.date}})"
+      },
+      "pr_merged": {
+        "name": "PR слит → Уведомление",
+        "description": "Отправляет уведомление при слиянии pull request.",
+        "message": "PR #{{pr.number}} '{{pr.title}}' слит пользователем {{pr.merged_by}}"
+      },
+      "issue_opened": {
+        "name": "Issue открыт → Создать задачу",
+        "description": "Создает задачу в бэклоге, когда открывается issue на GitHub.",
+        "task_title": "Issue #{{issue.number}}: {{issue.title}}",
+        "task_description": "{{issue.body}}\n\n{{issue.html_url}}"
+      },
+      "generic_webhook": {
+        "name": "Вебхук → Создать задачу",
+        "description": "Создает задачу из любой внешней системы, отправляющей JSON на URL вебхука."
+      }
     }
   },
   "team": {

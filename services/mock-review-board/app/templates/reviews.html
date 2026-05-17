@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="{{ lang }}" dir="{% if lang == 'he' %}rtl{% else %}ltr{% endif %}">
 <head>
     <meta charset="UTF-8">
-    <title>Отзывы — Mock Review Board</title>
+    <title>{{ t.title }}</title>
     <style>
-        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; background: #f5f5f5; }
+        body { font-family: sans-serif; max-width: 800px; margin: 2rem auto; background: #f5f5f5; padding: 0 1rem; }
         .review { background: white; padding: 1rem; margin: 1rem 0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
         .review-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; }
         .rating { font-size: 1.2rem; }
@@ -12,10 +12,18 @@
         .rating-high { color: #27ae60; }
         .business { color: #7f8c8d; font-size: 0.9rem; }
         .date { color: #95a5a6; font-size: 0.85rem; }
+        .lang-switch { margin-bottom: 1rem; text-align: right; }
+        .lang-switch a { margin-left: 10px; text-decoration: none; color: #3498db; font-size: 0.9rem; }
+        [dir="rtl"] .review-header { flex-direction: row-reverse; }
     </style>
 </head>
 <body>
-    <h1>Отзывы клиентов</h1>
+    <div class="lang-switch">
+        <a href="?lang=ru">Русский</a>
+        <a href="?lang=en">English</a>
+        <a href="?lang=he">עברית</a>
+    </div>
+    <h1>{{ t.header }}</h1>
     {% for review in reviews %}
     <div class="review" data-review-id="{{ review.id }}" data-rating="{{ review.rating }}">
         <div class="review-header">

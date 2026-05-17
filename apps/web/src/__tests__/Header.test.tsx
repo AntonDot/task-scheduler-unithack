@@ -53,13 +53,13 @@ describe("Header", () => {
 
   it("renders search input on kanban view", () => {
     renderHeader({ view: "kanban" });
-    expect(screen.getByPlaceholderText("Search tasks…")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Search tasks...")).toBeInTheDocument();
   });
 
   it("calls setSearch when typing in search", () => {
     const setSearch = vi.fn();
     renderHeader({ view: "kanban", setSearch });
-    const input = screen.getByPlaceholderText("Search tasks…");
+    const input = screen.getByPlaceholderText("Search tasks...");
     fireEvent.change(input, { target: { value: "test" } });
     expect(setSearch).toHaveBeenCalledWith("test");
   });

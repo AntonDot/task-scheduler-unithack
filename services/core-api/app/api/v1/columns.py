@@ -141,7 +141,7 @@ async def delete_column(
     # Move all non-deleted tasks from target to fallback
     await db.execute(
         Task.__table__.update()
-        .where(Task.column_id == column_id, not Task.is_deleted)
+        .where(Task.column_id == column_id, Task.is_deleted.is_(False))
         .values(column_id=fallback_col.id)
     )
 

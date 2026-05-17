@@ -31,7 +31,14 @@
     "success": "הצלחה",
     "error": "שגיאה",
     "lightMode": "מצב בהיר",
-    "darkMode": "מצב כהה"
+    "darkMode": "מצב כהה",
+    "justNow": "זה עתה",
+    "minutesAgo": "לפני {{m}}ד'",
+    "hoursAgo": "לפני {{h}}ש'",
+    "daysAgo": "לפני {{d}}י'",
+    "tapToChangePhoto": "לחץ לשינוי תמונה",
+    "inviteTeammates": "הזמן חברי צוות",
+    "addNewMembers": "הוסף חברים חדשים"
   },
   "urgency": {
     "LOW": "נמוך",

@@ -24,6 +24,7 @@ interface AutomationsViewProps {
   projectId: number;
   accent: string;
   theme: Theme;
+  isMobile?: boolean;
 }
 
 const NUMERIC_OPS = [
@@ -64,7 +65,7 @@ function buildWebhookUrl(token: string): string {
   return `${trimmed}/webhooks/${token}`;
 }
 
-export function AutomationsView({ projectId, accent, theme }: AutomationsViewProps) {
+export function AutomationsView({ projectId, accent, theme, isMobile }: AutomationsViewProps) {
   const t = useT();
   const th = theme;
   const queryClient = useQueryClient();
@@ -262,11 +263,13 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
     <button
       onClick={() => setActiveTab(id)}
       style={{
-        padding: '8px 16px', border: 'none', background: 'none',
-        fontSize: 14, fontWeight: activeTab === id ? 600 : 500,
+        padding: isMobile ? '10px 14px' : '8px 16px', border: 'none', background: 'none',
+        fontSize: isMobile ? 13.5 : 14, fontWeight: activeTab === id ? 600 : 500,
         color: activeTab === id ? accent : th.textMuted,
         borderBottom: activeTab === id ? `2px solid ${accent}` : 'none',
         cursor: 'pointer', transition: 'all 0.2s',
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
       }}
     >
       {label}
@@ -279,76 +282,138 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
   };
 
   return (
-    <div style={{ padding: '28px 32px', overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column' }}>
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-        <div>
-          <h2 style={{ fontSize: 22, fontWeight: 700, color: th.text, margin: 0 }}>{t('automations.title')}</h2>
-          <p style={{ fontSize: 13, color: th.textSecondary, marginTop: 4 }}>
-            {t('automations.subtitle')}
-          </p>
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column',
+      overflow: 'hidden', color: th.text
+    }}>
+      {/* Non-scrolling area: header + tab bar always stay visible */}
+      <div style={{
+        padding: isMobile ? 'calc(var(--sat, 0px) + 16px) 16px 0' : '28px 32px 0',
+        flexShrink: 0,
+      }}>
+        <div style={{
+          display: 'flex',
+          alignItems: isMobile ? 'flex-start' : 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          marginBottom: 20
+        }}>
+          <div style={{ flex: 1 }}>
+            <h2 style={{ fontSize: isMobile ? 20 : 22, fontWeight: 700, color: th.text, margin: 0 }}>{t('automations.title')}</h2>
+            <p style={{ fontSize: isMobile ? 12 : 13, color: th.textSecondary, marginTop: 4, lineHeight: 1.4 }}>
+              {t('automations.subtitle')}
+            </p>
+          </div>
+          <button
+            onClick={() => { resetBuilder(); setShowBuilder(true); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: isMobile ? '8px 14px' : '10px 18px', borderRadius: 10, border: 'none',
+              background: accent, color: 'white', fontSize: isMobile ? 13 : 14, fontWeight: 600,
+              cursor: 'pointer', boxShadow: `0 4px 12px ${accent}40`, flexShrink: 0,
+            }}
+          >
+            <IcoPlus size={14} />
+            {isMobile ? t('common.add') : t('automations.create')}
+          </button>
         </div>
-        <button
-          onClick={() => { resetBuilder(); setShowBuilder(true); }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 8,
-            padding: '10px 18px', borderRadius: 10, border: 'none',
-            background: accent, color: 'white', fontSize: 14, fontWeight: 600,
-            cursor: 'pointer', boxShadow: `0 4px 12px ${accent}40`,
-          }}
-        >
-          <IcoPlus size={16} />
-          {t('automations.create')}
-        </button>
+
+        {/* marginLeft/Right: -16 must equal the wrapper paddingLeft/Right: 16 to stay within overflow:hidden root */}
+        <div style={{
+          display: 'flex',
+          gap: isMobile ? 12 : 20,
+          borderBottom: `1px solid ${th.border}`,
+          overflowX: isMobile ? 'auto' : 'visible',
+          marginLeft: isMobile ? -16 : 0,
+          marginRight: isMobile ? -16 : 0,
+          paddingLeft: isMobile ? 16 : 0,
+          scrollbarWidth: 'none',
+        }}>
+          <TabButton id="my" label={t('automations.tabs.myAutomations')} />
+          <TabButton id="catalog" label={t('automations.tabs.templates')} />
+          <TabButton id="triggers" label={t('automations.tabs.customTriggers')} />
+          <TabButton id="history" label={t('automations.tabs.history')} />
+        </div>
       </div>
 
-      <div style={{ display: 'flex', gap: 20, borderBottom: `1px solid ${th.border}`, marginBottom: 24 }}>
-        <TabButton id="my" label={t('automations.tabs.myAutomations')} />
-        <TabButton id="catalog" label={t('automations.tabs.templates')} />
-        <TabButton id="triggers" label={t('automations.tabs.customTriggers')} />
-        <TabButton id="history" label={t('automations.tabs.history')} />
-      </div>
+      {/* Scrollable content area only */}
+      <div style={{
+        flex: 1, overflowY: 'auto',
+        padding: isMobile ? '24px 16px 120px' : '24px 32px 28px',
+      }}>
 
       {activeTab === 'my' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
           {automations.length === 0 && !loadingAutos && (
-            <div style={{ padding: '40px', textAlign: 'center', background: th.surface, borderRadius: 16, border: `1px dashed ${th.border}` }}>
-              <p style={{ color: th.textMuted }}>{t('automations.empty')}</p>
+            <div style={{ padding: '40px 20px', textAlign: 'center', background: th.surface, borderRadius: 16, border: `1px dashed ${th.border}` }}>
+              <p style={{ color: th.textMuted, fontSize: 14 }}>{t('automations.empty')}</p>
             </div>
           )}
           {automations.map(auto => (
             <div key={auto.id} style={{
-              background: th.surface, border: `1px solid ${th.border}`, borderRadius: 14, padding: '16px 20px',
-              display: 'flex', alignItems: 'center', gap: 16,
+              background: th.surface, border: `1px solid ${th.border}`, borderRadius: 14,
+              padding: isMobile ? '14px' : '16px 20px',
+              display: 'flex',
+              flexDirection: isMobile ? 'column' : 'row',
+              alignItems: isMobile ? 'flex-start' : 'center',
+              gap: isMobile ? 14 : 16,
               opacity: auto.is_active ? 1 : 0.6, transition: 'opacity 0.2s',
             }}>
-              <Toggle val={auto.is_active} onChange={(v) => toggleMutation.mutate({ id: auto.id, is_active: v })} />
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-                  <p style={{ fontSize: 15, fontWeight: 600, color: th.text, margin: 0 }}>{auto.name}</p>
-                  <span style={{ fontSize: 11, color: th.textMuted }}>• {auto.stats_runs} {t('automations.runs')}</span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%' }}>
+                <Toggle val={auto.is_active} onChange={(v) => toggleMutation.mutate({ id: auto.id, is_active: v })} />
+                <div style={{ flex: 1 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <p style={{ fontSize: isMobile ? 14.5 : 15, fontWeight: 700, color: th.text, margin: 0 }}>{auto.name}</p>
+                    <span style={{ fontSize: 10.5, color: th.textMuted }}>• {auto.stats_runs} {t('automations.runs')}</span>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-                  <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: 11, background: th.bg, border: `1px solid ${th.border}` }}>
-                    {t('automations.builder.when')}: {TRIGGER_TYPES_LABELED.find(tt => tt.id === auto.config.trigger.type)?.label || auto.config.trigger.type}
-                  </span>
-                  <IcoChevronR size={12} />
-                  <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: 11, background: `${accent}15`, color: accent, border: `1px solid ${accent}30` }}>
-                    {t('automations.builder.then')}: {auto.config.actions.map(a => ACTION_TYPES.find(at => at.id === a.type)?.label || a.type).join(', ')}
-                  </span>
-                </div>
+                {isMobile && (
+                  <div style={{ display: 'flex', gap: 12 }}>
+                    <button onClick={() => handleEdit(auto)} style={{ background: 'none', border: 'none', color: th.textMuted }}><IcoEdit size={16} /></button>
+                    <button onClick={() => deleteMutation.mutate(auto.id)} style={{ background: 'none', border: 'none', color: th.textMuted }}><IcoTrash size={16} /></button>
+                  </div>
+                )}
               </div>
-              <div style={{ textAlign: 'right', display: 'flex', alignItems: 'center', gap: 16 }}>
-                <div style={{ fontSize: 12, color: th.textMuted }}>
-                   {t('automations.timeSaved')}: {auto.stats_runs * 2} {t('automations.min')}.
+
+              {!isMobile && (
+                <div style={{ flex: 1, width: '100%' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <div style={{ padding: '4px 8px', borderRadius: 6, fontSize: 10.5, background: th.bg, border: `1px solid ${th.border}`, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <span style={{ fontWeight: 600, opacity: 0.7 }}>{t('automations.summary.when')}</span> {TRIGGER_TYPES_LABELED.find(tt => tt.id === auto.config.trigger.type)?.label || auto.config.trigger.type}
+                    </div>
+                    <IcoChevronR size={10} />
+                    <div style={{ padding: '4px 8px', borderRadius: 6, fontSize: 10.5, background: `${accent}15`, color: accent, border: `1px solid ${accent}30`, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      <span style={{ fontWeight: 600, opacity: 0.7 }}>{t('automations.summary.then')}</span> {auto.config.actions.map(a => ACTION_TYPES.find(at => at.id === a.type)?.label || a.type).join(', ')}
+                    </div>
+                  </div>
                 </div>
-                <button onClick={() => { setSelectedAutoForHistory(auto.id); setActiveTab('history'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: accent, fontSize: 12, fontWeight: 600 }}>{t('automations.logs')}</button>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <button onClick={() => handleEdit(auto)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: th.textMuted }}>
-                    <IcoEdit size={16} />
-                  </button>
-                  <button onClick={() => deleteMutation.mutate(auto.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: th.textMuted }}>
-                    <IcoTrash size={16} />
-                  </button>
+              )}
+
+              <div style={{
+                textAlign: isMobile ? 'left' : 'right',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                width: isMobile ? '100%' : 'auto',
+                gap: 16,
+                borderTop: isMobile ? `1px solid ${th.border}` : 'none',
+                paddingTop: isMobile ? 10 : 0
+              }}>
+                <div style={{ fontSize: 11.5, color: th.textMuted }}>
+                   {t('automations.timeSaved')}: {auto.stats_runs * 2} {t('automations.min')}..
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+                  <button onClick={() => { setSelectedAutoForHistory(auto.id); setActiveTab('history'); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: accent, fontSize: 12, fontWeight: 600 }}>{t('automations.logs')}</button>
+                  {!isMobile && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <button onClick={() => handleEdit(auto)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: th.textMuted }}>
+                        <IcoEdit size={16} />
+                      </button>
+                      <button onClick={() => deleteMutation.mutate(auto.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: th.textMuted }}>
+                        <IcoTrash size={16} />
+                      </button>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -357,14 +422,14 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
       )}
 
       {activeTab === 'catalog' && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
           {catalog.map(cat => (
             <div key={cat.category} style={{ gridColumn: '1 / -1' }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700, marginTop: 10, marginBottom: 15 }}>{cat.category}</h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))', gap: 20 }}>
+              <h3 style={{ fontSize: 15, fontWeight: 700, marginTop: 10, marginBottom: 12, color: th.text }}>{cat.category}</h3>
+              <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
                 {cat.templates.map(tmpl => (
                   <div key={tmpl.name} style={{
-                    background: th.surface, border: `1px solid ${th.border}`, borderRadius: 16, padding: '20px',
+                    background: th.surface, border: `1px solid ${th.border}`, borderRadius: 16, padding: '16px',
                     cursor: 'pointer', transition: 'transform 0.2s, box-shadow 0.2s',
                   }} onClick={() => {
                     setNewName(tmpl.name);
@@ -373,8 +438,8 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
                     setActions(tmpl.config.actions);
                     setShowBuilder(true);
                   }}>
-                    <p style={{ fontSize: 16, fontWeight: 600, marginBottom: 8 }}>{tmpl.name}</p>
-                    <p style={{ fontSize: 13, color: th.textSecondary, lineHeight: 1.5 }}>{tmpl.description}</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: th.text }}>{tmpl.name}</p>
+                    <p style={{ fontSize: 12.5, color: th.textSecondary, lineHeight: 1.5, margin: 0 }}>{tmpl.description}</p>
                   </div>
                 ))}
               </div>
@@ -385,29 +450,55 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
 
       {activeTab === 'triggers' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div style={{ padding: '20px 24px', background: th.surface, border: `1px solid ${th.border}`, borderRadius: 14 }}>
-            <h3 style={{ fontSize: 17, fontWeight: 700, marginBottom: 6, margin: 0 }}>{t('automations.customWebhooks')}</h3>
-            <p style={{ fontSize: 13, color: th.textSecondary, marginTop: 6, marginBottom: 0 }}>
+          <div style={{ padding: isMobile ? '16px' : '20px 24px', background: th.surface, border: `1px solid ${th.border}`, borderRadius: 14 }}>
+            <h3 style={{ fontSize: isMobile ? 16 : 17, fontWeight: 700, marginBottom: 6, margin: 0, color: th.text }}>{t('automations.customWebhooks')}</h3>
+            <p style={{ fontSize: 12.5, color: th.textSecondary, marginTop: 6, marginBottom: 0, lineHeight: 1.4 }}>
               {t('automations.customWebhooksHint')}
             </p>
           </div>
 
           {externalAutomations.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px', color: th.textMuted, background: th.surface, borderRadius: 14, border: `1px dashed ${th.border}` }}>
-              <IcoBolt size={36} style={{ opacity: 0.25, marginBottom: 12 }} />
-              <p style={{ marginBottom: 4, fontWeight: 600, color: th.textSecondary }}>{t('automations.noExternalTriggers')}</p>
-              <p style={{ fontSize: 13 }}>{t('automations.noExternalTriggersHint')}</p>
+            <div style={{ textAlign: 'center', padding: '40px 20px', color: th.textMuted, background: th.surface, borderRadius: 14, border: `1px dashed ${th.border}` }}>
+              <IcoBolt size={32} style={{ opacity: 0.25, marginBottom: 12 }} />
+              <p style={{ marginBottom: 4, fontWeight: 600, color: th.textSecondary, fontSize: 14 }}>{t('automations.noExternalTriggers')}</p>
+              <p style={{ fontSize: 12 }}>{t('automations.noExternalTriggersHint')}</p>
+            </div>
+          ) : isMobile ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {externalAutomations.map(auto => {
+                const url = buildWebhookUrl(auto.webhook_token!);
+                const triggerLabel = TRIGGER_TYPES_LABELED.find(tt => tt.id === auto.config.trigger.type)?.label || auto.config.trigger.type;
+                return (
+                  <div key={auto.id} style={{ background: th.surface, border: `1px solid ${th.border}`, borderRadius: 14, padding: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                      <p style={{ fontWeight: 700, margin: 0, color: th.text }}>{auto.name}</p>
+                      <Toggle val={auto.is_active} onChange={(v) => toggleMutation.mutate({ id: auto.id, is_active: v })} />
+                    </div>
+                    <div style={{ marginBottom: 12 }}>
+                       <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: 10.5, background: `${accent}15`, color: accent, border: `1px solid ${accent}30` }}>{triggerLabel}</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                       <code style={{ fontSize: 11, color: th.textSecondary, padding: '8px', background: th.bg, borderRadius: 8, border: `1px solid ${th.border}`, wordBreak: 'break-all' }}>{url}</code>
+                       <div style={{ display: 'flex', gap: 8 }}>
+                          <button onClick={() => copyToClipboard(url)} style={{ flex: 1, padding: '8px', borderRadius: 8, border: `1px solid ${th.border}`, background: th.surface, fontSize: 12, color: th.text }}>{t('common.copy')}</button>
+                          <button onClick={() => handleRotate(auto.id)} style={{ flex: 1, padding: '8px', borderRadius: 8, border: `1px solid ${th.border}`, background: th.surface, fontSize: 12, color: th.text }}>{t('automations.rotate')}</button>
+                          <button onClick={() => handleEdit(auto)} style={{ width: 40, borderRadius: 8, border: `1px solid ${th.border}`, background: th.surface, display: 'flex', alignItems: 'center', justifyContent: 'center', color: th.textMuted }}><IcoEdit size={14} /></button>
+                       </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div style={{ background: th.surface, border: `1px solid ${th.border}`, borderRadius: 14, overflow: 'hidden' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
                 <thead style={{ background: th.bg, borderBottom: `1px solid ${th.border}` }}>
                   <tr>
-                    <th style={{ textAlign: 'left', padding: '11px 18px', fontWeight: 600, width: '20%' }}>{t('automations.table.name')}</th>
-                    <th style={{ textAlign: 'left', padding: '11px 18px', fontWeight: 600, width: '14%' }}>{t('automations.table.trigger')}</th>
-                    <th style={{ textAlign: 'left', padding: '11px 18px', fontWeight: 600 }}>{t('automations.table.webhookUrl')}</th>
-                    <th style={{ textAlign: 'left', padding: '11px 18px', fontWeight: 600, width: '8%' }}>{t('automations.table.active')}</th>
-                    <th style={{ textAlign: 'right', padding: '11px 18px', fontWeight: 600, width: '14%' }}>{t('automations.table.actions')}</th>
+                    <th style={{ textAlign: 'left', padding: '11px 18px', fontWeight: 600, width: '20%', color: th.text }}>{t('automations.table.name')}</th>
+                    <th style={{ textAlign: 'left', padding: '11px 18px', fontWeight: 600, width: '14%', color: th.text }}>{t('automations.table.trigger')}</th>
+                    <th style={{ textAlign: 'left', padding: '11px 18px', fontWeight: 600, color: th.text }}>{t('automations.table.webhookUrl')}</th>
+                    <th style={{ textAlign: 'left', padding: '11px 18px', fontWeight: 600, width: '8%', color: th.text }}>{t('automations.table.active')}</th>
+                    <th style={{ textAlign: 'right', padding: '11px 18px', fontWeight: 600, width: '14%', color: th.text }}>{t('automations.table.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -417,7 +508,7 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
                     const triggerLabel = TRIGGER_TYPES_LABELED.find(tt => tt.id === auto.config.trigger.type)?.label || auto.config.trigger.type;
                     return (
                       <tr key={auto.id} style={{ borderBottom: `1px solid ${th.border}` }}>
-                        <td style={{ padding: '12px 18px', fontWeight: 600 }}>{auto.name}</td>
+                        <td style={{ padding: '12px 18px', fontWeight: 600, color: th.text }}>{auto.name}</td>
                         <td style={{ padding: '12px 18px' }}>
                           <span style={{ padding: '3px 8px', borderRadius: 6, fontSize: 11, background: `${accent}15`, color: accent, border: `1px solid ${accent}30` }}>{triggerLabel}</span>
                         </td>
@@ -453,70 +544,97 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
             <select
               value={selectedAutoForHistory || ''}
               onChange={e => setSelectedAutoForHistory(e.target.value || null)}
-              style={{ ...selectStyle, width: 'auto', minWidth: 250 }}
+              style={{ ...selectStyle, width: isMobile ? '100%' : 'auto', minWidth: isMobile ? 'none' : 250 }}
             >
               <option value="">{t('automations.allAutomations')}</option>
               {automations.map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </div>
-          <div style={{ background: th.surface, border: `1px solid ${th.border}`, borderRadius: 16, overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
-              <thead style={{ background: th.bg, borderBottom: `1px solid ${th.border}` }}>
-                <tr>
-                  <th style={{ textAlign: 'left', padding: '12px 20px', fontWeight: 600 }}>{t('automations.table.automation')}</th>
-                  <th style={{ textAlign: 'left', padding: '12px 20px', fontWeight: 600 }}>{t('automations.table.status')}</th>
-                  <th style={{ textAlign: 'left', padding: '12px 20px', fontWeight: 600 }}>{t('automations.table.date')}</th>
-                  <th style={{ textAlign: 'left', padding: '12px 20px', fontWeight: 600 }}>{t('automations.table.details')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {history.length === 0 ? (
+          {isMobile ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {history.length === 0 ? (
+                <div style={{ padding: '40px 20px', textAlign: 'center', color: th.textMuted, background: th.surface, borderRadius: 14 }}>
+                   {selectedAutoForHistory ? t('automations.noLogs') : t('automations.noRuns')}
+                </div>
+              ) : (
+                history.map(log => (
+                  <div key={log.id} style={{ background: th.surface, border: `1px solid ${th.border}`, borderRadius: 14, padding: '14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                       <p style={{ fontWeight: 700, fontSize: 13, margin: 0 }}>{automations.find(a => a.id === log.automation_id)?.name || t('automations.deleted')}</p>
+                       <span style={{ color: log.status === 'success' ? '#059669' : '#DC2626', fontWeight: 700, fontSize: 11 }}>
+                          {log.status === 'success' ? t('common.success') : t('common.error')}
+                       </span>
+                    </div>
+                    <p style={{ fontSize: 11, color: th.textMuted, marginBottom: 8 }}>{new Date(log.ran_at).toLocaleString()}</p>
+                    <div style={{ fontSize: 11.5, color: th.textSecondary, background: th.bg, padding: '8px', borderRadius: 8, border: `1px solid ${th.border}`, overflowX: 'auto' }}>
+                       {JSON.stringify(log.details)}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+            <div style={{ background: th.surface, border: `1px solid ${th.border}`, borderRadius: 16, overflow: 'hidden' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
+                <thead style={{ background: th.bg, borderBottom: `1px solid ${th.border}` }}>
                   <tr>
-                    <td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: th.textMuted }}>
-                      {selectedAutoForHistory ? t('automations.noLogs') : t('automations.noRuns')}
-                    </td>
+                    <th style={{ textAlign: 'left', padding: '12px 20px', fontWeight: 600 }}>{t('automations.table.automation')}</th>
+                    <th style={{ textAlign: 'left', padding: '12px 20px', fontWeight: 600 }}>{t('automations.table.status')}</th>
+                    <th style={{ textAlign: 'left', padding: '12px 20px', fontWeight: 600 }}>{t('automations.table.date')}</th>
+                    <th style={{ textAlign: 'left', padding: '12px 20px', fontWeight: 600 }}>{t('automations.table.details')}</th>
                   </tr>
-                ) : (
-                  history.map(log => (
-                    <tr key={log.id} style={{ borderBottom: `1px solid ${th.border}` }}>
-                      <td style={{ padding: '12px 20px' }}>{automations.find(a => a.id === log.automation_id)?.name || 'Deleted'}</td>
-                      <td style={{ padding: '12px 20px' }}>
-                        <span style={{ color: log.status === 'success' ? '#059669' : '#DC2626', fontWeight: 600 }}>
-                          {log.status === 'success' ? 'Success' : 'Error'}
-                        </span>
+                </thead>
+                <tbody>
+                  {history.length === 0 ? (
+                    <tr>
+                      <td colSpan={4} style={{ padding: '40px', textAlign: 'center', color: th.textMuted }}>
+                        {selectedAutoForHistory ? t('automations.noLogs') : t('automations.noRuns')}
                       </td>
-                      <td style={{ padding: '12px 20px' }}>{new Date(log.ran_at).toLocaleString()}</td>
-                      <td style={{ padding: '12px 20px', color: th.textSecondary }}>{JSON.stringify(log.details)}</td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
-          </div>
+                  ) : (
+                    history.map(log => (
+                      <tr key={log.id} style={{ borderBottom: `1px solid ${th.border}` }}>
+                        <td style={{ padding: '12px 20px' }}>{automations.find(a => a.id === log.automation_id)?.name || t('automations.deleted')}</td>
+                        <td style={{ padding: '12px 20px' }}>
+                          <span style={{ color: log.status === 'success' ? '#059669' : '#DC2626', fontWeight: 600 }}>
+                            {log.status === 'success' ? t('common.success') : t('common.error')}
+                          </span>
+                        </td>
+                        <td style={{ padding: '12px 20px' }}>{new Date(log.ran_at).toLocaleString()}</td>
+                        <td style={{ padding: '12px 20px', color: th.textSecondary }}>{JSON.stringify(log.details)}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
+
+      </div>{/* end scrollable content */}
 
       {/* Builder Modal */}
       {showBuilder && (
         <div style={{
           position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
           background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(4px)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          display: 'flex', alignItems: isMobile ? 'flex-end' : 'center', justifyContent: 'center', zIndex: 1000,
         }} onClick={() => { setShowBuilder(false); resetBuilder(); }}>
           <div style={{
-            width: '100%', maxWidth: 700, maxHeight: '90vh', overflowY: 'auto',
-            background: th.surface, borderRadius: 24, padding: '32px',
+            width: '100%', maxWidth: 700, maxHeight: isMobile ? '92vh' : '90vh', overflowY: 'auto',
+            background: th.surface, borderRadius: isMobile ? '24px 24px 0 0' : 24, padding: isMobile ? '24px 20px' : '32px',
             boxShadow: '0 20px 50px rgba(0,0,0,0.2)',
           }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h3 style={{ fontSize: 20, fontWeight: 700, margin: 0 }}>{editingId ? t('automations.builder.editTitle') : t('automations.builder.createTitle')}</h3>
+              <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, margin: 0, color: th.text }}>{editingId ? t('automations.builder.editTitle') : t('automations.builder.createTitle')}</h3>
               <button onClick={() => { setShowBuilder(false); resetBuilder(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: th.textMuted }}>
                 <IcoX size={20} />
               </button>
             </div>
 
             <div style={{ marginBottom: 20 }}>
-              <p style={{ fontSize: 13, fontWeight: 600, color: th.textMuted, marginBottom: 8, textTransform: 'uppercase' }}>{t('automations.builder.name')}</p>
+              <p style={{ fontSize: 12, fontWeight: 600, color: th.textMuted, marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('automations.builder.name')}</p>
               <input
                 placeholder={t('automations.builder.namePlaceholder')}
                 value={newName} onChange={e => setNewName(e.target.value)}
@@ -525,7 +643,7 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
             </div>
 
             <div style={{ marginBottom: 24 }}>
-              <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{t('automations.builder.when')}</p>
+              <p style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{t('automations.builder.when')}</p>
               <div style={{ padding: '16px', background: th.bg, borderRadius: 12, border: `1px solid ${th.border}` }}>
                 <select
                   value={trigger.type}
@@ -559,7 +677,7 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
                     <div style={{ marginTop: 12, padding: '12px 14px', background: th.surface, border: `1px solid ${th.border}`, borderRadius: 10 }}>
                       {trigger.type === 'github_event' && (
                         <div style={{ marginBottom: 10 }}>
-                          <p style={{ fontSize: 12, fontWeight: 600, color: th.textSecondary, margin: '0 0 6px 0' }}>{t('automations.builder.hmacSecret')}</p>
+                          <p style={{ fontSize: 11.5, fontWeight: 600, color: th.textSecondary, margin: '0 0 6px 0' }}>{t('automations.builder.hmacSecret')}</p>
                           <input
                             placeholder={t('automations.builder.hmacHint')}
                             value={(trigger as any).params?.secret || ''}
@@ -571,14 +689,14 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
                       )}
                       {url ? (
                         <div>
-                          <p style={{ fontSize: 12, fontWeight: 600, color: th.textSecondary, margin: '0 0 6px 0' }}>{t('automations.builder.webhookUrl')}</p>
-                          <div style={{ display: 'flex', gap: 6 }}>
-                            <code style={{ flex: 1, fontSize: 11.5, color: th.textSecondary, padding: '6px 10px', background: th.bg, borderRadius: 6, border: `1px solid ${th.border}`, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={url}>{url}</code>
-                            <button type="button" onClick={() => copyToClipboard(url)} style={{ background: 'none', border: `1px solid ${th.border}`, padding: '4px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>{t('common.copy')}</button>
+                          <p style={{ fontSize: 11.5, fontWeight: 600, color: th.textSecondary, margin: '0 0 6px 0' }}>{t('automations.builder.webhookUrl')}</p>
+                          <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', gap: 6 }}>
+                            <code style={{ flex: 1, fontSize: 11, color: th.textSecondary, padding: '8px', background: th.bg, borderRadius: 6, border: `1px solid ${th.border}`, overflow: 'hidden', textOverflow: 'ellipsis', wordBreak: 'break-all' }} title={url}>{url}</code>
+                            <button type="button" onClick={() => copyToClipboard(url)} style={{ background: 'none', border: `1px solid ${th.border}`, padding: '8px 12px', borderRadius: 6, cursor: 'pointer', fontSize: 12 }}>{t('common.copy')}</button>
                           </div>
                         </div>
                       ) : (
-                        <p style={{ fontSize: 12, color: th.textMuted, margin: 0 }}>{t('automations.builder.webhookUrlAfterSave')}</p>
+                        <p style={{ fontSize: 11.5, color: th.textMuted, margin: 0 }}>{t('automations.builder.webhookUrlAfterSave')}</p>
                       )}
                       {hint && <p style={{ fontSize: 11, color: th.textMuted, marginTop: 8, marginBottom: 0, lineHeight: 1.45 }}>{hint}</p>}
                     </div>
@@ -588,11 +706,11 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
             </div>
 
             <div style={{ marginBottom: 24 }}>
-              <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{t('automations.builder.if')}</p>
+              <p style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{t('automations.builder.if')}</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {conditions.map((cond, idx) => (
                   <div key={idx} style={{ padding: '16px', background: th.bg, borderRadius: 12, border: `1px solid ${th.border}`, position: 'relative' }}>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
                       <select
                         value={cond.type}
                         onChange={e => {
@@ -731,7 +849,7 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
                     const defaultType = allowed.has('column_equals') ? 'column_equals' : ([...allowed][0] ?? 'field_value_equals');
                     setConditions([...conditions, { type: defaultType, params: {} }]);
                   }}
-                  style={{ padding: '12px', background: 'none', border: `1px dashed ${th.border}`, borderRadius: 12, color: th.textSecondary, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+                  style={{ padding: '12px', background: 'none', border: `1px dashed ${th.border}`, borderRadius: 12, color: th.textSecondary, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
                 >
                   {t('automations.builder.addCondition')}
                 </button>
@@ -739,15 +857,15 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
             </div>
 
             <div style={{ marginBottom: 32 }}>
-              <p style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>{t('automations.builder.then')}</p>
+              <p style={{ fontSize: 13.5, fontWeight: 700, marginBottom: 12 }}>{t('automations.builder.then')}</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                 {actions.map((act, idx) => (
                   <div key={idx} style={{ padding: '16px', background: th.bg, borderRadius: 12, border: `1px solid ${th.border}`, position: 'relative' }}>
                     {actions.length > 1 && (
                       <button
                         onClick={() => setActions(actions.filter((_, i) => i !== idx))}
-                        title="Remove this action"
-                        style={{ position: 'absolute', top: -10, right: -10, width: 24, height: 24, borderRadius: '50%', background: th.surface, border: `1px solid ${th.border}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}
+                        title={t('automations.builder.removeAction')}
+                        style={{ position: 'absolute', top: -10, right: -10, width: 24, height: 24, borderRadius: '50%', background: th.surface, border: `1px solid ${th.border}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1, color: th.text }}
                       >
                         <IcoX size={14} />
                       </button>
@@ -765,7 +883,7 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
                         {ACTION_TYPES.filter(at => (ALLOWED_ACTION_TYPES[trigger.type] ?? new Set()).has(at.id)).map(at => <option key={at.id} value={at.id}>{at.label}</option>)}
                       </select>
 
-                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : '1fr 1fr', gap: 12 }}>
                         {act.type === 'change_column' && (
                           <select
                             value={act.params.column_id || ''}
@@ -844,24 +962,24 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
                               placeholder={t('automations.builder.taskTitle')}
                               value={act.params.title || ''}
                               onChange={e => { const n=[...actions]; n[idx].params={...n[idx].params, title: e.target.value}; setActions(n); }}
-                              style={{ ...selectStyle, gridColumn: '1 / -1' }}
+                              style={{ ...selectStyle, gridColumn: isMobile ? 'auto' : '1 / -1' }}
                             />
                             <textarea
                               placeholder={t('automations.builder.taskDescription')}
                               value={act.params.description || ''}
                               onChange={e => { const n=[...actions]; n[idx].params={...n[idx].params, description: e.target.value}; setActions(n); }}
                               rows={3}
-                              style={{ ...selectStyle, gridColumn: '1 / -1', resize: 'vertical', fontFamily: 'inherit' }}
+                              style={{ ...selectStyle, gridColumn: isMobile ? 'auto' : '1 / -1', resize: 'vertical', fontFamily: 'inherit' }}
                             />
                             <select
                               value={act.params.assignee_id || ''}
                               onChange={e => { const n=[...actions]; n[idx].params={...n[idx].params, assignee_id: e.target.value ? Number(e.target.value) : null}; setActions(n); }}
-                              style={{ ...selectStyle, gridColumn: '1 / -1' }}
+                              style={{ ...selectStyle, gridColumn: isMobile ? 'auto' : '1 / -1' }}
                             >
                               <option value="">{t('automations.builder.noAssignee')}</option>
                               {members.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
                             </select>
-                            <p style={{ fontSize: 11, color: th.textMuted, gridColumn: '1 / -1', margin: 0 }}>Tip: use <code>{`{{review.rating}}`}</code>, <code>{`{{pr.title}}`}</code>, etc. for templated values from the event payload.</p>
+                            <p style={{ fontSize: 11, color: th.textMuted, gridColumn: isMobile ? 'auto' : '1 / -1', margin: 0, lineHeight: 1.4 }}>{t('automations.builder.tipPayload')}</p>
                           </>
                         )}
                       </div>
@@ -870,17 +988,18 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
                 ))}
                 <button
                   onClick={() => setActions([...actions, { type: 'send_notification', params: {} }])}
-                  style={{ padding: '12px', background: 'none', border: `1px dashed ${th.border}`, borderRadius: 12, color: th.textSecondary, cursor: 'pointer', fontSize: 13, fontWeight: 500 }}
+                  style={{ padding: '12px', background: 'none', border: `1px dashed ${th.border}`, borderRadius: 12, color: th.textSecondary, cursor: 'pointer', fontSize: 13, fontWeight: 600 }}
                 >
                   {t('automations.builder.addAction')}
                 </button>
               </div>
             </div>
 
-            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 12 }}>
+            <div style={{ display: 'flex', flexDirection: isMobile ? 'column' : 'row', justifyContent: 'flex-end', gap: 12 }}>
               <button onClick={() => { setShowBuilder(false); resetBuilder(); }} style={{
-                padding: '10px 20px', borderRadius: 10, border: `1px solid ${th.border}`,
+                padding: '12px 20px', borderRadius: 12, border: `1px solid ${th.border}`,
                 background: 'none', color: th.text, fontWeight: 600, cursor: 'pointer',
+                order: isMobile ? 2 : 1
               }}>
                 {t('common.cancel')}
               </button>
@@ -888,9 +1007,11 @@ export function AutomationsView({ projectId, accent, theme }: AutomationsViewPro
                 onClick={handleSave}
                 disabled={createMutation.isPending || updateMutationCall.isPending}
                 style={{
-                  padding: '10px 24px', borderRadius: 10, border: 'none',
-                  background: accent, color: 'white', fontWeight: 600, cursor: 'pointer',
+                  padding: '12px 24px', borderRadius: 12, border: 'none',
+                  background: accent, color: 'white', fontWeight: 700, cursor: 'pointer',
                   opacity: (createMutation.isPending || updateMutationCall.isPending) ? 0.6 : 1,
+                  boxShadow: `0 4px 12px ${accent}44`,
+                  order: isMobile ? 1 : 2
                 }}
               >
                 {editingId

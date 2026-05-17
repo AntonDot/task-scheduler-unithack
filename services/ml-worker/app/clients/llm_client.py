@@ -2,6 +2,9 @@ import json
 import logging
 import re
 
+import anthropic
+import httpx
+
 from app.config import settings
 from app.schemas.webhook import ParsedTask
 
@@ -80,8 +83,6 @@ def try_repair_json(raw: str) -> str:
 
 async def _call_openai_compatible(text: str) -> str:
     """Call an OpenAI-compatible API endpoint via httpx."""
-    import httpx
-
     headers = {
         "Content-Type": "application/json",
         "Authorization": f"Bearer {settings.llm_api_key}",
@@ -108,8 +109,6 @@ async def _call_openai_compatible(text: str) -> str:
 
 async def _call_anthropic(text: str) -> str:
     """Call the Anthropic API via the official SDK."""
-    import anthropic
-
     client = anthropic.AsyncAnthropic(api_key=settings.llm_api_key)
     message = await client.messages.create(
         model=settings.llm_model,

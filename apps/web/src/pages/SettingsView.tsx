@@ -364,24 +364,6 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
         })}
       </Section>
 
-      {/* Workspace */}
-      <Section title={t('settings.workspace')}>
-        <Row label={t('settings.exportData')} sub={t('settings.exportHint')}
-          right={
-            <button style={{ padding: '9px 20px', borderRadius: 12, border: `1px solid ${th.border}`, background: 'none', fontSize: 18, fontWeight: 500, color: th.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
-              {t('common.export')}
-            </button>
-          }
-        />
-        <Row label={t('settings.deleteWorkspace')} sub={t('settings.deleteWorkspaceHint')}
-          right={
-            <button style={{ padding: '9px 20px', borderRadius: 12, border: '1px solid #FECACA', background: '#FEF2F2', fontSize: 18, fontWeight: 500, color: '#991B1B', cursor: 'pointer', fontFamily: 'inherit' }}>
-              {t('common.delete')}
-            </button>
-          }
-        />
-      </Section>
-
       {/* Edit Profile Modal */}
       {editOpen && (
         <>

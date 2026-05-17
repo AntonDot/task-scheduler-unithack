@@ -8,7 +8,7 @@ import { fetchTasks, changeColumn, createTask, updateTask, deleteTask } from '@/
 
 import { fetchProjectMembers } from '@/api/members';
 import { fetchColumns } from '@/api/columns';
-import { runReviewScraper, type ReviewScrapeResult } from '@/api/automations';
+import { AutomationsView } from '@/pages/AutomationsView';
 import { fetchComments, addComment, type Comment } from '@/api/comments';
 import { fetchAttachments, uploadAttachment, deleteAttachment, getDownloadUrl, type Attachment } from '@/api/attachments';
 import { fetchNotifications, type NotificationItem } from '@/api/notifications';
@@ -1277,109 +1277,6 @@ function CreateSheet({ open, onClose, onCreate, members, accent, th, projectTags
   );
 }
 
-// ─── Automations Mobile View ──────────────────────────────────────────────────
-
-const MBL_RUNS_KEY = 'vt_scraper_runs';
-const MBL_LOG_KEY = 'vt_scraper_log';
-
-function AutomationsMobileView({ accent, th }: { accent: string; th: ReturnType<typeof useTheme>['theme'] }) {
-  const [scraperActive, setScraperActive] = useState(true);
-  const [scraperRunning, setScraperRunning] = useState(false);
-  const [scraperRuns, setScraperRuns] = useState<number>(() => {
-    try { return parseInt(localStorage.getItem(MBL_RUNS_KEY) ?? '0', 10) || 0; } catch { return 0; }
-  });
-  const [scraperLog, setScraperLog] = useState<ReviewScrapeResult | null>(() => {
-    try { const r = localStorage.getItem(MBL_LOG_KEY); return r ? JSON.parse(r) as ReviewScrapeResult : null; } catch { return null; }
-  });
-  const [showLog, setShowLog] = useState(false);
-
-  useEffect(() => { localStorage.setItem(MBL_RUNS_KEY, String(scraperRuns)); }, [scraperRuns]);
-  useEffect(() => { if (scraperLog) localStorage.setItem(MBL_LOG_KEY, JSON.stringify(scraperLog)); }, [scraperLog]);
-
-  async function handleRunScraper() {
-    if (scraperRunning || !scraperActive) return;
-    setScraperRunning(true);
-    try {
-      const r = await runReviewScraper();
-      setScraperRuns(n => n + 1);
-      setScraperLog(r); setShowLog(true);
-    } catch (e) {
-      setScraperLog({ reviews_found: 0, negative_found: 0, tasks_created: 0, duplicates: 0, errors: 1, ran_at: new Date().toISOString(), details: [{ status: 'error', detail: e instanceof Error ? e.message : String(e) }] });
-      setShowLog(true);
-    } finally { setScraperRunning(false); }
-  }
-
-  const activeCount = scraperActive ? 1 : 0;
-
-  return (
-    <div style={{ flex: 1, overflowY: 'auto', padding: 'calc(var(--sat, 0px) + 20px) 16px 100px' }}>
-      <h2 style={{ fontSize: 20, fontWeight: 700, color: th.text, marginBottom: 4 }}>Automations</h2>
-      <p style={{ fontSize: 12.5, color: th.textSecondary, marginBottom: 20 }}>{activeCount} of 1 active</p>
-
-      {/* Stats */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10, marginBottom: 20 }}>
-        {[
-          { label: 'Runs', value: scraperRuns, color: accent },
-          { label: 'Active', value: activeCount, color: '#059669' },
-          { label: 'Tasks', value: scraperLog?.tasks_created ?? 0, color: '#D97706' },
-        ].map(s => (
-          <div key={s.label} style={{ background: th.surface, border: `1px solid ${th.border}`, borderRadius: 14, padding: '14px 16px' }}>
-            <p style={{ fontSize: 11, color: th.textMuted, fontWeight: 500, marginBottom: 4 }}>{s.label}</p>
-            <p style={{ fontSize: 22, fontWeight: 700, color: s.color, margin: 0 }}>{s.value}</p>
-          </div>
-        ))}
-      </div>
-
-      {/* Review Monitor (real) */}
-      <div style={{ background: th.surface, border: `1px solid ${scraperActive ? accent + '40' : th.border}`, borderRadius: 16, padding: 16, marginBottom: 10, opacity: scraperActive ? 1 : 0.6 }}>
-        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 10 }}>
-          <div style={{ flex: 1 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-              <p style={{ fontSize: 14, fontWeight: 600, color: th.text, margin: 0 }}>Review Monitor</p>
-              <span style={{ padding: '2px 8px', borderRadius: 20, fontSize: 10.5, fontWeight: 600, background: accent + '18', color: accent, border: `1px solid ${accent}30` }}>LIVE</span>
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
-              <span style={{ padding: '4px 10px', borderRadius: 7, fontSize: 12, fontWeight: 500, background: '#DC262614', color: '#DC2626', border: '1px solid #DC262628', display: 'inline-block' }}>
-                When: Negative review (★1-2) detected
-              </span>
-              <span style={{ padding: '4px 10px', borderRadius: 7, fontSize: 12, fontWeight: 500, background: accent + '14', color: accent, border: `1px solid ${accent}28`, display: 'inline-block' }}>
-                Then: Create URGENT task via AI
-              </span>
-            </div>
-          </div>
-          <Toggle val={scraperActive} onChange={setScraperActive} accent={accent} />
-        </div>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <p style={{ fontSize: 11, color: th.textMuted }}>{scraperRuns} runs this session</p>
-          <button onClick={handleRunScraper} disabled={scraperRunning || !scraperActive} style={{
-            padding: '6px 14px', borderRadius: 8, border: 'none',
-            background: scraperActive ? accent : th.columnBg,
-            color: scraperActive ? 'white' : th.textMuted,
-            fontSize: 12, fontWeight: 600, cursor: scraperActive ? 'pointer' : 'default', fontFamily: 'inherit',
-          }}>
-            {scraperRunning ? '⟳ Running…' : '▶ Run now'}
-          </button>
-        </div>
-        {showLog && scraperLog && (
-          <div style={{ marginTop: 12, padding: '10px 12px', background: th.bg, borderRadius: 10, border: `1px solid ${th.border}` }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-              <p style={{ fontSize: 11.5, fontWeight: 600, color: th.text, margin: 0 }}>Last run result</p>
-              <button onClick={() => setShowLog(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: th.textMuted, fontSize: 12 }}>✕</button>
-            </div>
-            <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', fontSize: 11.5 }}>
-              <span style={{ color: th.textSecondary }}><strong>{scraperLog.reviews_found}</strong> found</span>
-              <span style={{ color: '#DC2626' }}><strong>{scraperLog.negative_found}</strong> negative</span>
-              <span style={{ color: '#059669' }}><strong>{scraperLog.tasks_created}</strong> tasks</span>
-              {scraperLog.errors > 0 && <span style={{ color: '#DC2626' }}><strong>{scraperLog.errors}</strong> errors</span>}
-            </div>
-          </div>
-        )}
-      </div>
-
-    </div>
-  );
-}
-
 // ─── Team Mobile View ─────────────────────────────────────────────────────────
 
 function TeamMobileView({ tasks, members, accent, th, doneColumnId }: {
@@ -1387,9 +1284,10 @@ function TeamMobileView({ tasks, members, accent, th, doneColumnId }: {
   accent: string; th: ReturnType<typeof useTheme>['theme'];
   doneColumnId?: number;
 }) {
+  const t = useT();
   return (
     <div style={{ flex: 1, overflowY: 'auto', padding: 'calc(var(--sat, 0px) + 20px) 16px 100px' }}>
-      <h2 style={{ fontSize: 20, fontWeight: 700, color: th.text, marginBottom: 20 }}>Team</h2>
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: th.text, marginBottom: 20 }}>{t('nav.team')}</h2>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {members.map(m => {
           const mt = tasks.filter(t => t.assignee_id === m.id);
@@ -1695,7 +1593,7 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
                     </div>
                   );
                 })()}
-                <p style={{ fontSize: 11.5, color: th.textMuted, marginTop: 8 }}>Tap to change photo</p>
+                <p style={{ fontSize: 11.5, color: th.textMuted, marginTop: 8 }}>{t('common.tapToChangePhoto')}</p>
                 <input ref={mobileAvatarInputRef} type="file" accept="image/*" onChange={handleMobileAvatarChange} style={{ display: 'none' }} />
               </div>
               <div>
@@ -1750,11 +1648,11 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
       <Section title={t('settings.notifications')}>
         <PushNotifRow accent={accent} th={th} />
         {[
-          { key: 'task_assigned', label: 'Task assigned to me' },
-          { key: 'comment', label: 'New comment on my task' },
-          { key: 'deadline', label: 'Deadline reminder' },
-          { key: 'mention', label: '@Mentions' },
-          { key: 'status_change', label: 'Status changes' },
+          { key: 'task_assigned', label: t('settings.notifTaskAssigned') },
+          { key: 'comment', label: t('settings.notifNewComment') },
+          { key: 'deadline', label: t('settings.notifDeadline') },
+          { key: 'mention', label: t('settings.notifMention') },
+          { key: 'status_change', label: t('settings.notifStatusChange') },
         ].map(item => (
           <Row key={item.key} label={item.label}
             right={<Toggle val={notifs[item.key as keyof typeof notifs]} onChange={v => setNotifs(n => ({ ...n, [item.key]: v }))} accent={accent} />}
@@ -1763,7 +1661,7 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
       </Section>
 
       <Section title={t('settings.appearance')}>
-        <Row label={t('settings.darkMode')} sub="Switch to dark interface"
+        <Row label={t('settings.darkMode')} sub={t('settings.darkModeHint')}
           right={<Toggle val={isDark} onChange={onToggleDark} accent={accent} />}
         />
         <div style={{ padding: '14px 16px' }}>
@@ -1803,10 +1701,8 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
         </div>
       </Section>
 
-      <Section title="Workspace">
-        <Row label="Export data" sub="Download as JSON" right={<IcoChevR s={16} />} />
-        <Row label="Invite teammates" sub="Add new members" right={<IcoChevR s={16} />} />
-        <Row label="Delete workspace" danger right={<span style={{ fontSize: 12, color: '#991B1B' }}>Delete</span>} />
+      <Section title={t('settings.workspace')}>
+        <Row label={t('common.inviteTeammates')} sub={t('common.addNewMembers')} right={<IcoChevR s={16} />} />
       </Section>
 
       <button onClick={clearAuth} style={{
@@ -1815,7 +1711,7 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
         color: '#DC2626', fontSize: 15, fontWeight: 600,
         cursor: 'pointer', fontFamily: 'inherit', marginBottom: 16,
       }}>
-        Sign out
+        {t('sidebar.signOut')}
       </button>
 
       <div style={{ textAlign: 'center', padding: '4px 0 12px' }}>
@@ -1827,14 +1723,14 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
 
 // ─── Notification sheet ───────────────────────────────────────────────────────
 
-function timeAgoMbl(iso: string): string {
+function timeAgoMbl(iso: string, t: (key: string, vars?: Record<string, string | number>) => string): string {
   const diff = Date.now() - new Date(iso).getTime();
   const m = Math.floor(diff / 60000);
-  if (m < 1) return 'только что';
-  if (m < 60) return `${m}м назад`;
+  if (m < 1) return t('common.justNow');
+  if (m < 60) return t('common.minutesAgo', { m });
   const h = Math.floor(m / 60);
-  if (h < 24) return `${h}ч назад`;
-  return `${Math.floor(h / 24)}д назад`;
+  if (h < 24) return t('common.hoursAgo', { h });
+  return t('common.daysAgo', { d: Math.floor(h / 24) });
 }
 
 function NotificationSheet({ notifications, open, onClose, onMarkAllRead, onMarkRead, onOpenTask, accent, th }: {
@@ -1914,7 +1810,7 @@ function NotificationSheet({ notifications, open, onClose, onMarkAllRead, onMark
                       {n.action_key ? (t(`notifications.actionLabels.${n.action_key}`) || n.title) : n.title}
                     </p>
                     <p style={{ fontSize: 12.5, color: th.textSecondary, lineHeight: 1.4, marginBottom: 3 }}>{n.body}</p>
-                    <p style={{ fontSize: 11, color: th.textMuted }}>{timeAgoMbl(n.created_at)}</p>
+                    <p style={{ fontSize: 11, color: th.textMuted }}>{timeAgoMbl(n.created_at, t)}</p>
                   </div>
                 </div>
               );
@@ -1939,7 +1835,7 @@ function BottomNav({ view, setView, accent, th }: {
   const tabs: Array<{ id: MobileView; label: string; Icon: ({ s }: { s: number }) => React.JSX.Element; dot?: boolean }> = [
     { id: 'kanban', label: t('nav.board'), Icon: IcoBoard },
     { id: 'automations', label: t('nav.automations'), Icon: IcoBolt, dot: true },
-    { id: 'team', label: 'Team', Icon: IcoUsers },
+    { id: 'team', label: t('nav.team'), Icon: IcoUsers },
     { id: 'settings', label: t('settings.title'), Icon: IcoCog },
   ];
 
@@ -2294,7 +2190,7 @@ export function MobileApp() {
            />
           )}
 
-          {view === 'automations' && <AutomationsMobileView accent={accent} th={th} />}
+          {view === 'automations' && <AutomationsView projectId={resolvedProjectId ?? 0} accent={accent} theme={th} isMobile={true} />}
           {view === 'team' && <TeamMobileView tasks={tasks} members={members} accent={accent} th={th} doneColumnId={columns[columns.length - 1]?.id} />}
           {view === 'settings' && (
             <SettingsMobileView

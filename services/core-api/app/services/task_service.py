@@ -16,6 +16,7 @@ from app.services.push_service import send_push_to_user
 
 _TASK_OPTS = [
     selectinload(Task.project),
+    selectinload(Task.column),
     selectinload(Task.assignee),
     selectinload(Task.co_assignees),
     selectinload(Task.tags),
@@ -23,7 +24,7 @@ _TASK_OPTS = [
 
 
 async def list_tasks(db: AsyncSession, project_id: int, assignee_id: int | None = None) -> list[Task]:
-    stmt = select(Task).where(Task.project_id == project_id, Task.is_deleted == False)
+    stmt = select(Task).where(Task.project_id == project_id, Task.is_deleted.is_(False))
     if assignee_id is not None:
         stmt = stmt.where(Task.assignee_id == assignee_id)
     result = await db.execute(
@@ -33,7 +34,7 @@ async def list_tasks(db: AsyncSession, project_id: int, assignee_id: int | None 
 
 
 async def get_task(db: AsyncSession, task_id: int) -> Task | None:
-    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False).options(*_TASK_OPTS))
+    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted.is_(False)).options(*_TASK_OPTS))
     return result.scalar_one_or_none()
 
 
@@ -46,7 +47,7 @@ async def _set_co_assignees(db: AsyncSession, task: Task, ids: list[int]) -> Non
 
 
 async def _reload_task(db: AsyncSession, task_id: int) -> Task:
-    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False).options(*_TASK_OPTS))
+    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted.is_(False)).options(*_TASK_OPTS))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -54,7 +55,6 @@ async def _reload_task(db: AsyncSession, task_id: int) -> Task:
 
 
 async def _set_tags(db: AsyncSession, task: Task, tag_ids: list[int] | None) -> None:
-
     if not tag_ids:
         task.tags = []
         return
@@ -74,10 +74,31 @@ async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: 
     if column_id is None:
         from app.models.board_column import BoardColumn
 
-        col_result = await db.execute(
-            select(BoardColumn.id).where(BoardColumn.project_id == project_id).order_by(BoardColumn.order).limit(1)
-        )
-        column_id = col_result.scalar_one_or_none()
+        # Try to map status to column
+        if data.status:
+            # Simple mapping: AI_DRAFT or TODO -> Order 0, IN_PROGRESS -> Order 1, etc.
+            target_order = 0
+            if data.status == "IN_PROGRESS":
+                target_order = 1
+            elif data.status == "REVIEW":
+                target_order = 2
+            elif data.status == "DONE":
+                target_order = 3
+
+            col_result = await db.execute(
+                select(BoardColumn.id)
+                .where(BoardColumn.project_id == project_id, BoardColumn.order == target_order)
+                .limit(1)
+            )
+            column_id = col_result.scalar_one_or_none()
+
+        # Fallback to first column if still None
+        if column_id is None:
+            col_result = await db.execute(
+                select(BoardColumn.id).where(BoardColumn.project_id == project_id).order_by(BoardColumn.order).limit(1)
+            )
+            column_id = col_result.scalar_one_or_none()
+
         if column_id is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Project has no columns")
 
@@ -138,7 +159,7 @@ async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: 
 
 
 async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_project: UserProject) -> Task:
-    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False).options(*_TASK_OPTS))
+    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted.is_(False)).options(*_TASK_OPTS))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
@@ -260,7 +281,7 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
 
 
 async def change_column(db: AsyncSession, task_id: int, new_column_id: int, user_project: UserProject) -> Task:
-    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted == False).options(*_TASK_OPTS))
+    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted.is_(False)).options(*_TASK_OPTS))
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")

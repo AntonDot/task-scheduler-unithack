@@ -16,6 +16,7 @@ from app.services.push_service import send_push_to_user
 
 _TASK_OPTS = [
     selectinload(Task.project),
+    selectinload(Task.column),
     selectinload(Task.assignee),
     selectinload(Task.co_assignees),
     selectinload(Task.tags),
@@ -54,7 +55,6 @@ async def _reload_task(db: AsyncSession, task_id: int) -> Task:
 
 
 async def _set_tags(db: AsyncSession, task: Task, tag_ids: list[int] | None) -> None:
-
     if not tag_ids:
         task.tags = []
         return
@@ -74,10 +74,31 @@ async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: 
     if column_id is None:
         from app.models.board_column import BoardColumn
 
-        col_result = await db.execute(
-            select(BoardColumn.id).where(BoardColumn.project_id == project_id).order_by(BoardColumn.order).limit(1)
-        )
-        column_id = col_result.scalar_one_or_none()
+        # Try to map status to column
+        if data.status:
+            # Simple mapping: AI_DRAFT or TODO -> Order 0, IN_PROGRESS -> Order 1, etc.
+            target_order = 0
+            if data.status == "IN_PROGRESS":
+                target_order = 1
+            elif data.status == "REVIEW":
+                target_order = 2
+            elif data.status == "DONE":
+                target_order = 3
+
+            col_result = await db.execute(
+                select(BoardColumn.id)
+                .where(BoardColumn.project_id == project_id, BoardColumn.order == target_order)
+                .limit(1)
+            )
+            column_id = col_result.scalar_one_or_none()
+
+        # Fallback to first column if still None
+        if column_id is None:
+            col_result = await db.execute(
+                select(BoardColumn.id).where(BoardColumn.project_id == project_id).order_by(BoardColumn.order).limit(1)
+            )
+            column_id = col_result.scalar_one_or_none()
+
         if column_id is None:
             raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Project has no columns")
 

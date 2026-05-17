@@ -425,21 +425,33 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
           {catalog.map(cat => (
             <div key={cat.category} style={{ gridColumn: '1 / -1' }}>
-              <h3 style={{ fontSize: 15, fontWeight: 700, marginTop: 10, marginBottom: 12, color: th.text }}>{cat.category}</h3>
+              <h3 style={{ fontSize: 15, fontWeight: 700, marginTop: 10, marginBottom: 12, color: th.text }}>{t(cat.category)}</h3>
               <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(auto-fill, minmax(300px, 1fr))', gap: 16 }}>
                 {cat.templates.map(tmpl => (
                   <div key={tmpl.name} style={{
                     background: th.surface, border: `1px solid ${th.border}`, borderRadius: 16, padding: '16px',
                     cursor: 'pointer', transition: 'transform 0.2s, box-shadow 0.2s',
                   }} onClick={() => {
-                    setNewName(tmpl.name);
+                    setNewName(t(tmpl.name));
                     setTrigger(tmpl.config.trigger);
                     setConditions(tmpl.config.conditions);
-                    setActions(tmpl.config.actions);
+                    
+                    // Translate common action fields that might be keys
+                    const translatedActions = tmpl.config.actions.map(a => ({
+                      ...a,
+                      params: {
+                        ...a.params,
+                        ...(a.params.message ? { message: t(a.params.message as string) } : {}),
+                        ...(a.params.title ? { title: t(a.params.title as string) } : {}),
+                        ...(a.params.description ? { description: t(a.params.description as string) } : {}),
+                      }
+                    }));
+                    
+                    setActions(translatedActions);
                     setShowBuilder(true);
                   }}>
-                    <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: th.text }}>{tmpl.name}</p>
-                    <p style={{ fontSize: 12.5, color: th.textSecondary, lineHeight: 1.5, margin: 0 }}>{tmpl.description}</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, color: th.text }}>{t(tmpl.name)}</p>
+                    <p style={{ fontSize: 12.5, color: th.textSecondary, lineHeight: 1.5, margin: 0 }}>{t(tmpl.description)}</p>
                   </div>
                 ))}
               </div>
@@ -956,7 +968,7 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
                               onChange={e => { const n=[...actions]; n[idx].params={...n[idx].params, urgency: e.target.value}; setActions(n); }}
                               style={selectStyle}
                             >
-                              {URGENCY_VALUES.map(u => <option key={u} value={u}>{u}</option>)}
+                              {URGENCY_VALUES.map(u => <option key={u} value={u}>{t(`urgency.${u}`)}</option>)}
                             </select>
                             <input
                               placeholder={t('automations.builder.taskTitle')}

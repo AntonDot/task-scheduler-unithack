@@ -75,11 +75,11 @@ async def get_automation_catalog(_user: User = Depends(get_current_user)):
     """
     return [
         {
-            "category": "Tasks",
+            "category": "automations.catalog.categories.tasks",
             "templates": [
                 {
-                    "name": "Auto-assign on creation",
-                    "description": "Automatically assign a user when a task is created.",
+                    "name": "automations.catalog.auto_assign.name",
+                    "description": "automations.catalog.auto_assign.description",
                     "config": {
                         "trigger": {"type": "task_created", "filters": {}},
                         "conditions": [],
@@ -87,8 +87,8 @@ async def get_automation_catalog(_user: User = Depends(get_current_user)):
                     },
                 },
                 {
-                    "name": "Move to Done when checklist is complete",
-                    "description": "Move task to 'Done' status once all checklist items are checked.",
+                    "name": "automations.catalog.checklist_done.name",
+                    "description": "automations.catalog.checklist_done.description",
                     "config": {
                         "trigger": {"type": "checklist_updated", "filters": {}},
                         "conditions": [{"type": "all_checklist_items_done", "params": {}}],
@@ -98,31 +98,29 @@ async def get_automation_catalog(_user: User = Depends(get_current_user)):
             ],
         },
         {
-            "category": "Notifications",
+            "category": "automations.catalog.categories.notifications",
             "templates": [
                 {
-                    "name": "Notify on high priority",
-                    "description": "Send a notification when a task priority is set to 'High'.",
+                    "name": "automations.catalog.high_priority_notif.name",
+                    "description": "automations.catalog.high_priority_notif.description",
                     "config": {
                         "trigger": {"type": "task_updated", "filters": {"field": "priority"}},
                         "conditions": [
                             {"type": "field_value_equals", "params": {"field": "priority", "value": "High"}}
                         ],
                         "actions": [
-                            {"type": "send_notification", "params": {"message": "High priority task detected!"}}
+                            {"type": "send_notification", "params": {"message": "automations.catalog.high_priority_notif.message"}}
                         ],
                     },
                 }
             ],
         },
         {
-            "category": "External: Reviews",
+            "category": "automations.catalog.categories.reviews",
             "templates": [
                 {
-                    "name": "Negative review → Urgent task",
-                    "description": (
-                        "When a 1-2 star review arrives, create an urgent task in the backlog with the review text."
-                    ),
+                    "name": "automations.catalog.negative_review.name",
+                    "description": "automations.catalog.negative_review.description",
                     "config": {
                         "trigger": {
                             "type": "review_received",
@@ -136,8 +134,8 @@ async def get_automation_catalog(_user: User = Depends(get_current_user)):
                                 "type": "create_task",
                                 "params": {
                                     "column_id": None,
-                                    "title": "Жалоба {{review.rating}}★ от {{review.author}}",
-                                    "description": "{{review.text}}\n\n— {{review.business}} ({{review.date}})",
+                                    "title": "automations.catalog.negative_review.task_title",
+                                    "description": "automations.catalog.negative_review.task_description",
                                     "urgency": "URGENT",
                                 },
                             }
@@ -147,25 +145,25 @@ async def get_automation_catalog(_user: User = Depends(get_current_user)):
             ],
         },
         {
-            "category": "External: GitHub",
+            "category": "automations.catalog.categories.github",
             "templates": [
                 {
-                    "name": "PR merged → Notify",
-                    "description": "Send a notification whenever a pull request is merged.",
+                    "name": "automations.catalog.pr_merged.name",
+                    "description": "automations.catalog.pr_merged.description",
                     "config": {
                         "trigger": {"type": "github_event", "params": {}},
                         "conditions": [],
                         "actions": [
                             {
                                 "type": "send_notification",
-                                "params": {"message": "PR #{{pr.number}} '{{pr.title}}' merged by {{pr.merged_by}}"},
+                                "params": {"message": "automations.catalog.pr_merged.message"},
                             }
                         ],
                     },
                 },
                 {
-                    "name": "Issue opened → Create task",
-                    "description": "Create a task in the backlog when a GitHub issue is opened.",
+                    "name": "automations.catalog.issue_opened.name",
+                    "description": "automations.catalog.issue_opened.description",
                     "config": {
                         "trigger": {"type": "github_event", "params": {}},
                         "conditions": [],
@@ -174,8 +172,8 @@ async def get_automation_catalog(_user: User = Depends(get_current_user)):
                                 "type": "create_task",
                                 "params": {
                                     "column_id": None,
-                                    "title": "Issue #{{issue.number}}: {{issue.title}}",
-                                    "description": "{{issue.body}}\n\n{{issue.html_url}}",
+                                    "title": "automations.catalog.issue_opened.task_title",
+                                    "description": "automations.catalog.issue_opened.task_description",
                                     "urgency": "MEDIUM",
                                 },
                             }
@@ -185,11 +183,11 @@ async def get_automation_catalog(_user: User = Depends(get_current_user)):
             ],
         },
         {
-            "category": "External: Generic",
+            "category": "automations.catalog.categories.generic",
             "templates": [
                 {
-                    "name": "Generic webhook → Create task",
-                    "description": "Create a task from any external system that POSTs JSON to the webhook URL.",
+                    "name": "automations.catalog.generic_webhook.name",
+                    "description": "automations.catalog.generic_webhook.description",
                     "config": {
                         "trigger": {"type": "webhook_generic", "params": {}},
                         "conditions": [],

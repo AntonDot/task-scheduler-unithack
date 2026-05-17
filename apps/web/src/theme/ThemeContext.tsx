@@ -42,7 +42,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (user && token) {
         updateProfile({ is_dark: next })
           .then((updated) => {
-            setAuth({ ...user, is_dark: updated.is_dark }, token);
+            setAuth(updated, token);
           })
           .catch(() => {/* silently ignore */});
       }

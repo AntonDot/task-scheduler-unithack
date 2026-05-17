@@ -195,7 +195,7 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
     if (!user || !token) return;
     try {
       const updated = await updateProfile({ accent_color: c });
-      setAuth({ ...user, accent_color: updated.accent_color }, token);
+      setAuth(updated, token);
     } catch (e) {
       console.error("Failed to save accent color", e);
     }
@@ -205,8 +205,8 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
     setLanguage(lang);
     if (!user || !token) return;
     try {
-      await updateProfile({ language: lang });
-      setAuth({ ...user, language: lang }, token);
+      const updated = await updateProfile({ language: lang });
+      setAuth(updated, token);
     } catch (e) {
       console.error("Failed to save language", e);
     }

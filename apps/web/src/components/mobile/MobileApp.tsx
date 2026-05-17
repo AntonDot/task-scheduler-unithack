@@ -1654,9 +1654,12 @@ function SettingsMobileView({ accent, th, isDark, onToggleDark, onSetAccent }: {
             {(['en', 'ru', 'he'] as const).map(lang => (
               <button
                 key={lang}
-                onClick={() => {
+                onClick={async () => {
                   setLanguage(lang);
-                  updateProfile({ language: lang }).catch(() => {});
+                  try {
+                    const updated = await updateProfile({ language: lang });
+                    if (token) setAuth(updated, token);
+                  } catch { }
                 }}
                 style={{
                   padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 500,
@@ -1861,7 +1864,7 @@ export function MobileApp() {
   const [createOpen, setCreateOpen] = useState(false);
   const [activeProjectId, setActiveProjectId] = useState<number | null>(null);
   const [bellOpen, setBellOpen] = useState(false);
-  const { user, projectRoles } = useAuthStore();
+  const { user, token, setAuth, projectRoles } = useAuthStore();
   const { toasts, addToast, removeToast } = useToast();
   const NOTIF_READ_KEY = `vt_read_notifs_${user?.id || 'default'}`;
   const [readIds, setReadIds] = useState<Set<string>>(() => {
@@ -2137,6 +2140,15 @@ export function MobileApp() {
   }
 
 
+  const handleSetAccent = useCallback(async (c: string) => {
+    setAccentColor(c);
+    if (!user || !token) return;
+    try {
+      const updated = await updateProfile({ accent_color: c });
+      setAuth(updated, token);
+    } catch { }
+  }, [user, token, setAuth, setAccentColor]);
+
   return (
     <>
       <style>{`
@@ -2168,7 +2180,7 @@ export function MobileApp() {
             <SettingsMobileView
               accent={accent} th={th}
               isDark={isDark} onToggleDark={toggleTheme}
-              onSetAccent={setAccentColor}
+              onSetAccent={handleSetAccent}
             />
           )}
         </div>

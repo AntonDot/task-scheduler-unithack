@@ -26,20 +26,45 @@ MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 ALLOWED_TYPE_PREFIXES = (
     "image/",
     "text/",
+    "audio/",
+    "video/",
 )
 ALLOWED_TYPES_EXACT = {
     "application/pdf",
     "application/msword",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-excel",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    "application/vnd.ms-powerpoint",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    "application/zip",
+    "application/x-zip-compressed",
+    "application/x-7z-compressed",
+    "application/x-rar-compressed",
+    "application/x-tar",
+    "application/x-gzip",
+    "application/x-sql",
+    "application/sql",
+    "application/json",
+    "application/xml",
+    "application/x-apple-diskimage",  # .dmg
 }
-ALLOWED_TYPE_PREFIXES_EXTENDED = ("application/vnd.openxmlformats-officedocument.",)
+ALLOWED_EXTENSIONS = {
+    ".md", ".markdown", ".sql", ".json", ".yaml", ".yml",
+    ".log", ".csv", ".dmg", ".zip", ".7z", ".rar", ".gz", ".tar"
+}
 
 
-def _is_allowed_content_type(content_type: str) -> bool:
+def _is_allowed_content_type(filename: str, content_type: str) -> bool:
+    # Check by prefix (images, text, audio, video)
     if any(content_type.startswith(prefix) for prefix in ALLOWED_TYPE_PREFIXES):
         return True
+    # Check exact MIME type
     if content_type in ALLOWED_TYPES_EXACT:
         return True
-    return bool(any(content_type.startswith(prefix) for prefix in ALLOWED_TYPE_PREFIXES_EXTENDED))
+    # Check by extension for common development files that might have generic MIME types
+    ext = os.path.splitext(filename.lower())[1]
+    return ext in ALLOWED_EXTENSIONS
 
 
 async def _get_task_access(
@@ -74,11 +99,12 @@ async def upload_attachment(
     task, _ = await _get_task_access(task_id, current_user, db)
 
     # Validate content type
+    original_filename = file.filename or "untitled"
     content_type = file.content_type or "application/octet-stream"
-    if not _is_allowed_content_type(content_type):
+    if not _is_allowed_content_type(original_filename, content_type):
         raise HTTPException(
             status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=f"File type not allowed: {content_type}",
+            detail=f"File type not allowed: {content_type} ({original_filename})",
         )
 
     # Read file content and check size
@@ -90,7 +116,6 @@ async def upload_attachment(
         )
 
     # Store file on disk
-    original_filename = file.filename or "untitled"
     unique_name = f"{uuid.uuid4()}_{original_filename}"
     task_dir = Path(UPLOAD_DIR) / str(task_id)
     task_dir.mkdir(parents=True, exist_ok=True)

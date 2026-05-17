@@ -367,25 +367,42 @@ async def execute_action(action: dict, context: dict):
                 else:
                     from sqlalchemy import text
 
-                    await db.execute(
+                    project_id_for_tag = payload.get("project_id")
+                    tag_check = await db.execute(
                         text(
-                            "INSERT INTO task_tags (task_id, tag_id) VALUES (:tid, :tag_id)"
-                            " ON CONFLICT DO NOTHING"
+                            "SELECT id FROM tags WHERE id = :tag_id AND project_id = :pid"
                         ),
-                        {"tid": task_id, "tag_id": tag_id},
+                        {"tag_id": tag_id, "pid": project_id_for_tag},
                     )
-                    logger.info("Automation added tag %s to task %s", tag_id, task_id)
-                    async with httpx.AsyncClient() as client:
-                        await client.post(
-                            f"{settings.core_api_url}/api/v1/tasks/internal/automation-event",
-                            json={
-                                "task_id": task_id,
-                                "action": "task_updated",
-                                "message": f"Added tag {tag_id}",
-                            },
-                            headers={"X-Service-Token": settings.service_token},
-                            timeout=5.0,
+                    if tag_check.scalar() is None:
+                        logger.warning(
+                            "add_tag: tag %s not found in project %s, skipping",
+                            tag_id,
+                            project_id_for_tag,
                         )
+                    else:
+                        await db.execute(
+                            text(
+                                "INSERT INTO task_tags (task_id, tag_id) VALUES (:tid, :tag_id)"
+                                " ON CONFLICT DO NOTHING"
+                            ),
+                            {"tid": task_id, "tag_id": tag_id},
+                        )
+                        logger.info("Automation added tag %s to task %s", tag_id, task_id)
+                        try:
+                            async with httpx.AsyncClient() as client:
+                                await client.post(
+                                    f"{settings.core_api_url}/api/v1/tasks/internal/automation-event",
+                                    json={
+                                        "task_id": task_id,
+                                        "action": "task_updated",
+                                        "message": f"Added tag {tag_id}",
+                                    },
+                                    headers={"X-Service-Token": settings.service_token},
+                                    timeout=5.0,
+                                )
+                        except Exception as e:
+                            logger.error("add_tag: failed to notify core-api: %s", e)
 
         elif a_type == "enrich_task":
             if not task_id:
@@ -410,8 +427,8 @@ async def execute_action(action: dict, context: dict):
                             resp.raise_for_status()
                             enriched = resp.json()
 
-                        new_title = enriched.get("title") or current_title
-                        new_description = enriched.get("description") or ""
+                        new_title = str(enriched.get("title") or current_title)
+                        new_description = str(enriched.get("description") or "")
                         new_urgency = enriched.get("urgency")
 
                         update_parts = ["title = :title", "description = :desc"]
@@ -422,7 +439,7 @@ async def execute_action(action: dict, context: dict):
                         }
                         if new_urgency:
                             update_parts.append("urgency = :urgency")
-                            update_params["urgency"] = new_urgency
+                            update_params["urgency"] = str(new_urgency)
 
                         await db.execute(
                             text(
@@ -436,6 +453,11 @@ async def execute_action(action: dict, context: dict):
                             task_id,
                             new_title[:60],
                         )
+                    except Exception as e:
+                        logger.error("Automation enrich_task failed for task %s: %s", task_id, e)
+                        raise
+
+                    try:
                         async with httpx.AsyncClient() as client:
                             await client.post(
                                 f"{settings.core_api_url}/api/v1/tasks/internal/automation-event",
@@ -448,8 +470,7 @@ async def execute_action(action: dict, context: dict):
                                 timeout=5.0,
                             )
                     except Exception as e:
-                        logger.error("Automation enrich_task failed for task %s: %s", task_id, e)
-                        raise
+                        logger.error("enrich_task: failed to notify core-api: %s", e)
 
         await db.commit()
 

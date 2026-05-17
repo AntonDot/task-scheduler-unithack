@@ -1,6 +1,6 @@
 """Add tags and task_tags tables.
 
-Revision ID: 0011_tags
+Revision ID: 0011_add_tags
 Revises: 0010_custom_columns
 Create Date: 2026-05-16 10:40:00.000000
 """

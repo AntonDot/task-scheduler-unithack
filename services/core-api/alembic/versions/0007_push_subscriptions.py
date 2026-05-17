@@ -1,7 +1,7 @@
 """Add push_subscriptions table.
 
 Revision ID: 0007_push_subscriptions
-Revises: 0006_accent_color
+Revises: 0006_add_accent_color
 Create Date: 2026-05-16 10:00:00.000000
 """
 

@@ -1,6 +1,6 @@
 """Add avatar_data to users table.
 
-Revision ID: 0008_user_avatar
+Revision ID: 0008_user_avatar_data
 Revises: 0007_push_subscriptions
 Create Date: 2026-05-16 10:10:00.000000
 """

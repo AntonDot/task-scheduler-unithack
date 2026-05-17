@@ -283,54 +283,63 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
 
   return (
     <div style={{
-      padding: isMobile ? 'calc(var(--sat, 0px) + 16px) 16px 120px' : '28px 32px',
-      overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column',
-      color: th.text
+      flex: 1, display: 'flex', flexDirection: 'column',
+      overflow: 'hidden', color: th.text
     }}>
+      {/* Non-scrolling area: header + tab bar always stay visible */}
       <div style={{
-        display: 'flex',
-        alignItems: isMobile ? 'flex-start' : 'center',
-        justifyContent: 'space-between',
-        flexDirection: isMobile ? 'row' : 'row', // Keeping row but button is smaller
-        gap: 12,
-        marginBottom: 20
+        padding: isMobile ? 'calc(var(--sat, 0px) + 16px) 16px 0' : '28px 32px 0',
+        flexShrink: 0,
       }}>
-        <div style={{ flex: 1 }}>
-          <h2 style={{ fontSize: isMobile ? 20 : 22, fontWeight: 700, color: th.text, margin: 0 }}>{t('automations.title')}</h2>
-          <p style={{ fontSize: isMobile ? 12 : 13, color: th.textSecondary, marginTop: 4, lineHeight: 1.4 }}>
-            {t('automations.subtitle')}
-          </p>
+        <div style={{
+          display: 'flex',
+          alignItems: isMobile ? 'flex-start' : 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+          marginBottom: 20
+        }}>
+          <div style={{ flex: 1 }}>
+            <h2 style={{ fontSize: isMobile ? 20 : 22, fontWeight: 700, color: th.text, margin: 0 }}>{t('automations.title')}</h2>
+            <p style={{ fontSize: isMobile ? 12 : 13, color: th.textSecondary, marginTop: 4, lineHeight: 1.4 }}>
+              {t('automations.subtitle')}
+            </p>
+          </div>
+          <button
+            onClick={() => { resetBuilder(); setShowBuilder(true); }}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 6,
+              padding: isMobile ? '8px 14px' : '10px 18px', borderRadius: 10, border: 'none',
+              background: accent, color: 'white', fontSize: isMobile ? 13 : 14, fontWeight: 600,
+              cursor: 'pointer', boxShadow: `0 4px 12px ${accent}40`, flexShrink: 0,
+            }}
+          >
+            <IcoPlus size={14} />
+            {isMobile ? t('common.add') : t('automations.create')}
+          </button>
         </div>
-        <button
-          onClick={() => { resetBuilder(); setShowBuilder(true); }}
-          style={{
-            display: 'flex', alignItems: 'center', gap: 6,
-            padding: isMobile ? '8px 14px' : '10px 18px', borderRadius: 10, border: 'none',
-            background: accent, color: 'white', fontSize: isMobile ? 13 : 14, fontWeight: 600,
-            cursor: 'pointer', boxShadow: `0 4px 12px ${accent}40`, flexShrink: 0,
-          }}
-        >
-          <IcoPlus size={14} />
-          {isMobile ? t('common.add') : t('automations.create')}
-        </button>
+
+        <div style={{
+          display: 'flex',
+          gap: isMobile ? 12 : 20,
+          borderBottom: `1px solid ${th.border}`,
+          overflowX: isMobile ? 'auto' : 'visible',
+          marginLeft: isMobile ? -16 : 0,
+          marginRight: isMobile ? -16 : 0,
+          paddingLeft: isMobile ? 16 : 0,
+          scrollbarWidth: 'none',
+        }}>
+          <TabButton id="my" label={t('automations.tabs.myAutomations')} />
+          <TabButton id="catalog" label={t('automations.tabs.templates')} />
+          <TabButton id="triggers" label={t('automations.tabs.customTriggers')} />
+          <TabButton id="history" label={t('automations.tabs.history')} />
+        </div>
       </div>
 
+      {/* Scrollable content area only */}
       <div style={{
-        display: 'flex',
-        gap: isMobile ? 12 : 20,
-        borderBottom: `1px solid ${th.border}`,
-        marginBottom: 24,
-        overflowX: isMobile ? 'auto' : 'visible',
-        marginLeft: isMobile ? -16 : 0,
-        marginRight: isMobile ? -16 : 0,
-        paddingLeft: isMobile ? 16 : 0,
-        scrollbarWidth: 'none',
+        flex: 1, overflowY: 'auto',
+        padding: isMobile ? '24px 16px 120px' : '24px 32px 28px',
       }}>
-        <TabButton id="my" label={t('automations.tabs.myAutomations')} />
-        <TabButton id="catalog" label={t('automations.tabs.templates')} />
-        <TabButton id="triggers" label={t('automations.tabs.customTriggers')} />
-        <TabButton id="history" label={t('automations.tabs.history')} />
-      </div>
 
       {activeTab === 'my' && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -601,6 +610,8 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
           )}
         </div>
       )}
+
+      </div>{/* end scrollable content */}
 
       {/* Builder Modal */}
       {showBuilder && (

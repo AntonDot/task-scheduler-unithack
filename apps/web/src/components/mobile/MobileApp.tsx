@@ -16,7 +16,7 @@ import { updateProfile } from '@/api/auth';
 import { useT, useLangStore } from '@/i18n';
 import { Avatar, getAvatarUrl, setAvatarUrl } from '@/components/kanban/Avatar';
 import { Logo } from '@/components/ui/Logo';
-import { getPushStatus, getPushDiagnostics, enablePushNotifications, type PushStatus } from '@/api/push';
+import { getPushStatus, isIOSDevice, enablePushNotifications, type PushStatus } from '@/api/push';
 import { fetchProjectTags, createTag, deleteTag } from '@/api/tags';
 import { useTasksRealtime } from '@/hooks/useTasksRealtime';
 import type { Task, BoardColumn, Tag } from '@/types/domain';
@@ -1329,8 +1329,6 @@ function TeamMobileView({ tasks, members, accent, th, doneColumnId }: {
 function PushNotifRow({ accent, th }: { accent: string; th: ReturnType<typeof useTheme>['theme'] }) {
   const [status, setStatus] = useState<PushStatus>('checking');
   const [loading, setLoading] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
-  const diag = getPushDiagnostics();
 
   useEffect(() => {
     getPushStatus().then(setStatus).catch(() => setStatus('unsupported'));
@@ -1340,7 +1338,7 @@ function PushNotifRow({ accent, th }: { accent: string; th: ReturnType<typeof us
     'no-https': { label: 'No HTTPS', sub: 'App must be opened over HTTPS for push to work', color: '#EF4444' },
     unsupported: {
       label: 'Not supported',
-      sub: diag.ios
+      sub: isIOSDevice()
         ? 'Requires iOS 16.4+ — open the app from the Home Screen icon'
         : 'Push notifications are not supported in this browser',
       color: th.textMuted,
@@ -1395,27 +1393,6 @@ function PushNotifRow({ accent, th }: { accent: string; th: ReturnType<typeof us
           </button>
         )}
       </div>
-      {/* Collapsible debug panel */}
-      {status !== 'subscribed' && (
-        <div style={{ marginTop: 6 }}>
-          <button
-            onClick={() => setShowDebug(v => !v)}
-            style={{ fontSize: 11, color: th.textMuted, background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}
-          >
-            {showDebug ? '▾ debug' : '▸ debug'}
-          </button>
-          {showDebug && (
-            <pre style={{
-              marginTop: 4, padding: '8px 10px', borderRadius: 8,
-              background: th.columnBg, border: `1px solid ${th.border}`,
-              fontSize: 10, color: th.textMuted, lineHeight: 1.5,
-              overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all',
-            }}>
-              {JSON.stringify(diag, null, 2)}
-            </pre>
-          )}
-        </div>
-      )}
     </div>
   );
 }

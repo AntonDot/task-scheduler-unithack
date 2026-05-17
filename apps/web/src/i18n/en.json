@@ -310,7 +310,7 @@
     },
     "help": {
       "title": "Automations Guide",
-      "content": "Automations allow you to streamline your workflow. You can create rules like: 'When a task is created, assign it to a member' or 'When a column changes, send a notification'. Use 'My Automations' to manage your rules, 'Templates' to quickly add common patterns, and 'Custom Triggers' for external integrations via webhooks."
+      "content": "Automations allow you to create rules: \"Trigger → Condition → Action\".\n\n🔗 External Webhooks\nTo integrate with external systems, create an automation with the \"GitHub\" or \"Generic Webhook\" trigger. After saving, you will receive a unique URL.\n\nRequest Format:\nMethod: POST / Content-Type: application/json.\nExample body:\n{ \"event_type\": \"my_event\", \"payload\": { \"user\": \"Ivan\", \"score\": 42 } }\n\n🔍 Using Fields in Conditions\nAddress fields directly (without 'payload.' prefix). Use dot notation for nested objects. For example:\n— user — extracts username from the example above.\n— score — extracts the numeric value.\n— repo.name — extracts repository name from GitHub events.\n\n📝 Variables in Actions\nYou can use variables in notification texts and task titles: {{user}}, {{task.title}}."
     }
   },
   "team": {

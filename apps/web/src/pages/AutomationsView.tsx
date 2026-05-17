@@ -680,7 +680,7 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
                 <IcoX size={20} />
               </button>
             </div>
-            <p style={{ fontSize: 15, color: th.textSecondary, lineHeight: 1.6, margin: 0 }}>
+            <p style={{ fontSize: 15, color: th.textSecondary, lineHeight: 1.6, margin: 0, whiteSpace: 'pre-wrap' }}>
               {t('automations.help.content')}
             </p>
             <button onClick={() => setShowHelp(false)} style={{

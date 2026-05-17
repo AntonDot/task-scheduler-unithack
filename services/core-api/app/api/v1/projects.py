@@ -109,7 +109,7 @@ async def get_project_analytics(
 ):
     # Total tasks
     total_result = await db.execute(
-        select(func.count(Task.id)).where(Task.project_id == project_id, not Task.is_deleted)
+        select(func.count(Task.id)).where(Task.project_id == project_id, Task.is_deleted.is_(False))
     )
     total_tasks = total_result.scalar() or 0
 
@@ -123,7 +123,7 @@ async def get_project_analytics(
 
     # By status (column name)
     status_result = await db.execute(
-        select(BoardColumn.name, func.count(Task.id).filter(not Task.is_deleted))
+        select(BoardColumn.name, func.count(Task.id).filter(Task.is_deleted.is_(False)))
         .join(Task, Task.column_id == BoardColumn.id, isouter=True)
         .where(BoardColumn.project_id == project_id)
         .group_by(BoardColumn.id)
@@ -133,7 +133,7 @@ async def get_project_analytics(
     # By urgency
     urgency_result = await db.execute(
         select(Task.urgency, func.count(Task.id))
-        .where(Task.project_id == project_id, not Task.is_deleted)
+        .where(Task.project_id == project_id, Task.is_deleted.is_(False))
         .group_by(Task.urgency)
     )
     by_urgency = dict(urgency_result.all())
@@ -146,7 +146,7 @@ async def get_project_analytics(
             Task.deadline < now,
             Task.column_id != last_col_id,
             Task.deadline.isnot(None),
-            not Task.is_deleted,
+            Task.is_deleted.is_(False),
         )
     )
     overdue_count = overdue_result.scalar() or 0
@@ -156,7 +156,7 @@ async def get_project_analytics(
         select(Task.created_at, Task.updated_at).where(
             Task.project_id == project_id,
             Task.column_id == last_col_id,
-            not Task.is_deleted,
+            Task.is_deleted.is_(False),
         )
     )
     done_rows = done_result.all()
@@ -181,7 +181,7 @@ async def get_project_analytics(
             func.sum(case((Task.column_id.notin_([first_col_id, last_col_id]), 1), else_=0)).label("in_progress"),
         )
         .join(User, User.id == Task.assignee_id)
-        .where(Task.project_id == project_id, Task.assignee_id.isnot(None), not Task.is_deleted)
+        .where(Task.project_id == project_id, Task.assignee_id.isnot(None), Task.is_deleted.is_(False))
         .group_by(Task.assignee_id, User.full_name)
     )
     assignee_load = [
@@ -218,7 +218,7 @@ async def export_project_tasks(
 
     result = await db.execute(
         select(Task)
-        .where(Task.project_id == project_id, not Task.is_deleted)
+        .where(Task.project_id == project_id, Task.is_deleted.is_(False))
         .options(selectinload(Task.assignee), selectinload(Task.column))
         .order_by(Task.id)
     )

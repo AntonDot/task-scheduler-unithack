@@ -2,7 +2,7 @@
 
 Revision ID: 0001_initial_schema
 Revises:
-Create Date: 2026-05-07 21:00:00.000000
+Create Date: 2026-05-16 09:00:00.000000
 """
 
 from collections.abc import Sequence

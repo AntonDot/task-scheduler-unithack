@@ -2,7 +2,7 @@
 
 Revision ID: 0007_push_subscriptions
 Revises: 0006_add_accent_color
-Create Date: 2026-05-13 00:00:00.000000
+Create Date: 2026-05-16 10:00:00.000000
 """
 
 from collections.abc import Sequence

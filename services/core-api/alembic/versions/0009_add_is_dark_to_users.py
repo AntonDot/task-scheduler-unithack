@@ -2,7 +2,7 @@
 
 Revision ID: 0009_add_missing_cols
 Revises: 0008_user_avatar_data
-Create Date: 2026-05-14 10:00:00.000000
+Create Date: 2026-05-16 10:20:00.000000
 """
 
 from collections.abc import Sequence

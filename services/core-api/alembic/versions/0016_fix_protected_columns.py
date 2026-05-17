@@ -2,7 +2,7 @@
 
 Revision ID: 0016_fix_protected_columns
 Revises: 0015_merge_heads
-Create Date: 2026-05-16 16:00:00.000000
+Create Date: 2026-05-16 11:50:00.000000
 """
 
 from collections.abc import Sequence

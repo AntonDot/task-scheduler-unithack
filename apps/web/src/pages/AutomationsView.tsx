@@ -968,7 +968,7 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
                               onChange={e => { const n=[...actions]; n[idx].params={...n[idx].params, urgency: e.target.value}; setActions(n); }}
                               style={selectStyle}
                             >
-                              {URGENCY_VALUES.map(u => <option key={u} value={u}>{u}</option>)}
+                              {URGENCY_VALUES.map(u => <option key={u} value={u}>{t(`urgency.${u}`)}</option>)}
                             </select>
                             <input
                               placeholder={t('automations.builder.taskTitle')}

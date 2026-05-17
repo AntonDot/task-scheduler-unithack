@@ -219,7 +219,9 @@
       "nameRequired": "Please enter automation name",
       "githubHint": "In your repo: Settings → Webhooks → Add → Payload URL: <url> → Content-type: application/json → optionally set Secret",
       "reviewHint": "Trigger via POST /api/v1/automations/run-review-scraper (or hit the webhook URL with your scraper)",
-      "genericHint": "POST any JSON; use event_type to set the event name, payload for data"
+      "genericHint": "POST any JSON; use event_type to set the event name, payload for data",
+      "tipPayload": "Tip: use {{vars}} for values from the event payload.",
+      "removeAction": "Remove this action"
     },
     "triggers": {
       "task_created": "Task created",
@@ -254,7 +256,12 @@
     "customWebhooks": "Custom Webhooks",
     "customWebhooksHint": "External systems (GitHub, scrapers, custom integrations) POST events to these URLs to fire automations.",
     "logs": "Logs",
-    "rotate": "Rotate"
+    "rotate": "Rotate",
+    "deleted": "Deleted",
+    "summary": {
+      "when": "When:",
+      "then": "Then:"
+    }
   },
   "team": {
     "title": "Team",

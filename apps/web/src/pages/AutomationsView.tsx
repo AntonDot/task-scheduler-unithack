@@ -284,7 +284,8 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
   return (
     <div style={{
       padding: isMobile ? 'calc(var(--sat, 0px) + 16px) 16px 120px' : '28px 32px',
-      overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column'
+      overflowY: 'auto', flex: 1, display: 'flex', flexDirection: 'column',
+      color: th.text
     }}>
       <div style={{
         display: 'flex',
@@ -310,8 +311,7 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
           }}
         >
           <IcoPlus size={14} />
-          {!isMobile && t('automations.create')}
-          {isMobile && t('common.add') || 'Automation'}
+          {isMobile ? t('common.add') : t('automations.create')}
         </button>
       </div>
 
@@ -369,11 +369,11 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
                 <div style={{ flex: 1, width: '100%' }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <div style={{ padding: '4px 8px', borderRadius: 6, fontSize: 10.5, background: th.bg, border: `1px solid ${th.border}`, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      <span style={{ fontWeight: 600, opacity: 0.7 }}>When:</span> {TRIGGER_TYPES_LABELED.find(tt => tt.id === auto.config.trigger.type)?.label || auto.config.trigger.type}
+                      <span style={{ fontWeight: 600, opacity: 0.7 }}>{t('automations.summary.when')}</span> {TRIGGER_TYPES_LABELED.find(tt => tt.id === auto.config.trigger.type)?.label || auto.config.trigger.type}
                     </div>
                     <IcoChevronR size={10} />
                     <div style={{ padding: '4px 8px', borderRadius: 6, fontSize: 10.5, background: `${accent}15`, color: accent, border: `1px solid ${accent}30`, maxWidth: '100%', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                      <span style={{ fontWeight: 600, opacity: 0.7 }}>Then:</span> {auto.config.actions.map(a => ACTION_TYPES.find(at => at.id === a.type)?.label || a.type).join(', ')}
+                      <span style={{ fontWeight: 600, opacity: 0.7 }}>{t('automations.summary.then')}</span> {auto.config.actions.map(a => ACTION_TYPES.find(at => at.id === a.type)?.label || a.type).join(', ')}
                     </div>
                   </div>
                 </div>
@@ -550,7 +550,7 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
                 history.map(log => (
                   <div key={log.id} style={{ background: th.surface, border: `1px solid ${th.border}`, borderRadius: 14, padding: '14px' }}>
                     <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                       <p style={{ fontWeight: 700, fontSize: 13, margin: 0 }}>{automations.find(a => a.id === log.automation_id)?.name || 'Deleted'}</p>
+                       <p style={{ fontWeight: 700, fontSize: 13, margin: 0 }}>{automations.find(a => a.id === log.automation_id)?.name || t('automations.deleted')}</p>
                        <span style={{ color: log.status === 'success' ? '#059669' : '#DC2626', fontWeight: 700, fontSize: 11 }}>
                           {log.status === 'success' ? t('common.success') : t('common.error')}
                        </span>
@@ -584,7 +584,7 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
                   ) : (
                     history.map(log => (
                       <tr key={log.id} style={{ borderBottom: `1px solid ${th.border}` }}>
-                        <td style={{ padding: '12px 20px' }}>{automations.find(a => a.id === log.automation_id)?.name || 'Deleted'}</td>
+                        <td style={{ padding: '12px 20px' }}>{automations.find(a => a.id === log.automation_id)?.name || t('automations.deleted')}</td>
                         <td style={{ padding: '12px 20px' }}>
                           <span style={{ color: log.status === 'success' ? '#059669' : '#DC2626', fontWeight: 600 }}>
                             {log.status === 'success' ? t('common.success') : t('common.error')}
@@ -615,7 +615,7 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
             boxShadow: '0 20px 50px rgba(0,0,0,0.2)',
           }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, margin: 0 }}>{editingId ? t('automations.builder.editTitle') : t('automations.builder.createTitle')}</h3>
+              <h3 style={{ fontSize: isMobile ? 18 : 20, fontWeight: 700, margin: 0, color: th.text }}>{editingId ? t('automations.builder.editTitle') : t('automations.builder.createTitle')}</h3>
               <button onClick={() => { setShowBuilder(false); resetBuilder(); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: th.textMuted }}>
                 <IcoX size={20} />
               </button>
@@ -852,8 +852,8 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
                     {actions.length > 1 && (
                       <button
                         onClick={() => setActions(actions.filter((_, i) => i !== idx))}
-                        title="Remove this action"
-                        style={{ position: 'absolute', top: -10, right: -10, width: 24, height: 24, borderRadius: '50%', background: th.surface, border: `1px solid ${th.border}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1 }}
+                        title={t('automations.builder.removeAction')}
+                        style={{ position: 'absolute', top: -10, right: -10, width: 24, height: 24, borderRadius: '50%', background: th.surface, border: `1px solid ${th.border}`, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1, color: th.text }}
                       >
                         <IcoX size={14} />
                       </button>
@@ -967,7 +967,7 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
                               <option value="">{t('automations.builder.noAssignee')}</option>
                               {members.map(m => <option key={m.id} value={m.id}>{m.full_name}</option>)}
                             </select>
-                            <p style={{ fontSize: 11, color: th.textMuted, gridColumn: isMobile ? 'auto' : '1 / -1', margin: 0, lineHeight: 1.4 }}>Tip: use <code>{`{{review.rating}}`}</code>, <code>{`{{pr.title}}`}</code>, etc. for templated values from the event payload.</p>
+                            <p style={{ fontSize: 11, color: th.textMuted, gridColumn: isMobile ? 'auto' : '1 / -1', margin: 0, lineHeight: 1.4 }}>{t('automations.builder.tipPayload')}</p>
                           </>
                         )}
                       </div>

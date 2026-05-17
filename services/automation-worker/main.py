@@ -50,6 +50,7 @@ class Settings(BaseSettings):
     rabbitmq_url: str = "amqp://guest:guest@rabbitmq:5672/"
     automation_events_queue: str = "automation.events"
     core_api_url: str = "http://core-api:8000"
+    ml_worker_url: str = "http://ml-worker:8001"
     service_token: str = "dev-service-token"
 
     model_config = {"env_prefix": "AUTOMATION_", "extra": "ignore"}
@@ -355,6 +356,121 @@ async def execute_action(action: dict, context: dict):
                         )
             except Exception as e:
                 logger.error("Failed to send notification via core-api: %s", e)
+
+        elif a_type == "add_tag":
+            if not task_id:
+                logger.warning("add_tag requires task_id in payload")
+            else:
+                tag_id = params.get("tag_id")
+                if not tag_id:
+                    logger.warning("add_tag requires tag_id param")
+                else:
+                    from sqlalchemy import text
+
+                    project_id_for_tag = payload.get("project_id")
+                    tag_check = await db.execute(
+                        text(
+                            "SELECT id FROM tags WHERE id = :tag_id AND project_id = :pid"
+                        ),
+                        {"tag_id": tag_id, "pid": project_id_for_tag},
+                    )
+                    if tag_check.scalar() is None:
+                        logger.warning(
+                            "add_tag: tag %s not found in project %s, skipping",
+                            tag_id,
+                            project_id_for_tag,
+                        )
+                    else:
+                        await db.execute(
+                            text(
+                                "INSERT INTO task_tags (task_id, tag_id) VALUES (:tid, :tag_id)"
+                                " ON CONFLICT DO NOTHING"
+                            ),
+                            {"tid": task_id, "tag_id": tag_id},
+                        )
+                        logger.info("Automation added tag %s to task %s", tag_id, task_id)
+                        try:
+                            async with httpx.AsyncClient() as client:
+                                await client.post(
+                                    f"{settings.core_api_url}/api/v1/tasks/internal/automation-event",
+                                    json={
+                                        "task_id": task_id,
+                                        "action": "task_updated",
+                                        "message": f"Added tag {tag_id}",
+                                    },
+                                    headers={"X-Service-Token": settings.service_token},
+                                    timeout=5.0,
+                                )
+                        except Exception as e:
+                            logger.error("add_tag: failed to notify core-api: %s", e)
+
+        elif a_type == "enrich_task":
+            if not task_id:
+                logger.warning("enrich_task requires task_id in payload")
+            else:
+                from sqlalchemy import text
+
+                res = await db.execute(
+                    text("SELECT title FROM tasks WHERE id = :tid"),
+                    {"tid": task_id},
+                )
+                current_title = res.scalar()
+                if not current_title:
+                    logger.warning("enrich_task: task %s not found or has no title", task_id)
+                else:
+                    try:
+                        async with httpx.AsyncClient(timeout=30.0) as client:
+                            resp = await client.post(
+                                f"{settings.ml_worker_url}/ai/improve",
+                                json={"text": current_title},
+                            )
+                            resp.raise_for_status()
+                            enriched = resp.json()
+
+                        new_title = str(enriched.get("title") or current_title)
+                        new_description = str(enriched.get("description") or "")
+                        new_urgency = enriched.get("urgency")
+
+                        update_parts = ["title = :title", "description = :desc"]
+                        update_params: dict = {
+                            "title": new_title,
+                            "desc": new_description,
+                            "tid": task_id,
+                        }
+                        if new_urgency:
+                            update_parts.append("urgency = :urgency")
+                            update_params["urgency"] = str(new_urgency)
+
+                        await db.execute(
+                            text(
+                                f"UPDATE tasks SET {', '.join(update_parts)}"
+                                " WHERE id = :tid"
+                            ),
+                            update_params,
+                        )
+                        logger.info(
+                            "Automation enrich_task succeeded: task=%s new_title=%r",
+                            task_id,
+                            new_title[:60],
+                        )
+                    except Exception as e:
+                        logger.error("Automation enrich_task failed for task %s: %s", task_id, e)
+                        raise
+
+                    try:
+                        async with httpx.AsyncClient() as client:
+                            await client.post(
+                                f"{settings.core_api_url}/api/v1/tasks/internal/automation-event",
+                                json={
+                                    "task_id": task_id,
+                                    "action": "task_updated",
+                                    "message": "Task enriched by AI",
+                                },
+                                headers={"X-Service-Token": settings.service_token},
+                                timeout=5.0,
+                            )
+                    except Exception as e:
+                        logger.error("enrich_task: failed to notify core-api: %s", e)
 
         await db.commit()
 

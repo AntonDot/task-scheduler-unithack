@@ -221,6 +221,7 @@
       "reviewHint": "Запустите через POST /api/v1/automations/run-review-scraper",
       "genericHint": "POST любой JSON; event_type — имя события, payload — данные",
       "tipPayload": "Подсказка: используйте {{vars}} для значений из payload события.",
+      "enrichHint": "AI автоматически перепишет заголовок и описание задачи с помощью ML-воркера.",
       "removeAction": "Удалить это действие"
     },
     "triggers": {
@@ -244,7 +245,9 @@
       "change_column": "Переместить в колонку",
       "assign_user": "Назначить исполнителя",
       "send_notification": "Отправить уведомление",
-      "create_task": "Создать задачу"
+      "create_task": "Создать задачу",
+      "add_tag": "Добавить тег",
+      "enrich_task": "Обогатить с помощью AI"
     },
     "ops": {
       "gte": "≥",

@@ -50,13 +50,13 @@ const ALLOWED_CONDITION_TYPES: Record<string, Set<string>> = {
 };
 
 const ALLOWED_ACTION_TYPES: Record<string, Set<string>> = {
-  task_created:    new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
-  task_updated:    new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
-  column_changed:  new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
-  tag_changed:     new Set(['change_column', 'assign_user', 'send_notification', 'create_task']),
-  review_received: new Set(['send_notification', 'create_task']),
-  github_event:    new Set(['send_notification', 'create_task']),
-  webhook_generic: new Set(['send_notification', 'create_task']),
+  task_created:    new Set(['change_column', 'assign_user', 'send_notification', 'create_task', 'add_tag', 'enrich_task']),
+  task_updated:    new Set(['change_column', 'assign_user', 'send_notification', 'create_task', 'add_tag', 'enrich_task']),
+  column_changed:  new Set(['change_column', 'assign_user', 'send_notification', 'create_task', 'add_tag', 'enrich_task']),
+  tag_changed:     new Set(['change_column', 'assign_user', 'send_notification', 'create_task', 'add_tag', 'enrich_task']),
+  review_received: new Set(['send_notification', 'create_task', 'add_tag', 'enrich_task']),
+  github_event:    new Set(['send_notification', 'create_task', 'add_tag', 'enrich_task']),
+  webhook_generic: new Set(['send_notification', 'create_task', 'add_tag', 'enrich_task']),
 };
 
 function buildWebhookUrl(token: string): string {
@@ -108,6 +108,8 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
     { id: 'assign_user',        label: t('automations.actions.assign_user') },
     { id: 'send_notification',  label: t('automations.actions.send_notification') },
     { id: 'create_task',        label: t('automations.actions.create_task') },
+    { id: 'add_tag',            label: t('automations.actions.add_tag') },
+    { id: 'enrich_task',        label: t('automations.actions.enrich_task') },
   ];
 
   function externalTriggerHint(triggerType: string): string | null {
@@ -1059,6 +1061,33 @@ export function AutomationsView({ projectId, accent, theme, isMobile }: Automati
                             </select>
                             <p style={{ fontSize: 11, color: th.textMuted, gridColumn: isMobile ? 'auto' : '1 / -1', margin: 0, lineHeight: 1.4 }}>{t('automations.builder.tipPayload')}</p>
                           </>
+                        )}
+
+                        {act.type === 'add_tag' && (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <select
+                              value={act.params.tag_id || ''}
+                              onChange={e => { const n=[...actions]; n[idx].params={ tag_id: Number(e.target.value) }; setActions(n); }}
+                              style={selectStyle}
+                            >
+                              <option value="">{t('automations.builder.selectTag')}</option>
+                              {projectTags.map(tag => (
+                                <option key={tag.id} value={tag.id}>{tag.name}</option>
+                              ))}
+                            </select>
+                            {act.params.tag_id && (() => {
+                              const selectedTag = projectTags.find(tag => tag.id === act.params.tag_id);
+                              return selectedTag ? (
+                                <div style={{ width: 12, height: 12, borderRadius: '50%', background: selectedTag.color, flexShrink: 0 }} />
+                              ) : null;
+                            })()}
+                          </div>
+                        )}
+
+                        {act.type === 'enrich_task' && (
+                          <p style={{ fontSize: 12, color: th.textMuted, gridColumn: isMobile ? 'auto' : '1 / -1', margin: 0, lineHeight: 1.5 }}>
+                            {t('automations.builder.enrichHint')}
+                          </p>
                         )}
                       </div>
                     </div>

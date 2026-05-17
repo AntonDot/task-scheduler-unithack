@@ -221,6 +221,7 @@
       "reviewHint": "Trigger via POST /api/v1/automations/run-review-scraper (or hit the webhook URL with your scraper)",
       "genericHint": "POST any JSON; use event_type to set the event name, payload for data",
       "tipPayload": "Tip: use {{vars}} for values from the event payload.",
+      "enrichHint": "AI will automatically rewrite the task title and description using the ML worker.",
       "removeAction": "Remove this action"
     },
     "triggers": {
@@ -244,7 +245,9 @@
       "change_column": "Move to column",
       "assign_user": "Assign user",
       "send_notification": "Send notification",
-      "create_task": "Create task"
+      "create_task": "Create task",
+      "add_tag": "Add tag",
+      "enrich_task": "Enrich with AI"
     },
     "ops": {
       "gte": "≥",

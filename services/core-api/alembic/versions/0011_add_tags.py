@@ -1,8 +1,8 @@
 """Add tags and task_tags tables.
 
-Revision ID: 0011_add_tags
+Revision ID: 0011_tags
 Revises: 0010_custom_columns
-Create Date: 2026-05-15 18:00:00.000000
+Create Date: 2026-05-16 10:40:00.000000
 """
 
 from collections.abc import Sequence

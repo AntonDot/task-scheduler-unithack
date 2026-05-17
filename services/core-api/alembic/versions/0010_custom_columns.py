@@ -2,7 +2,7 @@
 
 Revision ID: 0010_custom_columns
 Revises: 0009_fix_users
-Create Date: 2026-05-15 12:00:00.000000
+Create Date: 2026-05-16 10:30:00.000000
 """
 
 from collections.abc import Sequence

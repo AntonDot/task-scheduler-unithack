@@ -2,7 +2,7 @@
 
 Revision ID: 0019_user_language
 Revises: 0018_nullable_audit_task
-Create Date: 2026-05-17 10:00:00.000000
+Create Date: 2026-05-16 12:20:00.000000
 """
 
 from collections.abc import Sequence

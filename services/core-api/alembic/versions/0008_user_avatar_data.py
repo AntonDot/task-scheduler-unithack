@@ -1,8 +1,8 @@
 """Add avatar_data to users table.
 
-Revision ID: 0008_user_avatar_data
+Revision ID: 0008_user_avatar
 Revises: 0007_push_subscriptions
-Create Date: 2026-05-13 01:00:00.000000
+Create Date: 2026-05-16 10:10:00.000000
 """
 
 from collections.abc import Sequence

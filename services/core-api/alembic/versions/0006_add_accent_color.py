@@ -1,8 +1,8 @@
 """Add accent_color to users table.
 
-Revision ID: 0006_add_accent_color
+Revision ID: 0006_accent_color
 Revises: 0005_multi_assignees
-Create Date: 2026-05-12 01:28:00.000000
+Create Date: 2026-05-16 09:50:00.000000
 """
 
 from collections.abc import Sequence

@@ -1,23 +1,28 @@
 name: Auto Approve to Dev
 
 on:
-  pull_request:
+  pull_request_target:
     branches:
       - dev
     types: [opened, reopened, synchronize]
 
-permissions:
-  pull-requests: write
-
 jobs:
   auto-approve:
     runs-on: ubuntu-latest
-    # Проверяем, что PR не имеет конфликтов (GitHub выставляет mergeable в true)
-    # Исключаем самого автора бота, чтобы не было бесконечного цикла
-    if: github.actor != 'github-actions[bot]'
+    permissions:
+      pull-requests: write
+      contents: write # Требуется для совершения слияния (merge)
     
     steps:
-      - name: Approve Pull Request
+      # Шаг 1: Одобряем (это у вас уже работает!)
+      - name: Approve PR
         uses: hmarr/auto-approve-action@v4
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      # Шаг 2: Сами жмем кнопку Merge через GitHub CLI
+      - name: Merge PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr merge ${{ github.event.pull_request.number }} --merge --delete-branch

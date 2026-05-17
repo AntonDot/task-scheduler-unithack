@@ -20,6 +20,7 @@ import { fetchProjectTags, createTag, deleteTag } from '@/api/tags';
 import type { Tag } from '@/types/domain';
 import { formatRelativeCreationDate } from '@/theme/theme';
 import { TagsSection } from '@/components/tags/TagsSection';
+import { useT } from '@/i18n';
 
 interface TaskDrawerProps {
   task: Task | null;
@@ -35,6 +36,7 @@ interface TaskDrawerProps {
 }
 
 export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, columns, accentColor, theme, scrollToSection }: TaskDrawerProps) {
+  const t = useT();
   const [localTask, setLocalTask] = useState<Task | null>(null);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openTaskIdRef = useRef<number | null>(null);
@@ -127,7 +129,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
 
   async function handleDelete() {
     if (!isLead && !isCreator) return;
-    if (!confirm('Delete this task permanently?')) return;
+    if (!confirm(t('task.deleteConfirm'))) return;
     await deleteTask(display.id);
     onDelete?.(display.id);
     onClose();
@@ -354,12 +356,12 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
 
   function actionLabel(action: string) {
     const map: Record<string, string> = {
-      created: 'создал задачу',
-      updated: 'обновил задачу',
-      status_changed: 'изменил статус',
-      deleted: 'удалил задачу',
-      attachment_added: 'прикрепил файл',
-      attachment_removed: 'удалил файл',
+      created: t('task.actions.created'),
+      updated: t('task.actions.updated'),
+      status_changed: t('task.actions.statusChanged'),
+      deleted: t('task.actions.deleted'),
+      attachment_added: t('task.actions.attachedFile'),
+      attachment_removed: t('task.actions.deletedFile'),
     };
     return map[action] ?? action;
   }
@@ -429,7 +431,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
           <div style={{ background: th.bg, border: `1px solid ${th.border}`, borderRadius: 12, marginBottom: 24 }}>
             {/* Status */}
             <div style={{ ...metaRowStyle, borderBottom: `1px solid ${th.border}` }}>
-              <span style={metaLabelStyle}>Status</span>
+              <span style={metaLabelStyle}>{t('task.status')}</span>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {columns.map(c => (
                   <button key={c.id} onClick={() => handleColumnChange(c.id)} style={{
@@ -447,7 +449,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
             </div>
             {/* Urgency */}
             <div style={{ ...metaRowStyle, borderBottom: `1px solid ${th.border}` }}>
-              <span style={metaLabelStyle}>Urgency</span>
+              <span style={metaLabelStyle}>{t('task.urgency')}</span>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                 {Object.entries(urgMap).map(([key, u]) => (
                   <button key={key} onClick={() => handleUrgencyChange(key.toUpperCase() as Task['urgency'])} style={{
@@ -465,7 +467,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
             </div>
             {/* Assignee — click to add/remove, multiple supported */}
             <div style={{ ...metaRowStyle, borderBottom: `1px solid ${th.border}` }}>
-              <span style={metaLabelStyle}>Assignees</span>
+              <span style={metaLabelStyle}>{t('task.assignees')}</span>
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', alignItems: 'center' }}>
                 {members.map(m => {
                   const selected = display.assignee_id === m.id || (display.co_assignees ?? []).some(u => u.id === m.id);
@@ -481,14 +483,14 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
                 })}
                 <span style={{ fontSize: 10.5, color: th.textMuted, marginLeft: 2 }}>
                   {[display.assignee_id, ...(display.co_assignees ?? []).map(u => u.id)].filter(Boolean).length > 0
-                    ? `${[display.assignee_id, ...(display.co_assignees ?? []).map(u => u.id)].filter(Boolean).length} selected`
-                    : 'None'}
+                    ? `${[display.assignee_id, ...(display.co_assignees ?? []).map(u => u.id)].filter(Boolean).length} ${t('task.selected')}`
+                    : t('common.none')}
                 </span>
               </div>
             </div>
             {/* Deadline */}
             <div style={{ ...metaRowStyle, borderBottom: `1px solid ${th.border}` }}>
-              <span style={metaLabelStyle}>Deadline</span>
+              <span style={metaLabelStyle}>{t('task.deadline')}</span>
               <DatePicker
                 value={display.deadline ? display.deadline.substring(0, 10) : null}
                 onChange={handleDeadlineChange}
@@ -499,14 +501,14 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
             </div>
             {/* Created At */}
             <div style={{ ...metaRowStyle, borderBottom: `1px solid ${th.border}` }}>
-              <span style={metaLabelStyle}>Created</span>
+              <span style={metaLabelStyle}>{t('task.created')}</span>
               <span style={{ fontSize: 12, color: th.textMuted }}>
                 {formatRelativeCreationDate(display.created_at)}
               </span>
             </div>
             {/* Project */}
             <div style={metaRowStyle}>
-              <span style={metaLabelStyle}>Project</span>
+              <span style={metaLabelStyle}>{t('task.project')}</span>
               {display.project && (
                 <span style={{ display: 'inline-block', padding: '3px 9px', borderRadius: 20, background: projectBg, color: projectColor, fontSize: 11, fontWeight: 500 }}>
                   {display.project.name}
@@ -530,7 +532,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
           {/* Description */}
           <div ref={descriptionRef} style={{ marginBottom: 24 }}>
             <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 8 }}>
-              Description
+              {t('task.description')}
             </p>
             <BlockEditor
               value={display.description || ''}
@@ -551,7 +553,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
           >
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
               <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
-                Attachments {attachments.length > 0 && `(${attachments.length})`}
+                {t('task.attachments')} {attachments.length > 0 && `(${attachments.length})`}
               </p>
               {!readonly && (
                 <>
@@ -565,7 +567,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
                       cursor: uploadingFile ? 'not-allowed' : 'pointer', fontFamily: 'inherit',
                     }}
                   >
-                    {uploadingFile ? 'Uploading…' : '+ Attach'}
+                    {uploadingFile ? t('task.uploading') : t('task.attach')}
                   </button>
                 </>
               )}
@@ -579,7 +581,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
                     border: `2px dashed ${acc}`, display: 'flex', alignItems: 'center', justifyContent: 'center',
                     color: acc, fontWeight: 600, fontSize: 13, pointerEvents: 'none'
                   }}>
-                    Drop to attach file
+                    {t('task.dropToAttach')}
                   </div>
                 )}
                 {attachments.map(att => {
@@ -640,7 +642,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
                   transition: 'all 0.2s',
                 }}
               >
-                {fileDragOver ? 'Drop file here' : 'Drop files or click "+ Attach"'}
+                {fileDragOver ? t('task.dropToAttach') : t('task.dropFiles')}
               </div>
             )}
           </div>
@@ -648,13 +650,13 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
           {/* Activity */}
           <div ref={commentsRef}>
             <p style={{ fontSize: 11, fontWeight: 600, color: th.textMuted, letterSpacing: '0.07em', textTransform: 'uppercase', marginBottom: 12 }}>
-              Activity
+              {t('task.activity')}
             </p>
 
             {/* Timeline */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
               {timeline.length === 0 && (
-                <p style={{ fontSize: 13, color: th.textMuted, fontStyle: 'italic' }}>Нет активности</p>
+                <p style={{ fontSize: 13, color: th.textMuted, fontStyle: 'italic' }}>{t('task.noActivity')}</p>
               )}
               {timeline.map((item, i) => {
                 if (item.kind === 'comment') {
@@ -790,7 +792,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
                     }
                     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSendComment(); }
                   }}
-                  placeholder="Написать комментарий… (@ для упоминания)"
+                  placeholder={t('task.comment.placeholder')}
                   rows={2}
                   style={{
                     flex: 1, padding: '8px 11px', borderRadius: 10,
@@ -814,7 +816,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
                     transition: 'all 0.12s', flexShrink: 0,
                   }}
                 >
-                  {sendingComment ? '…' : 'Отправить'}
+                  {sendingComment ? '…' : t('task.comment.send')}
                 </button>
               </div>
 
@@ -837,7 +839,7 @@ export function TaskDrawer({ task, open, onClose, onUpdate, onDelete, members, c
                     <svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
                       <path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6" />
                     </svg>
-                    Delete Task
+                    {t('task.deleteTask')}
                   </button>
                 </div>
               )}

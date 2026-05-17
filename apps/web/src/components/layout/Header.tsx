@@ -6,6 +6,7 @@ import { Avatar } from '@/components/kanban/Avatar';
 import { IcoSearch, IcoBell, IcoMoon, IcoSun, IcoPlus } from '@/components/ui/Icons';
 import type { ProjectMember } from '@/api/members';
 import { fetchNotifications, type NotificationItem } from '@/api/notifications';
+import { useT, useLangStore, RTL_LANGS, type Language } from '@/i18n';
 
 const NOTIF_SETTINGS_KEY = 'vt_notif_settings';
 
@@ -41,12 +42,15 @@ import { useAuthStore } from '@/store/authStore';
 
 export function Header({ view, search, setSearch, onAddTask, accent, theme, darkMode, onToggleDark, members, onOpenTask, onManageColumns }: HeaderProps) {
   const th = theme;
+  const t = useT();
   const titles: Record<AppView, string> = {
-    kanban: 'Board', automations: 'Automations', analytics: 'Analytics',
-    team: 'Team', settings: 'Settings',
+    kanban: t('nav.board'), automations: t('nav.automations'), analytics: t('nav.analytics'),
+    team: t('nav.team'), settings: t('nav.settings'),
   };
 
   const { user } = useAuthStore();
+  const { language } = useLangStore();
+  const isRTL = RTL_LANGS.includes(language as Language);
   const [darkHover, setDarkHover] = useState(false);
   const [bellOpen,  setBellOpen]  = useState(false);
   const NOTIF_READ_KEY = `vt_read_notifs_${user?.id || 'default'}`;
@@ -133,7 +137,7 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
           <input
             value={search}
             onChange={e => setSearch(e.target.value)}
-            placeholder="Search tasks…"
+            placeholder={t('common.search')}
             style={{
               width: '100%', padding: '7px 12px 7px 32px',
               border: `1px solid ${th.border}`, borderRadius: 8,
@@ -157,7 +161,7 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
             </div>
           ))}
           <span style={{ fontSize: 11.5, color: th.textMuted, marginLeft: 10, whiteSpace: 'nowrap' }}>
-            {members.length} members
+            {members.length} {t('common.members')}
           </span>
         </div>
       )}
@@ -166,7 +170,7 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
       <button
         ref={undefined}
         onClick={onToggleDark}
-        title={darkMode ? 'Light mode' : 'Dark mode'}
+        title={darkMode ? t('common.lightMode') : t('common.darkMode')}
         style={iconBtn(darkHover)}
         onMouseEnter={() => setDarkHover(true)}
         onMouseLeave={() => setDarkHover(false)}
@@ -191,25 +195,26 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
           )}
         </button>
 
-        {/* Notification dropdown */}
+        {/* Notification dropdown — use insetInlineEnd so it stays on-screen in both LTR and RTL */}
         {bellOpen && (
           <div ref={dropRef} style={{
-            position: 'absolute', top: 'calc(100% + 8px)', right: 0,
+            position: 'absolute', top: 'calc(100% + 8px)',
+            ...(isRTL ? { left: 0 } : { right: 0 }),
             width: 340, background: th.surface,
             border: `1px solid ${th.border}`, borderRadius: 14,
             boxShadow: '0 12px 40px rgba(0,0,0,0.14)',
             zIndex: 200, overflow: 'hidden', maxHeight: 440, display: 'flex', flexDirection: 'column',
           }}>
             <div style={{ padding: '12px 16px', borderBottom: `1px solid ${th.border}`, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: th.text }}>Уведомления</h4>
+              <h4 style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: th.text }}>{t('notifications.title')}</h4>
               <button onClick={() => setReadIds(new Set(notifs.map(n => n.id)))} style={{
                 background: 'none', border: 'none', color: accent, fontSize: 12, fontWeight: 600, cursor: 'pointer', padding: 0
-              }}>Прочитать все</button>
+              }}>{t('notifications.markAllRead')}</button>
             </div>
             <div style={{ maxHeight: 380, overflowY: 'auto' }}>
               {notifs.length === 0 ? (
                 <div style={{ padding: '32px 16px', textAlign: 'center', color: th.textMuted, fontSize: 13 }}>
-                  Нет уведомлений
+                  {t('notifications.empty')}
                 </div>
               ) : (
                 notifs.map(n => {
@@ -241,7 +246,9 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
                         flexShrink: 0, marginTop: 6,
                       }} />
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 12.5, fontWeight: 600, color: th.text, margin: 0, marginBottom: 2 }}>{n.title}</p>
+                        <p style={{ fontSize: 12.5, fontWeight: 600, color: th.text, margin: 0, marginBottom: 2 }}>
+                          {n.action_key ? (t(`notifications.actionLabels.${n.action_key}`) || n.title) : n.title}
+                        </p>
                         <p style={{ fontSize: 11.5, color: th.textSecondary, margin: 0, lineHeight: 1.4 }}>{n.body}</p>
                         <p style={{ fontSize: 10.5, color: th.textMuted, margin: 0, marginTop: 3 }}>{timeAgo(n.created_at)}</p>
                       </div>
@@ -267,7 +274,7 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
           onMouseEnter={e => (e.currentTarget.style.background = th.columnBg)}
           onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
         >
-          Columns
+          {t('common.columns')}
         </button>
       )}
 
@@ -283,7 +290,7 @@ export function Header({ view, search, setSearch, onAddTask, accent, theme, dark
         onMouseEnter={e => (e.currentTarget.style.opacity = '0.9')}
         onMouseLeave={e => (e.currentTarget.style.opacity = '1')}
       >
-        <IcoPlus size={15} />New task
+        <IcoPlus size={15} />{t('common.newTask')}
       </button>
     </div>
   );

@@ -2,6 +2,7 @@ import type { Task } from '@/types/domain';
 import type { Theme } from '@/theme/theme';
 import { Avatar } from '@/components/kanban/Avatar';
 import type { ProjectMember } from '@/api/members';
+import { useT } from '@/i18n';
 
 interface TeamViewProps {
   tasks: Task[];
@@ -13,10 +14,11 @@ interface TeamViewProps {
 
 export function TeamView({ tasks, members, accent, theme, doneColumnId }: TeamViewProps) {
   const th = theme;
+  const t  = useT();
 
   return (
     <div style={{ padding: '28px 32px', overflowY: 'auto', flex: 1 }}>
-      <h2 style={{ fontSize: 20, fontWeight: 700, color: th.text, marginBottom: 24 }}>Team</h2>
+      <h2 style={{ fontSize: 20, fontWeight: 700, color: th.text, marginBottom: 24 }}>{t('team.title')}</h2>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 14 }}>
         {members.map(member => {
           const mt   = tasks.filter(t => t.assignee_id === member.id);
@@ -38,9 +40,9 @@ export function TeamView({ tasks, members, accent, theme, doneColumnId }: TeamVi
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 {[
-                  { label: 'assigned', value: mt.length, color: accent },
-                  { label: 'done',     value: done,       color: '#059669' },
-                  { label: 'open',     value: mt.length - done, color: '#D97706' },
+                  { label: t('team.assigned'), value: mt.length,       color: accent    },
+                  { label: t('team.done'),     value: done,             color: '#059669' },
+                  { label: t('team.open'),     value: mt.length - done, color: '#D97706' },
                 ].map(s => (
                   <div key={s.label} style={{ textAlign: 'center' }}>
                     <p style={{ fontSize: 22, fontWeight: 700, color: s.color, margin: 0 }}>{s.value}</p>
@@ -59,7 +61,7 @@ export function TeamView({ tasks, members, accent, theme, doneColumnId }: TeamVi
           );
         })}
         {members.length === 0 && (
-          <p style={{ color: th.textMuted, fontSize: 14 }}>No team members yet.</p>
+          <p style={{ color: th.textMuted, fontSize: 14 }}>{t('team.noMembers')}</p>
         )}
       </div>
     </div>

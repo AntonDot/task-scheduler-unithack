@@ -64,7 +64,7 @@ export function KanbanBoard({
 
   return (
     <>
-      <div style={{
+      <div dir="ltr" style={{
         flex: 1, overflowX: 'auto', overflowY: 'hidden',
         padding: '20px 20px 0',
         display: 'flex', alignItems: 'flex-start', gap: 14,

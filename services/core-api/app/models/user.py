@@ -26,6 +26,7 @@ class User(Base):
     is_dark: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     last_notifications_read_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     avatar_data: Mapped[str | None] = mapped_column(Text, nullable=True)
+    language: Mapped[str] = mapped_column(String(10), server_default="en", default="en")
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 

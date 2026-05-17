@@ -4,6 +4,7 @@ import { Avatar, setAvatarUrl } from '@/components/kanban/Avatar';
 import { useAuthStore } from '@/store/authStore';
 import { updateProfile } from '@/api/auth';
 import { getPushStatus, getPushDiagnostics, enablePushNotifications, type PushStatus } from '@/api/push';
+import { useT, useLangStore, type Language } from '@/i18n';
 
 interface SettingsViewProps {
   accent: string;
@@ -55,7 +56,7 @@ function Toggle({ val, onChange, accent }: { val: boolean; onChange: (v: boolean
   );
 }
 
-function PushRow({ accent, theme: th }: { accent: string; theme: Theme }) {
+function PushRow({ accent, theme: th, t }: { accent: string; theme: Theme; t: (key: string) => string }) {
   const [status, setStatus] = useState<PushStatus>('checking');
   const [loading, setLoading] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
@@ -71,14 +72,14 @@ function PushRow({ accent, theme: th }: { accent: string; theme: Theme }) {
   };
 
   const labels: Record<Exclude<PushStatus, 'checking'>, string> = {
-    'no-https':   'App must be opened over HTTPS for push to work',
+    'no-https':   t('settings.pushHttpsRequired'),
     unsupported:  diag.ios
-      ? 'Requires iOS 16.4+ and must be opened from the Home Screen icon'
-      : 'Push notifications are not supported in this browser',
-    'needs-pwa':  'Open in Safari → Share → Add to Home Screen, then reopen the app',
-    denied:       'Notifications blocked — go to iOS Settings → Victory → Notifications',
-    subscribed:   'Push notifications are active',
-    unsubscribed: 'Click Enable to receive push notifications',
+      ? t('settings.pushIosHint')
+      : t('settings.pushNotSupported'),
+    'needs-pwa':  t('settings.pushIosSafari'),
+    denied:       t('settings.pushIosBlocked'),
+    subscribed:   t('settings.pushActive'),
+    unsubscribed: t('settings.pushClickEnable'),
   };
 
   async function handleEnable() {
@@ -93,13 +94,13 @@ function PushRow({ accent, theme: th }: { accent: string; theme: Theme }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16 }}>
         <div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <p style={{ fontSize: 20, fontWeight: 500, color: th.text, margin: 0 }}>Push notifications</p>
+            <p style={{ fontSize: 20, fontWeight: 500, color: th.text, margin: 0 }}>{t('settings.pushNotifications')}</p>
             {status !== 'checking' && (
               <div style={{ width: 8, height: 8, borderRadius: '50%', background: dot[status] }} />
             )}
           </div>
           <p style={{ fontSize: 15, color: th.textMuted, marginTop: 3 }}>
-            {status === 'checking' ? 'Checking…' : labels[status]}
+            {status === 'checking' ? t('settings.pushCheckingStatus') : labels[status]}
           </p>
         </div>
         {status === 'unsubscribed' && (
@@ -113,7 +114,7 @@ function PushRow({ accent, theme: th }: { accent: string; theme: Theme }) {
               fontFamily: 'inherit', flexShrink: 0,
             }}
           >
-            {loading ? 'Enabling…' : 'Enable'}
+            {loading ? t('common.enabling') : t('common.enable')}
           </button>
         )}
       </div>
@@ -144,6 +145,8 @@ function PushRow({ accent, theme: th }: { accent: string; theme: Theme }) {
 export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColor, setAccentColor }: SettingsViewProps) {
   const th = theme;
   const { user, setAuth, token } = useAuthStore();
+  const t = useT();
+  const { language, setLanguage } = useLangStore();
 
   const [notifs, setNotifs] = useState<NotifSetting[]>(loadNotifs);
   const [editOpen, setEditOpen] = useState(false);
@@ -171,6 +174,13 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
     reader.readAsDataURL(file);
     e.target.value = '';
   }
+
+  // Sync language from profile to i18n store on mount
+  useEffect(() => {
+    if (user?.language && useLangStore.getState().language !== user.language) {
+      useLangStore.getState().setLanguage(user.language as Language);
+    }
+  }, [user?.language]);
 
   // Persist notification settings to localStorage whenever they change
   useEffect(() => {
@@ -213,6 +223,17 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
     }
   }
 
+  async function handleLanguageChange(lang: Language) {
+    setLanguage(lang);
+    if (!user || !token) return;
+    try {
+      await updateProfile({ language: lang });
+      setAuth({ ...user, language: lang }, token);
+    } catch (e) {
+      console.error("Failed to save language", e);
+    }
+  }
+
   function Section({ title, children }: { title: string; children: React.ReactNode }) {
     return (
       <div style={{ marginBottom: 42 }}>
@@ -245,10 +266,10 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
   return (
     <div style={{ flex: 1, overflowY: 'auto', display: 'flex', justifyContent: 'center' }}>
       <div style={{ width: '100%', maxWidth: 960, padding: '60px 48px', margin: '0 0' }}>
-        <h2 style={{ fontSize: 30, fontWeight: 700, color: th.text, marginBottom: 42 }}>Settings</h2>
+        <h2 style={{ fontSize: 30, fontWeight: 700, color: th.text, marginBottom: 42 }}>{t('settings.title')}</h2>
 
       {/* Profile */}
-      <Section title="Profile">
+      <Section title={t('settings.profile')}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 24, padding: '24px', background: th.surface, border: `1px solid ${th.border}`, borderRadius: 18, marginBottom: 18 }}>
           <div style={{ position: 'relative', cursor: 'pointer' }} onClick={() => avatarInputRef.current?.click()} title="Change photo">
             <input ref={avatarInputRef} type="file" accept="image/*" onChange={handleAvatarChange} style={{ display: 'none' }} />
@@ -272,16 +293,16 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
             <p style={{ fontSize: 18, color: th.textSecondary, margin: 0 }}>{user?.email ?? '—'}</p>
           </div>
           <button onClick={openEdit} style={{ padding: '10px 20px', borderRadius: 12, border: `1px solid ${th.border}`, background: 'none', fontSize: 19, fontWeight: 500, color: th.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
-            Edit profile
+            {t('settings.editProfile')}
           </button>
         </div>
       </Section>
 
       {/* Appearance */}
-      <Section title="Appearance">
-        <Row label="Dark mode" sub="Switch between light and dark interface"
+      <Section title={t('settings.appearance')}>
+        <Row label={t('settings.darkMode')} sub={t('settings.darkModeHint')}
           right={<Toggle val={darkMode} onChange={onToggleDark} accent={accent} />} />
-        <Row label="Accent color" sub="Choose your primary action color"
+        <Row label={t('settings.accentColor')} sub={t('settings.accentColorHint')}
           right={
             <div style={{ display: 'flex', gap: 8 }}>
               {ACCENT_OPTIONS.map(c => (
@@ -294,31 +315,68 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
             </div>
           }
         />
+        <Row label={t('settings.language')} sub={t('settings.languageHint')}
+          right={
+            <div style={{ display: 'flex', gap: 8 }}>
+              {([
+                { lang: 'en' as Language, flag: '🇬🇧', label: t('languages.en') },
+                { lang: 'ru' as Language, flag: '🇷🇺', label: t('languages.ru') },
+                { lang: 'he' as Language, flag: '🇮🇱', label: t('languages.he') },
+              ]).map(({ lang, flag, label }) => (
+                <button
+                  key={lang}
+                  onClick={() => handleLanguageChange(lang)}
+                  style={{
+                    padding: '6px 14px', borderRadius: 10, cursor: 'pointer',
+                    fontFamily: 'inherit', fontSize: 15, fontWeight: language === lang ? 700 : 400,
+                    border: language === lang ? `2px solid ${accent}` : `1px solid ${th.border}`,
+                    background: language === lang ? accent + '15' : 'none',
+                    color: language === lang ? accent : th.textSecondary,
+                    transition: 'all 0.12s', display: 'flex', alignItems: 'center', gap: 5,
+                  }}
+                >
+                  <span>{flag}</span>
+                  <span>{label}</span>
+                </button>
+              ))}
+            </div>
+          }
+        />
       </Section>
 
       {/* Notifications */}
-      <Section title="Notifications">
-        <PushRow accent={accent} theme={th} />
-        {notifs.map((n, i) => (
-          <Row key={n.id} label={n.label}
-            right={<Toggle val={n.enabled} onChange={v => setNotifs(ns => ns.map((x, j) => j === i ? { ...x, enabled: v } : x))} accent={accent} />}
-          />
-        ))}
+      <Section title={t('settings.notifications')}>
+        <PushRow accent={accent} theme={th} t={t} />
+        {notifs.map((n, i) => {
+          const labelKey: Record<string, string> = {
+            task_assigned: 'settings.notifTaskAssigned',
+            comment:       'settings.notifNewComment',
+            deadline:      'settings.notifDeadline',
+            status_change: 'settings.notifStatusChange',
+            mention:       'settings.notifMention',
+            weekly:        'settings.notifWeeklyDigest',
+          };
+          return (
+            <Row key={n.id} label={t(labelKey[n.id] ?? n.id)}
+              right={<Toggle val={n.enabled} onChange={v => setNotifs(ns => ns.map((x, j) => j === i ? { ...x, enabled: v } : x))} accent={accent} />}
+            />
+          );
+        })}
       </Section>
 
       {/* Workspace */}
-      <Section title="Workspace">
-        <Row label="Export all data" sub="Download your tasks and automations as JSON"
+      <Section title={t('settings.workspace')}>
+        <Row label={t('settings.exportData')} sub={t('settings.exportHint')}
           right={
             <button style={{ padding: '9px 20px', borderRadius: 12, border: `1px solid ${th.border}`, background: 'none', fontSize: 18, fontWeight: 500, color: th.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
-              Export
+              {t('common.export')}
             </button>
           }
         />
-        <Row label="Delete workspace" sub="Permanently delete this workspace and all its data"
+        <Row label={t('settings.deleteWorkspace')} sub={t('settings.deleteWorkspaceHint')}
           right={
             <button style={{ padding: '9px 20px', borderRadius: 12, border: '1px solid #FECACA', background: '#FEF2F2', fontSize: 18, fontWeight: 500, color: '#991B1B', cursor: 'pointer', fontFamily: 'inherit' }}>
-              Delete
+              {t('common.delete')}
             </button>
           }
         />
@@ -333,24 +391,24 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
             width: 600, background: th.surface, borderRadius: 24,
             boxShadow: '0 20px 60px rgba(0,0,0,0.2)', zIndex: 201, padding: '42px 42px 36px',
           }}>
-            <h3 style={{ fontSize: 24, fontWeight: 700, color: th.text, marginBottom: 30, margin: 0 }}>Edit Profile</h3>
+            <h3 style={{ fontSize: 24, fontWeight: 700, color: th.text, marginBottom: 30, margin: 0 }}>{t('settings.editProfile')}</h3>
             <div style={{ marginTop: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
               <div>
-                <label style={{ fontSize: 18, fontWeight: 600, color: th.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 8 }}>Full name</label>
-                <input value={editName} onChange={e => setEditName(e.target.value)} style={inputStyle} placeholder="Your name" />
+                <label style={{ fontSize: 18, fontWeight: 600, color: th.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 8 }}>{t('settings.fullName')}</label>
+                <input value={editName} onChange={e => setEditName(e.target.value)} style={inputStyle} placeholder={t('settings.yourName')} />
               </div>
               <div>
-                <label style={{ fontSize: 18, fontWeight: 600, color: th.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 8 }}>Email</label>
-                <input value={editEmail} onChange={e => setEditEmail(e.target.value)} style={inputStyle} placeholder="your@email.com" />
+                <label style={{ fontSize: 18, fontWeight: 600, color: th.textMuted, textTransform: 'uppercase', letterSpacing: '0.05em', display: 'block', marginBottom: 8 }}>{t('settings.email')}</label>
+                <input value={editEmail} onChange={e => setEditEmail(e.target.value)} style={inputStyle} placeholder={t('settings.emailPlaceholder')} />
               </div>
               {editError && <p style={{ fontSize: 18, color: '#DC2626', margin: 0 }}>{editError}</p>}
             </div>
             <div style={{ display: 'flex', gap: 15, justifyContent: 'flex-end', marginTop: 32 }}>
               <button onClick={() => setEditOpen(false)} style={{ padding: '12px 26px', borderRadius: 12, border: `1px solid ${th.border}`, background: 'none', fontSize: 20, fontWeight: 500, color: th.textSecondary, cursor: 'pointer', fontFamily: 'inherit' }}>
-                Cancel
+                {t('common.cancel')}
               </button>
               <button onClick={saveProfile} disabled={editSaving} style={{ padding: '12px 26px', borderRadius: 12, border: 'none', background: accent, color: 'white', fontSize: 20, fontWeight: 600, cursor: 'pointer', fontFamily: 'inherit' }}>
-                {editSaving ? 'Saving…' : 'Save'}
+                {editSaving ? t('common.saving') : t('common.save')}
               </button>
             </div>
           </div>

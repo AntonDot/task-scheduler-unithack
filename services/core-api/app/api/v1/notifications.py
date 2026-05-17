@@ -45,6 +45,7 @@ class NotificationItem(BaseModel):
     task_title: str
     created_at: datetime
     actor_name: str
+    action_key: str = "task_assigned"
 
 
 @router.get("/notifications", response_model=list[NotificationItem])
@@ -134,6 +135,7 @@ async def get_notifications(
                 task_title=task_title,
                 created_at=log.created_at,
                 actor_name=actor,
+                action_key=log.action,
             )
         )
 
@@ -163,6 +165,7 @@ async def get_notifications(
                 task_title=f"Task #{c.task_id}",
                 created_at=c.created_at,
                 actor_name=actor,
+                action_key="mentioned",
             )
         )
 
@@ -193,6 +196,7 @@ async def get_notifications(
                 task_title=t.title,
                 created_at=t.updated_at,
                 actor_name=actor,
+                action_key="mentioned_description",
             )
         )
 
@@ -222,6 +226,7 @@ async def get_notifications(
                 task_title="—",
                 created_at=log.created_at,
                 actor_name=actor,
+                action_key="automation_triggered",
             )
         )
 

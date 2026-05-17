@@ -1,6 +1,7 @@
 import type { Theme } from '@/theme/theme';
 import { IcoBoard, IcoBolt, IcoChart, IcoUsers, IcoCog, IcoSync, IcoSidebarL, IcoLogout } from '@/components/ui/Icons';
 import type { Project } from '@/types/domain';
+import { useT } from '@/i18n';
 
 export type AppView = 'kanban' | 'automations' | 'analytics' | 'team' | 'settings';
 
@@ -18,17 +19,18 @@ interface SidebarProps {
   onLogout: () => void;
 }
 
-const NAV: { id: AppView; label: string; Icon: React.FC<{ size?: number }> }[] = [
-  { id: 'kanban',      label: 'Board',       Icon: IcoBoard },
-  { id: 'automations', label: 'Automations', Icon: IcoBolt  },
-  { id: 'analytics',   label: 'Analytics',   Icon: IcoChart },
-  { id: 'team',        label: 'Team',        Icon: IcoUsers },
-  { id: 'settings',    label: 'Settings',    Icon: IcoCog   },
-];
-
 export function Sidebar({ view, setView, projects, activeProjectId, setActiveProjectId, collapsed, onToggleCollapse, syncing, accent, theme, onLogout }: SidebarProps) {
   const th = theme;
+  const t  = useT();
   const w  = collapsed ? 56 : 228;
+
+  const NAV: { id: AppView; label: string; Icon: React.FC<{ size?: number }> }[] = [
+    { id: 'kanban',      label: t('nav.board'),       Icon: IcoBoard },
+    { id: 'automations', label: t('nav.automations'), Icon: IcoBolt  },
+    { id: 'analytics',   label: t('nav.analytics'),   Icon: IcoChart },
+    { id: 'team',        label: t('nav.team'),        Icon: IcoUsers },
+    { id: 'settings',    label: t('nav.settings'),    Icon: IcoCog   },
+  ];
 
   return (
     <div style={{
@@ -55,7 +57,7 @@ export function Sidebar({ view, setView, projects, activeProjectId, setActivePro
           </div>
           <button
             onClick={onToggleCollapse}
-            title="Expand sidebar"
+            title={t('sidebar.expandSidebar')}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
               color: th.textMuted, padding: '4px', borderRadius: 6,
@@ -89,7 +91,7 @@ export function Sidebar({ view, setView, projects, activeProjectId, setActivePro
           </div>
           <button
             onClick={onToggleCollapse}
-            title="Collapse sidebar"
+            title={t('sidebar.collapseSidebar')}
             style={{
               background: 'none', border: 'none', cursor: 'pointer',
               color: th.textMuted, padding: '4px', borderRadius: 6,
@@ -138,7 +140,7 @@ export function Sidebar({ view, setView, projects, activeProjectId, setActivePro
               letterSpacing: '0.07em', textTransform: 'uppercase',
               padding: '0 10px', marginBottom: 5,
             }}>
-              Projects
+              {t('sidebar.projects')}
             </p>
             {projects.map(p => {
               const active = activeProjectId === p.id;
@@ -186,7 +188,7 @@ export function Sidebar({ view, setView, projects, activeProjectId, setActivePro
           onMouseLeave={e => { e.currentTarget.style.background = 'none'; e.currentTarget.style.color = th.textSecondary; }}
         >
           <IcoLogout size={17} />
-          {!collapsed && 'Sign out'}
+          {!collapsed && t('sidebar.signOut')}
         </button>
 
         {/* Sync status */}
@@ -199,7 +201,7 @@ export function Sidebar({ view, setView, projects, activeProjectId, setActivePro
           {!collapsed && (
             <>
               <span style={{ fontSize: 11.5, color: th.textMuted, whiteSpace: 'nowrap' }}>
-                {syncing ? 'Syncing…' : 'Live · synced'}
+                {syncing ? t('sidebar.syncing') : t('sidebar.synced')}
               </span>
               <div style={{
                 width: 6, height: 6, borderRadius: '50%', marginLeft: 'auto', flexShrink: 0,

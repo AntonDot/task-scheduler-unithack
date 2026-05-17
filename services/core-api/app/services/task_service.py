@@ -154,7 +154,7 @@ async def create_task(db: AsyncSession, project_id: int, creator_id: int, data: 
 
     # Notify new assignee
     if data.assignee_id and data.assignee_id != creator_id:
-        await send_push_to_user(db, data.assignee_id, "Новая задача назначена", task.title)
+        await send_push_to_user(db, data.assignee_id, "Новая задача назначена", task.title, notif_type="task_assigned")
     return task
 
 
@@ -227,13 +227,17 @@ async def update_task(db: AsyncSession, task_id: int, data: TaskUpdate, user_pro
         )
         # Push notification to newly assigned user (if different from actor)
         if assignee_changed and task.assignee_id and task.assignee_id != user_project.user_id:
-            await send_push_to_user(db, task.assignee_id, "Задача назначена вам", task.title)
+            await send_push_to_user(
+                db, task.assignee_id, "Задача назначена вам", task.title, notif_type="task_assigned"
+            )
         if co_assignee_changed:
             new_co_ids = set(co_assignee_ids or [])
             old_co_ids = {u.id for u in task.co_assignees if u.id not in new_co_ids}
             for uid in new_co_ids - old_co_ids:
                 if uid != user_project.user_id:
-                    await send_push_to_user(db, uid, "Вы добавлены как соисполнитель", task.title)
+                    await send_push_to_user(
+                        db, uid, "Вы добавлены как соисполнитель", task.title, notif_type="task_assigned"
+                    )
 
     # Only log 'updated' if there are other fields changed besides assignee_id
     other_fields = {k: v for k, v in new_values.items() if k != "assignee_id"}
@@ -308,6 +312,24 @@ async def change_column(db: AsyncSession, task_id: int, new_column_id: int, user
         old_value=json.dumps({"column_id": old_column_id}),
         new_value=json.dumps({"column_id": new_column_id}),
     )
+
+    # Push notification for status change
+    recipients: set[int] = set()
+    if task.assignee_id and task.assignee_id != user_project.user_id:
+        recipients.add(task.assignee_id)
+    for co in task.co_assignees:
+        if co.id != user_project.user_id:
+            recipients.add(co.id)
+
+    for uid in recipients:
+        await send_push_to_user(
+            db,
+            uid,
+            "Статус задачи изменён",
+            f"Задача «{task.title}» перемещена в новую колонку",
+            f"/tasks/{task.id}",
+            notif_type="status_change",
+        )
 
     # Publish to RabbitMQ for automations
     await rabbitmq_manager.publish_event(

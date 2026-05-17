@@ -80,13 +80,17 @@ async def add_comment(
 
     # --- Push notifications ---
     notif_body = f"{current_user.full_name}: {body.text[:80]}{'…' if len(body.text) > 80 else ''}"
-    recipients: set[int] = set()
+
+    # 1. Notify assignees (comment type)
+    assignee_ids: set[int] = set()
     if task.assignee_id and task.assignee_id != current_user.id:
-        recipients.add(task.assignee_id)
+        assignee_ids.add(task.assignee_id)
     for co in task.co_assignees:
         if co.id != current_user.id:
-            recipients.add(co.id)
-    # Also notify mentioned users (@name in text)
+            assignee_ids.add(co.id)
+
+    # 2. Notify mentioned users (mention type)
+    mention_ids: set[int] = set()
     if "@" in body.text:
         words = body.text.split()
         mention_names = {w.lstrip("@") for w in words if w.startswith("@")}
@@ -94,8 +98,13 @@ async def add_comment(
             name_result = await db.execute(select(User).where(User.full_name.in_(list(mention_names))))
             for u in name_result.scalars().all():
                 if u.id != current_user.id:
-                    recipients.add(u.id)
-    for uid in recipients:
-        await send_push_to_user(db, uid, "Новый комментарий", notif_body, f"/tasks/{task_id}")
+                    mention_ids.add(u.id)
+
+    # 3. Send notifications
+    # If a user is both assignee and mentioned, mention takes precedence (usually more specific)
+    all_uids = assignee_ids | mention_ids
+    for uid in all_uids:
+        n_type = "mention" if uid in mention_ids else "comment"
+        await send_push_to_user(db, uid, "Новый комментарий", notif_body, f"/tasks/{task_id}", notif_type=n_type)
 
     return data

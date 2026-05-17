@@ -144,6 +144,8 @@
       "task_assigned": "Task assigned",
       "task_created": "Task created",
       "status_changed": "Status changed",
+      "column_changed": "Column changed",
+      "deadline_approaching": "Deadline approaching",
       "comment_added": "New comment",
       "attachment_added": "File attached",
       "task_approved": "Task approved",

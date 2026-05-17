@@ -32,6 +32,7 @@ export interface User {
   is_dark?: boolean;
   avatar_data?: string | null;
   language?: string;
+  notification_settings?: Record<string, boolean> | null;
 }
 
 export interface Project {

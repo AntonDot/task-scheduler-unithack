@@ -12,6 +12,7 @@ class UserRead(BaseModel):
     accent_color: str | None = None
     is_dark: bool = False
     language: str = "en"
+    notification_settings: dict | None = None
     last_notifications_read_at: datetime | None = None
     avatar_data: str | None = None
 

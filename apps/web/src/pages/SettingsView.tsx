@@ -126,8 +126,24 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
   const t = useT();
   const { language, setLanguage } = useLangStore();
 
-  const [notifs, setNotifs] = useState<NotifSetting[]>(loadNotifs);
+  const [notifs, setNotifs] = useState<NotifSetting[]>(() => {
+    const defaults = NOTIF_DEFAULT;
+    const server = user?.notification_settings;
+    if (server) {
+      return defaults.map(n => ({ ...n, enabled: server[n.id] ?? n.enabled }));
+    }
+    return loadNotifs();
+  });
+
+  useEffect(() => {
+    if (user?.notification_settings) {
+      const server = user.notification_settings;
+      setNotifs(prev => prev.map(n => ({ ...n, enabled: server[n.id] ?? n.enabled })));
+    }
+  }, [user?.notification_settings]);
+
   const [editOpen, setEditOpen] = useState(false);
+  // ... rest of state
   const [editName, setEditName] = useState('');
   const [editEmail, setEditEmail] = useState('');
   const [editError, setEditError] = useState('');
@@ -336,7 +352,17 @@ export function SettingsView({ accent, theme, darkMode, onToggleDark, accentColo
           };
           return (
             <Row key={n.id} label={t(labelKey[n.id] ?? n.id)}
-              right={<Toggle val={n.enabled} onChange={v => setNotifs(ns => ns.map((x, j) => j === i ? { ...x, enabled: v } : x))} accent={accent} />}
+              right={<Toggle val={n.enabled} onChange={async v => {
+                const next = notifs.map((x, j) => j === i ? { ...x, enabled: v } : x);
+                setNotifs(next);
+                if (!user || !token) return;
+                const map: Record<string, boolean> = {};
+                next.forEach(x => { map[x.id] = x.enabled; });
+                try {
+                  const updated = await updateProfile({ notification_settings: map });
+                  setAuth(updated, token);
+                } catch {}
+              }} accent={accent} />}
             />
           );
         })}

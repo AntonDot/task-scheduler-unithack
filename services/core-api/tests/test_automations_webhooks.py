@@ -82,6 +82,6 @@ async def test_catalog_has_external_templates(client, seed_data, get_token):
     resp = await client.get("/api/v1/automations/catalog", headers={"Authorization": f"Bearer {token}"})
     assert resp.status_code == 200
     categories = [c["category"] for c in resp.json()]
-    assert "External: Reviews" in categories
-    assert "External: GitHub" in categories
-    assert "External: Generic" in categories
+    assert "automations.catalog.categories.reviews" in categories
+    assert "automations.catalog.categories.github" in categories
+    assert "automations.catalog.categories.generic" in categories

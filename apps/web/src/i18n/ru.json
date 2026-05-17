@@ -219,7 +219,9 @@
       "nameRequired": "Введите название автоматизации",
       "githubHint": "В репозитории: Settings → Webhooks → Add → Payload URL: <url> → Content-type: application/json → опционально укажите Secret",
       "reviewHint": "Запустите через POST /api/v1/automations/run-review-scraper",
-      "genericHint": "POST любой JSON; event_type — имя события, payload — данные"
+      "genericHint": "POST любой JSON; event_type — имя события, payload — данные",
+      "tipPayload": "Подсказка: используйте {{vars}} для значений из payload события.",
+      "removeAction": "Удалить это действие"
     },
     "triggers": {
       "task_created": "Задача создана",
@@ -254,7 +256,12 @@
     "customWebhooks": "Внешние вебхуки",
     "customWebhooksHint": "Внешние системы (GitHub, скрейперы, интеграции) отправляют POST-запросы на эти URL для запуска автоматизаций.",
     "logs": "Логи",
-    "rotate": "Сменить"
+    "rotate": "Сменить",
+    "deleted": "Удалено",
+    "summary": {
+      "when": "Когда:",
+      "then": "Тогда:"
+    }
   },
   "team": {
     "title": "Команда",

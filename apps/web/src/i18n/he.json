@@ -219,7 +219,8 @@
       "nameRequired": "נא להזין שם אוטומציה",
       "githubHint": "בריפוזיטורי: Settings → Webhooks → Add → Payload URL: <url> → Content-type: application/json",
       "reviewHint": "הפעל דרך POST /api/v1/automations/run-review-scraper",
-      "genericHint": "שלח JSON כלשהו; event_type — שם האירוע, payload — הנתונים"
+      "genericHint": "שלח JSON כלשהו; event_type — שם האירוע, payload — הנתונים",
+      "enrichHint": "ה-AI יכתוב מחדש את כותרת המשימה ותיאורה באמצעות ה-ML worker."
     },
     "triggers": {
       "task_created": "משימה נוצרה",
@@ -242,7 +243,9 @@
       "change_column": "העבר לעמודה",
       "assign_user": "הקצה משתמש",
       "send_notification": "שלח התראה",
-      "create_task": "צור משימה"
+      "create_task": "צור משימה",
+      "add_tag": "הוסף תג",
+      "enrich_task": "העשרה עם AI"
     },
     "ops": {
       "gte": "≥",

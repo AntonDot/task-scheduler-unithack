@@ -31,7 +31,14 @@
     "success": "Success",
     "error": "Error",
     "lightMode": "Light mode",
-    "darkMode": "Dark mode"
+    "darkMode": "Dark mode",
+    "justNow": "just now",
+    "minutesAgo": "{{m}}m ago",
+    "hoursAgo": "{{h}}h ago",
+    "daysAgo": "{{d}}d ago",
+    "tapToChangePhoto": "Tap to change photo",
+    "inviteTeammates": "Invite teammates",
+    "addNewMembers": "Add new members"
   },
   "urgency": {
     "LOW": "Low",

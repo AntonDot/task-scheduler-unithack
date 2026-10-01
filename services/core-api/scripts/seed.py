@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 from app.config import settings
 from app.domain import ProjectRole, Urgency
-from app.models import Base, BoardColumn, Project, Task, User, UserProject
+from app.models import BoardColumn, Project, Task, User, UserProject
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
@@ -97,9 +97,8 @@ def _tasks(project_id: int, creator_id: int, assignee_id: int, cols: list[BoardC
 
 
 async def seed():
+    # The schema is created by Alembic migrations (run before this script in `migrate`)
     engine = create_async_engine(settings.database_url)
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
 
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
     async with session_factory() as session:

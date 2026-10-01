@@ -2,17 +2,18 @@ import csv
 import io
 from datetime import UTC, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from fastapi import status as http_status
 from fastapi.responses import StreamingResponse
 from sqlalchemy import case, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user, require_project_access, verify_service_token
 from app.domain import ProjectRole
-from app.models import BoardColumn, Project, Tag, Task, User, UserProject
+from app.models import BoardColumn, ExternalEvent, Project, Tag, Task, User, UserProject
 from app.schemas import ProjectMemberRead, ProjectWithRole, TagCreate, TagRead, TaskCreate, TaskRead, UserRead
 from app.schemas.analytics import AssigneeLoad, ProjectAnalytics
 from app.services import task_service
@@ -77,7 +78,12 @@ async def create_task_by_project_slug(
     project_slug: str,
     body: TaskCreate,
     db: AsyncSession = Depends(get_db),
+    idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
 ):
+    # Dedupe of external events lives in the database, not in the memory of the caller
+    if idempotency_key and await db.get(ExternalEvent, idempotency_key) is not None:
+        raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="Event already processed")
+
     project_result = await db.execute(select(Project).where(Project.slug == project_slug))
     project = project_result.scalar_one_or_none()
     if project is None:
@@ -95,11 +101,33 @@ async def create_task_by_project_slug(
     if owner_link is None:
         raise HTTPException(status_code=http_status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Project has no members")
 
+    event = None
+    if idempotency_key:
+        # Claim the key before creating the task: a concurrent request with the same key
+        # blocks on the primary key here and gets 409 before any side effect (events, push).
+        event = ExternalEvent(event_id=idempotency_key)
+        db.add(event)
+        try:
+            await db.flush()
+        except IntegrityError as exc:
+            await db.rollback()
+            raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="Event already processed") from exc
+
     task = await task_service.create_task(db, project.id, owner_link.user_id, body)
+    if event is not None:
+        event.task_id = task.id
     data = TaskRead.model_validate(task).model_dump(mode="json")
     await db.commit()
     await ws_manager.broadcast(project.id, "task_created", data)
     return data
+
+
+@router.get("/internal/external-events/{event_id}", dependencies=[Depends(verify_service_token)])
+async def get_external_event(event_id: str, db: AsyncSession = Depends(get_db)):
+    event = await db.get(ExternalEvent, event_id)
+    if event is None:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Event not processed yet")
+    return {"event_id": event.event_id, "task_id": event.task_id}
 
 
 @router.get("/projects/{project_id}/analytics", response_model=ProjectAnalytics)

@@ -5,20 +5,15 @@ from app.schemas.webhook import DraftTextPayload, IncidentPayload, ParsedTask
 
 logger = logging.getLogger(__name__)
 
-_processed_events: set[str] = set()
-
-
-def is_duplicate(event_id: str) -> bool:
-    return event_id in _processed_events
-
-
-def mark_processed(event_id: str) -> None:
-    _processed_events.add(event_id)
-
 
 async def handle_incident(payload: IncidentPayload) -> dict:
-    if is_duplicate(payload.event_id):
-        return {"status": "duplicate", "message": f"Event {payload.event_id} already processed"}
+    # Cheap check before calling the LLM; the Idempotency-Key below closes the race between replicas
+    try:
+        if await core_api.event_processed(payload.event_id):
+            return _duplicate(payload.event_id)
+    except Exception:
+        logger.exception("Failed to check event %s in Core API", payload.event_id)
+        return {"status": "error", "message": "Core API is unavailable"}
 
     is_critical = payload.external_rating is not None and payload.external_rating <= 2
 
@@ -42,12 +37,17 @@ async def handle_incident(payload: IncidentPayload) -> dict:
         }
 
     try:
-        result = await core_api.create_task(payload.project_slug, task_data)
-        mark_processed(payload.event_id)
+        result = await core_api.create_task(payload.project_slug, task_data, idempotency_key=payload.event_id)
         return {"status": "created", "task_id": result.get("id"), "message": f"Task created as {task_data['status']}"}
+    except core_api.DuplicateEventError:
+        return _duplicate(payload.event_id)
     except Exception:
         logger.exception("Failed to create task in Core API")
         return {"status": "error", "message": "Failed to create task in Core API"}
+
+
+def _duplicate(event_id: str) -> dict:
+    return {"status": "duplicate", "message": f"Event {event_id} already processed"}
 
 
 async def handle_draft_text(payload: DraftTextPayload) -> dict:

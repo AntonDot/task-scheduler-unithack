@@ -1,0 +1,59 @@
+name: Release images
+
+# Build stage of 12-factor V: every commit to main and every v* tag becomes a set of
+# immutable images in GHCR, tagged with the commit sha (and the tag). A release on a
+# server is "these images + that server's .env"; rollback = run the previous tag.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  images:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        image:
+          - { name: core-api, context: services/core-api }
+          - { name: web, context: apps/web }
+          - { name: ml-worker, context: services/ml-worker }
+          - { name: automation-worker, context: services/automation-worker }
+          - { name: mock-review-board, context: services/mock-review-board }
+          - { name: review-scraper, context: jobs/review-scraper }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Image name and tags
+        id: meta
+        run: |
+          registry="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/task-scheduler"
+          version="${GITHUB_SHA::7}"
+          tags="${registry}/${{ matrix.image.name }}:${version}"
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            tags="${tags},${registry}/${{ matrix.image.name }}:${GITHUB_REF_NAME}"
+          fi
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tags=${tags}" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.image.context }}
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          build-args: APP_VERSION=${{ steps.meta.outputs.version }}
+          cache-from: type=gha,scope=${{ matrix.image.name }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image.name }}

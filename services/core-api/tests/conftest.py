@@ -1,3 +1,15 @@
+import os
+
+# Required settings are read from the environment at import time (12-factor III);
+# tests provide their own values before the app is imported.
+os.environ.setdefault("CORE_DATABASE_URL", "sqlite+aiosqlite:///:memory:")
+os.environ.setdefault("CORE_JWT_SECRET", "test-secret")
+os.environ.setdefault("CORE_SERVICE_TOKEN", "test-service-token")
+os.environ.setdefault("CORE_ML_WEBHOOK_API_KEY", "dev-webhook-key")
+os.environ.setdefault("CORE_S3_ACCESS_KEY", "test")
+os.environ.setdefault("CORE_S3_SECRET_KEY", "test")
+os.environ.setdefault("CORE_DEV_LOGIN", "true")
+
 import pytest
 from httpx import ASGITransport, AsyncClient
 from jose import jwt

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-API="http://localhost:8000"
-ML="http://localhost:8001"
-REVIEW="http://localhost:8002"
+API="${E2E_CORE_API_URL:-http://localhost:8000}"
+ML="${E2E_ML_WORKER_URL:-http://localhost:8001}"
+REVIEW="${E2E_REVIEW_BOARD_URL:-http://localhost:8002}"
 
 echo "=== Smoke Test Suite ==="
 

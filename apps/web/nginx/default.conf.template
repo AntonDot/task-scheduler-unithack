@@ -1,5 +1,12 @@
+# Rendered by the nginx image at container start (envsubst): PORT, CORE_API_URL and
+# NGINX_RESOLVER come from the environment, nginx's own variables stay as is.
 server {
-    listen 80;
+    listen ${PORT};
+
+    # Resolve the backend name per request (TTL 10s), not once at start: a recreated or
+    # scaled core-api gets new addresses and nginx must follow them.
+    resolver ${NGINX_RESOLVER} valid=10s ipv6=off;
+    set $core_api ${CORE_API_URL};
     root /usr/share/nginx/html;
     index index.html;
 
@@ -18,14 +25,15 @@ server {
     }
 
     location /api/ {
-        proxy_pass http://core-api:8000;
+        proxy_pass $core_api;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
     }
 
     location /ws {
-        proxy_pass http://core-api:8000;
+        proxy_pass $core_api;
         proxy_http_version 1.1;
+        proxy_read_timeout 1h;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
     }

@@ -21,10 +21,13 @@ jobs/
 ```
 
 **Инфраструктура:**
-- **PostgreSQL 16**: Основное хранилище данных.
-- **RabbitMQ 3**: Очередь событий для асинхронных автоматизаций.
+- **PostgreSQL 16**: Основное хранилище данных; через `LISTEN/NOTIFY` раздаёт события WebSocket всем репликам core-api.
+- **S3 (RustFS)**: Хранилище вложений задач; в облаке заменяется любым S3 через `CORE_S3_*`.
+- **RabbitMQ 3**: Очередь событий для асинхронных автоматизаций (профиль `full`).
 - **WebSocket**: Реал-тайм обновления доски и «колокольчика» уведомлений.
 - **Docker Compose**: Контейнеризация и оркестрация всех сервисов.
+
+Приложение сделано по методологии «12 факторов» — разбор по каждому пункту в [Отчёт.md](Отчёт.md).
 
 ---
 
@@ -56,18 +59,36 @@ jobs/
 ### 1. Подготовка окружения
 ```bash
 # Клонируйте репозиторий и перейдите в него
-cp .env.example .env
+cp .env.example .env   # весь конфиг деплоя; секреты для сервера поменяйте
 ```
 
 ### 2. Запуск в Docker (рекомендуется)
 ```bash
+# Таск-менеджер: postgres, s3, migrate (разово), core-api, web
 docker compose up -d --build
+
+# Плюс автоматизации и AI: rabbitmq, automation-worker, ml-worker, отзовик, скрейпер
+docker compose --profile full up -d --build
 ```
+Сначала отрабатывает разовый процесс `migrate` (миграции Alembic, бакет S3, демо-данные при `CORE_SEED_DEMO=true`), после него стартует core-api.
+
 - **Frontend**: [http://localhost:3000](http://localhost:3000)
 - **Swagger UI (Core API)**: [http://localhost:8000/docs](http://localhost:8000/docs)
-- **RabbitMQ Management**: [http://localhost:15672](http://localhost:15672) (guest/guest)
+- **Консоль S3 (RustFS)**: [http://localhost:9001](http://localhost:9001)
+- **RabbitMQ Management** (профиль `full`): [http://localhost:15672](http://localhost:15672)
 
-### 3. Демо-пользователи
+Порты на хосте переопределяются переменными `WEB_PORT`, `CORE_API_PORT`, `POSTGRES_PORT`, `S3_PORT`, `ML_WORKER_PORT`, `REVIEW_BOARD_PORT`.
+
+### 3. Релиз и деплой
+```bash
+# Сборка: образы с тегом коммита (в CI — .github/workflows/release.yml, пуш в GHCR)
+APP_VERSION=$(git rev-parse --short=7 HEAD) docker compose build
+# Запуск релиза: образы + .env сервера, без сборки на сервере; откат — прошлый тег
+DEPLOY_HOST=user@server APP_VERSION=<tag> ./scripts/deploy.sh
+```
+Пакеты GHCR по умолчанию приватные: на сервере один раз выполните `docker login ghcr.io` (токен с `read:packages`). Порты PostgreSQL, S3 и RabbitMQ публикуются только на `BIND_ADDR` (по умолчанию `127.0.0.1`).
+
+### 4. Демо-пользователи
 Для входа не требуется пароль (если `CORE_DEV_LOGIN=true`):
 
 | Email | Роль | Доступ к проектам |
@@ -110,29 +131,33 @@ docker compose up -d --build
 ### Локальный запуск (без Docker)
 Требуется Python 3.12 и Node.js 18+.
 
+Бэкинг-сервисы удобно взять из compose: `docker compose up -d postgres s3`.
+
 **Backend:**
 ```bash
 cd services/core-api
-python -m venv .venv
-source .venv/bin/activate  # или .venv\Scripts\activate на Windows
-pip install -e ".[dev]"
-uvicorn app.main:app --reload --port 8000
+uv sync --frozen --extra dev           # зависимости строго по uv.lock
+set -a; source ../../.env; set +a      # конфиг — только из окружения
+export CORE_DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/taskscheduler
+export CORE_S3_ENDPOINT_URL=http://localhost:9000
+uv run sh scripts/migrate.sh           # разовый админ-процесс
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
 **Frontend:**
 ```bash
 cd apps/web
-npm install
-npm run dev
+npm ci --legacy-peer-deps
+npm run dev    # проксирует /api и /ws на CORE_API_URL (по умолчанию http://localhost:8000)
 ```
 
 ### Тестирование
 ```bash
-# Unit & Integration тесты
-cd services/core-api && pytest
+# Unit & Integration тесты (в каждом сервисе)
+cd services/core-api && uv sync --frozen --extra dev && uv run pytest
 
-# E2E тесты (требуют запущенный Docker Compose)
-pytest tests/e2e -v
+# E2E тесты (требуют docker compose --profile full up)
+pytest tests/e2e -v -m e2e
 ```
 
 ---

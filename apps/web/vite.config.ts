@@ -2,6 +2,9 @@ import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { resolve } from "path";
 
+// Dev server proxies to the same backend address variable nginx uses in the image
+const coreApiUrl = process.env.CORE_API_URL ?? "http://localhost:8000";
+
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -13,11 +16,11 @@ export default defineConfig({
     port: 5173,
     proxy: {
       "/api": {
-        target: "http://localhost:8000",
+        target: coreApiUrl,
         changeOrigin: true,
       },
       "/ws": {
-        target: "ws://localhost:8000",
+        target: coreApiUrl.replace(/^http/, "ws"),
         ws: true,
       },
     },

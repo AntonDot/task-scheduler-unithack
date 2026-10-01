@@ -1,64 +1,148 @@
+# One compose file for dev, CI and the server (12-factor X).
+#
+# Release = image tag + .env. Build:   APP_VERSION=$(git rev-parse --short=7 HEAD) docker compose build
+#                            Run:     APP_VERSION=<tag> docker compose up -d --no-build
+#
+# Default stack — the task manager itself: postgres, s3, migrate (one-off), core-api, web.
+# `--profile full` adds automations and AI: rabbitmq, automation-worker, ml-worker,
+# mock-review-board, review-scraper.
+#
+# All config lives in .env (copy .env.example); this file only wires processes together.
+# Backing services publish their ports on BIND_ADDR (127.0.0.1 by default), so a server
+# deployed from this file does not expose PostgreSQL, S3 or RabbitMQ to the internet.
+
+x-app: &app
+  env_file:
+    - path: .env
+      required: true
+  restart: unless-stopped
+
+x-build-args: &build-args
+  APP_VERSION: ${APP_VERSION:-dev}
+
 services:
+  # ── backing services ──────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-taskscheduler}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
-      - "5432:5432"
+      - "${BIND_ADDR:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
       timeout: 3s
-      retries: 5
+      retries: 10
+    restart: unless-stopped
+
+  # S3-compatible object storage for attachments. RustFS is a drop-in MinIO replacement;
+  # core-api talks plain S3 API, so swapping it for AWS S3 / Yandex Object Storage is
+  # a matter of CORE_S3_* variables, not code.
+  s3:
+    image: rustfs/rustfs:1.0.0
+    environment:
+      RUSTFS_ACCESS_KEY: ${S3_ROOT_USER}
+      RUSTFS_SECRET_KEY: ${S3_ROOT_PASSWORD}
+      RUSTFS_CONSOLE_ENABLE: "true"
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${S3_PORT:-9000}:9000"
+      - "${BIND_ADDR:-127.0.0.1}:${S3_CONSOLE_PORT:-9001}:9001"
+    volumes:
+      - s3_data:/data
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:9000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
 
   rabbitmq:
+    profiles: [full]
     image: rabbitmq:3-management-alpine
-    ports:
-      - "5672:5672"
-      - "15672:15672"
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-guest}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS:-guest}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASS}
+    ports:
+      - "${BIND_ADDR:-127.0.0.1}:${RABBITMQ_PORT:-5672}:5672"
+      - "${BIND_ADDR:-127.0.0.1}:${RABBITMQ_CONSOLE_PORT:-15672}:15672"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_running"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
-  core-api:
-    build: ./services/core-api
-    ports:
-      - "8000:8000"
-    env_file: .env
-    environment:
-      CORE_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-taskscheduler}
-      CORE_ML_WORKER_URL: http://ml-worker:8001
-      CORE_ML_WEBHOOK_API_KEY: ${ML_WEBHOOK_API_KEY:-dev-webhook-key}
-      CORE_REVIEW_BOARD_URL: http://mock-review-board:8002
-      CORE_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
+  # ── admin process: migrations, bucket, demo seed — runs once and exits ────
+  migrate:
+    <<: *app
+    image: ${REGISTRY:-task-scheduler}/core-api:${APP_VERSION:-dev}
+    build:
+      context: ./services/core-api
+      args: *build-args
+    command: ["sh", "scripts/migrate.sh"]
+    restart: "no"
     depends_on:
       postgres:
         condition: service_healthy
+      s3:
+        condition: service_healthy
+
+  # ── web processes ─────────────────────────────────────────────────────────
+  core-api:
+    <<: *app
+    image: ${REGISTRY:-task-scheduler}/core-api:${APP_VERSION:-dev}
+    build:
+      context: ./services/core-api
+      args: *build-args
+    environment:
+      PORT: 8000
+    ports:
+      - "${CORE_API_PORT:-8000}:8000"
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
       rabbitmq:
         condition: service_healthy
+        required: false
     healthcheck:
-      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/ready')"]
       interval: 5s
       timeout: 3s
       retries: 10
-      start_period: 15s
+      start_period: 5s
+    stop_grace_period: 30s
+
+  web:
+    # nginx needs only its own two variables, not the app secrets from .env
+    image: ${REGISTRY:-task-scheduler}/web:${APP_VERSION:-dev}
+    build:
+      context: ./apps/web
+      args: *build-args
+    environment:
+      PORT: 80
+      CORE_API_URL: http://core-api:8000
+    ports:
+      - "${WEB_PORT:-3000}:80"
+    depends_on:
+      core-api:
+        condition: service_healthy
+    restart: unless-stopped
 
   ml-worker:
-    build: ./services/ml-worker
-    ports:
-      - "8001:8001"
-    env_file: .env
+    <<: *app
+    profiles: [full]
+    image: ${REGISTRY:-task-scheduler}/ml-worker:${APP_VERSION:-dev}
+    build:
+      context: ./services/ml-worker
+      args: *build-args
     environment:
-      ML_CORE_API_URL: http://core-api:8000
+      PORT: 8001
+    ports:
+      - "${ML_WORKER_PORT:-8001}:8001"
     depends_on:
       core-api:
         condition: service_healthy
@@ -67,50 +151,50 @@ services:
       interval: 5s
       timeout: 3s
       retries: 10
-      start_period: 10s
+      start_period: 5s
 
-  automation-worker:
-    build: ./services/automation-worker
-    env_file: .env
+  mock-review-board:
+    # emulator of an external site: gets no app config
+    profiles: [full]
+    image: ${REGISTRY:-task-scheduler}/mock-review-board:${APP_VERSION:-dev}
+    build:
+      context: ./services/mock-review-board
+      args: *build-args
     environment:
-      AUTOMATION_DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-taskscheduler}
-      AUTOMATION_RABBITMQ_URL: amqp://${RABBITMQ_USER:-guest}:${RABBITMQ_PASS:-guest}@rabbitmq:5672/
+      PORT: 8002
+    ports:
+      - "${REVIEW_BOARD_PORT:-8002}:8002"
+    restart: unless-stopped
+
+  # ── worker processes (no ports; scale with --scale automation-worker=N) ───
+  automation-worker:
+    <<: *app
+    profiles: [full]
+    image: ${REGISTRY:-task-scheduler}/automation-worker:${APP_VERSION:-dev}
+    build:
+      context: ./services/automation-worker
+      args: *build-args
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+    stop_grace_period: 30s
 
-  mock-review-board:
-    build: ./services/mock-review-board
-    ports:
-      - "8002:8002"
-
+  # ── clock process: polls the review board every SCRAPER_INTERVAL_SECONDS ──
   review-scraper:
+    <<: *app
+    profiles: [full]
+    image: ${REGISTRY:-task-scheduler}/review-scraper:${APP_VERSION:-dev}
     build:
       context: ./jobs/review-scraper
-    env_file: .env
-    environment:
-      SCRAPER_REVIEW_BOARD_URL: http://mock-review-board:8002
-      SCRAPER_ML_WORKER_URL: http://ml-worker:8001
-      SCRAPER_STATE_FILE: /app/state/processed_ids.json
-    command: ["python", "scraper.py", "--interval", "60"]
-    volumes:
-      - scraper_state:/app/state
+      args: *build-args
     depends_on:
       mock-review-board:
         condition: service_started
       ml-worker:
         condition: service_healthy
-    restart: unless-stopped
-
-  web:
-    build: ./apps/web
-    ports:
-      - "3000:80"
-    depends_on:
-      - core-api
 
 volumes:
   pgdata:
-  scraper_state:
+  s3_data:

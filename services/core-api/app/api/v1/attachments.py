@@ -1,10 +1,10 @@
 import os
 import uuid
-from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 from fastapi import status as http_status
-from fastapi.responses import FileResponse
+from fastapi.responses import Response
 from jose import JWTError, jwt
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,11 +16,11 @@ from app.dependencies import get_current_user
 from app.models import Attachment, Task, User, UserProject
 from app.schemas.attachment import AttachmentRead
 from app.services.audit_service import log_action
+from app.storage import ObjectNotFoundError, ObjectStorage, get_storage
 from app.websocket_manager import ws_manager
 
 router = APIRouter(tags=["attachments"])
 
-UPLOAD_DIR = "/app/uploads"
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10 MB
 
 ALLOWED_TYPE_PREFIXES = (
@@ -50,8 +50,20 @@ ALLOWED_TYPES_EXACT = {
     "application/x-apple-diskimage",  # .dmg
 }
 ALLOWED_EXTENSIONS = {
-    ".md", ".markdown", ".sql", ".json", ".yaml", ".yml",
-    ".log", ".csv", ".dmg", ".zip", ".7z", ".rar", ".gz", ".tar"
+    ".md",
+    ".markdown",
+    ".sql",
+    ".json",
+    ".yaml",
+    ".yml",
+    ".log",
+    ".csv",
+    ".dmg",
+    ".zip",
+    ".7z",
+    ".rar",
+    ".gz",
+    ".tar",
 }
 
 
@@ -95,6 +107,7 @@ async def upload_attachment(
     file: UploadFile,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
 ):
     task, _ = await _get_task_access(task_id, current_user, db)
 
@@ -115,21 +128,16 @@ async def upload_attachment(
             detail="File too large. Maximum size is 10MB.",
         )
 
-    # Store file on disk
-    unique_name = f"{uuid.uuid4()}_{original_filename}"
-    task_dir = Path(UPLOAD_DIR) / str(task_id)
-    task_dir.mkdir(parents=True, exist_ok=True)
-    stored_path = str(task_dir / unique_name)
-
-    with open(stored_path, "wb") as f:
-        f.write(content)
+    # Store the file in object storage, not on the replica's local disk
+    storage_key = f"tasks/{task_id}/{uuid.uuid4()}"
+    await storage.put(storage_key, content, content_type)
 
     # Create DB record
     attachment = Attachment(
         task_id=task_id,
         user_id=current_user.id,
         filename=original_filename,
-        stored_path=stored_path,
+        storage_key=storage_key,
         content_type=content_type,
         size_bytes=len(content),
     )
@@ -194,6 +202,7 @@ async def download_attachment(
     request: Request,
     token: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
 ):
     current_user = await _resolve_user_from_token_or_header(request, token, db)
     result = await db.execute(select(Attachment).where(Attachment.id == attachment_id))
@@ -217,13 +226,15 @@ async def download_attachment(
     if link is None:
         raise HTTPException(status_code=http_status.HTTP_403_FORBIDDEN, detail="No access to project")
 
-    if not os.path.exists(attachment.stored_path):
-        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="File not found on disk")
+    try:
+        content = await storage.get(attachment.storage_key)
+    except ObjectNotFoundError as exc:
+        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="File not found in storage") from exc
 
-    return FileResponse(
-        path=attachment.stored_path,
-        filename=attachment.filename,
+    return Response(
+        content=content,
         media_type=attachment.content_type,
+        headers={"Content-Disposition": f"attachment; filename*=utf-8''{quote(attachment.filename)}"},
     )
 
 
@@ -232,6 +243,7 @@ async def delete_attachment(
     attachment_id: int,
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    storage: ObjectStorage = Depends(get_storage),
 ):
     result = await db.execute(select(Attachment).where(Attachment.id == attachment_id))
     attachment = result.scalar_one_or_none()
@@ -265,11 +277,10 @@ async def delete_attachment(
             detail="You do not have permission to delete this attachment",
         )
 
-    # Remove file from disk
-    if os.path.exists(attachment.stored_path):
-        os.remove(attachment.stored_path)
-
+    storage_key = attachment.storage_key
     await log_action(db, task.id, current_user.id, "attachment_removed", old_value=attachment.filename)
 
     await db.delete(attachment)
     await db.commit()
+    # Drop the object only after the row is gone: a failed commit must not leave a record without a file
+    await storage.delete(storage_key)

@@ -27,6 +27,8 @@ async def improve_text(
     body: ImproveRequest,
     _user: User = Depends(get_current_user),
 ) -> ImproveResponse:
+    if not settings.ml_worker_url:
+        raise HTTPException(status_code=503, detail="AI service is not configured (CORE_ML_WORKER_URL)")
     async with httpx.AsyncClient(timeout=30) as client:
         try:
             resp = await client.post(

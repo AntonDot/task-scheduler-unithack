@@ -2,13 +2,15 @@ import asyncio
 import json
 import logging
 import re
+import signal
+import sys
 import uuid
+from datetime import UTC, datetime
 
 import aio_pika
 import httpx
-from sqlalchemy.ext.asyncio import create_async_engine, async_sessionmaker
-
 from pydantic_settings import BaseSettings
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 def _render(template: str, context: dict) -> str:
@@ -44,20 +46,38 @@ def _get_field(payload: dict, dotted: str):
 
 
 class Settings(BaseSettings):
-    database_url: str = (
-        "postgresql+asyncpg://postgres:postgres@postgres:5432/taskscheduler"
-    )
-    rabbitmq_url: str = "amqp://guest:guest@rabbitmq:5672/"
+    # Addresses of backing services and the service token come only from AUTOMATION_* env vars
+    database_url: str
+    rabbitmq_url: str
     automation_events_queue: str = "automation.events"
-    core_api_url: str = "http://core-api:8000"
-    ml_worker_url: str = "http://ml-worker:8001"
-    service_token: str = "dev-service-token"
+    core_api_url: str
+    ml_worker_url: str = ""
+    service_token: str
+    log_level: str = "INFO"
 
     model_config = {"env_prefix": "AUTOMATION_", "extra": "ignore"}
 
 
+class JsonFormatter(logging.Formatter):
+    """One JSON object per line to stdout — the environment collects the stream."""
+
+    def format(self, record: logging.LogRecord) -> str:
+        entry = {
+            "ts": datetime.fromtimestamp(record.created, UTC).isoformat(timespec="milliseconds"),
+            "level": record.levelname,
+            "service": "automation-worker",
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        if record.exc_info:
+            entry["exc_info"] = self.formatException(record.exc_info)
+        return json.dumps(entry, ensure_ascii=False)
+
+
 settings = Settings()
-logging.basicConfig(level=logging.INFO)
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(JsonFormatter())
+logging.basicConfig(level=settings.log_level.upper(), handlers=[_handler])
 logger = logging.getLogger(__name__)
 
 engine = create_async_engine(settings.database_url)
@@ -85,9 +105,7 @@ async def evaluate_condition(condition: dict, context: dict) -> bool:
                 from sqlalchemy import text
 
                 # Note: field name is from config, usually title/urgency/etc.
-                res = await db.execute(
-                    text(f"SELECT {field} FROM tasks WHERE id = :tid"), {"tid": task_id}
-                )
+                res = await db.execute(text(f"SELECT {field} FROM tasks WHERE id = :tid"), {"tid": task_id})
                 actual = res.scalar()
 
         res_bool = str(actual) == str(expected)
@@ -369,9 +387,7 @@ async def execute_action(action: dict, context: dict):
 
                     project_id_for_tag = payload.get("project_id")
                     tag_check = await db.execute(
-                        text(
-                            "SELECT id FROM tags WHERE id = :tag_id AND project_id = :pid"
-                        ),
+                        text("SELECT id FROM tags WHERE id = :tag_id AND project_id = :pid"),
                         {"tag_id": tag_id, "pid": project_id_for_tag},
                     )
                     if tag_check.scalar() is None:
@@ -383,8 +399,7 @@ async def execute_action(action: dict, context: dict):
                     else:
                         await db.execute(
                             text(
-                                "INSERT INTO task_tags (task_id, tag_id) VALUES (:tid, :tag_id)"
-                                " ON CONFLICT DO NOTHING"
+                                "INSERT INTO task_tags (task_id, tag_id) VALUES (:tid, :tag_id) ON CONFLICT DO NOTHING"
                             ),
                             {"tid": task_id, "tag_id": tag_id},
                         )
@@ -442,10 +457,7 @@ async def execute_action(action: dict, context: dict):
                             update_params["urgency"] = str(new_urgency)
 
                         await db.execute(
-                            text(
-                                f"UPDATE tasks SET {', '.join(update_parts)}"
-                                " WHERE id = :tid"
-                            ),
+                            text(f"UPDATE tasks SET {', '.join(update_parts)} WHERE id = :tid"),
                             update_params,
                         )
                         logger.info(
@@ -493,15 +505,11 @@ async def process_event(event: dict):
 
         # Fetch active automations for the project matching this trigger
         result = await db.execute(
-            text(
-                "SELECT id, config FROM automations WHERE project_id = :pid AND is_active = true"
-            ),
+            text("SELECT id, config FROM automations WHERE project_id = :pid AND is_active = true"),
             {"pid": project_id},
         )
         automations = result.fetchall()
-        logger.info(
-            "Found %d active automations for project %s", len(automations), project_id
-        )
+        logger.info("Found %d active automations for project %s", len(automations), project_id)
 
         for auto_id, config in automations:
             # Simple trigger check
@@ -545,7 +553,8 @@ async def process_event(event: dict):
                 # Log execution and update stats
                 await db.execute(
                     text(
-                        "INSERT INTO automation_logs (id, automation_id, status, details, ran_at) VALUES (:id, :aid, :status, :details, NOW())"
+                        "INSERT INTO automation_logs (id, automation_id, status, details, ran_at) "
+                        "VALUES (:id, :aid, :status, :details, NOW())"
                     ),
                     {
                         "id": uuid.uuid4(),
@@ -555,37 +564,63 @@ async def process_event(event: dict):
                     },
                 )
                 await db.execute(
-                    text(
-                        "UPDATE automations SET stats_runs = stats_runs + 1 WHERE id = :aid"
-                    ),
+                    text("UPDATE automations SET stats_runs = stats_runs + 1 WHERE id = :aid"),
                     {"aid": auto_id},
                 )
                 await db.commit()
 
 
 async def consume():
+    """Consume automation events until SIGTERM/SIGINT, then shut down gracefully.
+
+    On a signal the worker stops taking new messages, lets the in-flight ones finish
+    (they are acked only after processing) and closes its connections. A message that
+    was being processed when the process was killed outright is not acked, so RabbitMQ
+    redelivers it to another worker.
+    """
+    stop = asyncio.Event()
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        loop.add_signal_handler(sig, stop.set)
+
+    in_flight: set[asyncio.Task] = set()
+    # aio-pika runs each callback as its own task; events of one task must still be
+    # applied in queue order, so processing is serialized within a worker process.
+    # Throughput scales with the number of worker processes (12-factor VIII).
+    serial = asyncio.Lock()
+
+    async def on_message(message: aio_pika.abc.AbstractIncomingMessage) -> None:
+        task = asyncio.current_task()
+        in_flight.add(task)
+        try:
+            async with serial, message.process():
+                try:
+                    event = json.loads(message.body.decode("utf-8"))
+                    await process_event(event)
+                except Exception as e:
+                    logger.error("Error processing event: %s", e)
+        finally:
+            in_flight.discard(task)
+
     connection = await aio_pika.connect_robust(settings.rabbitmq_url)
     async with connection:
         channel = await connection.channel()
-        await channel.set_qos(prefetch_count=10)
+        # Events are processed one at a time anyway; a small prefetch keeps SIGTERM shutdown
+        # fast and leaves undelivered messages to other worker replicas.
+        await channel.set_qos(prefetch_count=1)
 
-        queue = await channel.declare_queue(
-            settings.automation_events_queue, durable=True
-        )
+        queue = await channel.declare_queue(settings.automation_events_queue, durable=True)
+        consumer_tag = await queue.consume(on_message)
+        logger.info("Automation worker started, consuming from queue %s", settings.automation_events_queue)
 
-        logger.info(
-            "Automation worker started, consuming from queue %s",
-            settings.automation_events_queue,
-        )
+        await stop.wait()
+        logger.info("Shutdown signal received, finishing %d in-flight event(s)", len(in_flight))
+        await queue.cancel(consumer_tag)
+        if in_flight:
+            await asyncio.gather(*in_flight, return_exceptions=True)
 
-        async with queue.iterator() as queue_iter:
-            async for message in queue_iter:
-                async with message.process():
-                    try:
-                        event = json.loads(message.body.decode("utf-8"))
-                        await process_event(event)
-                    except Exception as e:
-                        logger.error("Error processing event: %s", e)
+    await engine.dispose()
+    logger.info("Automation worker stopped")
 
 
 if __name__ == "__main__":

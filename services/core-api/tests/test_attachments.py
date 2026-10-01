@@ -1,20 +1,40 @@
-from unittest.mock import patch
-
 import pytest
+
+from app.main import app
+from app.storage import ObjectNotFoundError, get_storage
+
+
+class InMemoryStorage:
+    """Stand-in for the S3 backing service: same interface, objects kept in a dict."""
+
+    def __init__(self):
+        self.objects: dict[str, tuple[bytes, str]] = {}
+
+    async def put(self, key: str, data: bytes, content_type: str) -> None:
+        self.objects[key] = (data, content_type)
+
+    async def get(self, key: str) -> bytes:
+        if key not in self.objects:
+            raise ObjectNotFoundError(key)
+        return self.objects[key][0]
+
+    async def delete(self, key: str) -> None:
+        self.objects.pop(key, None)
 
 
 @pytest.fixture
-def upload_dir(tmp_path):
-    """Provide a temporary upload directory and patch UPLOAD_DIR."""
-    with patch("app.api.v1.attachments.UPLOAD_DIR", str(tmp_path)):
-        yield tmp_path
+def storage(client):
+    fake = InMemoryStorage()
+    app.dependency_overrides[get_storage] = lambda: fake
+    yield fake
+    app.dependency_overrides.pop(get_storage, None)
 
 
 # ── upload ──────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_upload_attachment(client, seed_data, get_token, upload_dir):
+async def test_upload_attachment(client, seed_data, get_token, storage):
     sd = seed_data
     token = get_token(sd["manager"].id)
     task_id = sd["todo_task"].id
@@ -34,13 +54,18 @@ async def test_upload_attachment(client, seed_data, get_token, upload_dir):
     assert data["user_id"] == sd["manager"].id
     assert "id" in data
     assert "created_at" in data
+    # The file went to object storage, keyed by task, not to the local disk
+    [(key, (body, content_type))] = storage.objects.items()
+    assert key.startswith(f"tasks/{task_id}/")
+    assert body == b"hello world"
+    assert content_type == "text/plain"
 
 
 # ── list ────────────────────────────────────────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_list_attachments(client, seed_data, get_token, upload_dir):
+async def test_list_attachments(client, seed_data, get_token, storage):
     sd = seed_data
     token = get_token(sd["manager"].id)
     task_id = sd["todo_task"].id
@@ -73,7 +98,7 @@ async def test_list_attachments(client, seed_data, get_token, upload_dir):
 
 
 @pytest.mark.asyncio
-async def test_download_attachment(client, seed_data, get_token, upload_dir):
+async def test_download_attachment(client, seed_data, get_token, storage):
     sd = seed_data
     token = get_token(sd["manager"].id)
     task_id = sd["todo_task"].id
@@ -98,7 +123,7 @@ async def test_download_attachment(client, seed_data, get_token, upload_dir):
 
 
 @pytest.mark.asyncio
-async def test_delete_attachment_owner(client, seed_data, get_token, upload_dir):
+async def test_delete_attachment_owner(client, seed_data, get_token, storage):
     sd = seed_data
     token = get_token(sd["manager"].id)
     task_id = sd["todo_task"].id
@@ -116,19 +141,20 @@ async def test_delete_attachment_owner(client, seed_data, get_token, upload_dir)
     )
     assert resp.status_code == 204
 
-    # Verify it's gone from the list
+    # Verify it's gone from the list and from object storage
     list_resp = await client.get(
         f"/api/v1/tasks/{task_id}/attachments",
         headers={"Authorization": f"Bearer {token}"},
     )
     assert len(list_resp.json()) == 0
+    assert storage.objects == {}
 
 
 # ── delete: assignee (non-owner) gets 403 ──────────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_delete_attachment_assignee_forbidden(client, seed_data, get_token, upload_dir):
+async def test_delete_attachment_assignee_forbidden(client, seed_data, get_token, storage):
     sd = seed_data
     owner_token = get_token(sd["manager"].id)
     assignee_token = get_token(sd["specialist"].id)
@@ -152,7 +178,7 @@ async def test_delete_attachment_assignee_forbidden(client, seed_data, get_token
 
 
 @pytest.mark.asyncio
-async def test_upload_requires_project_access(client, seed_data, get_token, upload_dir):
+async def test_upload_requires_project_access(client, seed_data, get_token, storage):
     sd = seed_data
     outsider_token = get_token(sd["outsider"].id)
     task_id = sd["todo_task"].id
@@ -169,7 +195,7 @@ async def test_upload_requires_project_access(client, seed_data, get_token, uplo
 
 
 @pytest.mark.asyncio
-async def test_upload_too_large(client, seed_data, get_token, upload_dir):
+async def test_upload_too_large(client, seed_data, get_token, storage):
     sd = seed_data
     token = get_token(sd["manager"].id)
     task_id = sd["todo_task"].id
@@ -189,7 +215,7 @@ async def test_upload_too_large(client, seed_data, get_token, upload_dir):
 
 
 @pytest.mark.asyncio
-async def test_upload_disallowed_type(client, seed_data, get_token, upload_dir):
+async def test_upload_disallowed_type(client, seed_data, get_token, storage):
     sd = seed_data
     token = get_token(sd["manager"].id)
     task_id = sd["todo_task"].id
@@ -200,3 +226,21 @@ async def test_upload_disallowed_type(client, seed_data, get_token, upload_dir):
         headers={"Authorization": f"Bearer {token}"},
     )
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_download_missing_object_returns_404(client, seed_data, get_token, storage):
+    sd = seed_data
+    token = get_token(sd["manager"].id)
+    upload_resp = await client.post(
+        f"/api/v1/tasks/{sd['todo_task'].id}/attachments",
+        files={"file": ("lost.txt", b"gone", "text/plain")},
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    storage.objects.clear()
+
+    resp = await client.get(
+        f"/api/v1/attachments/{upload_resp.json()['id']}/download",
+        headers={"Authorization": f"Bearer {token}"},
+    )
+    assert resp.status_code == 404

@@ -80,3 +80,29 @@ def bereg_project(owner_projects):
     if proj is None:
         pytest.skip("Project zhk-bereg not found")
     return proj
+
+
+# Board columns replaced task statuses: a task's status is derived from the order of its
+# column (0 TODO, 1 IN_PROGRESS, 2 REVIEW, 3 DONE in the seeded projects).
+STATUS_ORDER = {"TODO": 0, "IN_PROGRESS": 1, "REVIEW": 2, "DONE": 3}
+
+
+def column_ids(client: httpx.Client, headers: dict, project_id: int) -> dict[str, int]:
+    """Map status name → id of the project's column with the matching order."""
+    resp = client.get(f"{CORE_API_URL}/api/v1/projects/{project_id}/columns", headers=headers)
+    resp.raise_for_status()
+    by_order = {c["order"]: c["id"] for c in resp.json()}
+    return {status: by_order[order] for status, order in STATUS_ORDER.items()}
+
+
+def move_task(client: httpx.Client, headers: dict, task_id: int, column_id: int) -> httpx.Response:
+    return client.patch(
+        f"{CORE_API_URL}/api/v1/tasks/{task_id}/column",
+        json={"column_id": column_id},
+        headers=headers,
+    )
+
+
+@pytest.fixture
+def onegin_columns(client, owner_headers, onegin_project):
+    return column_ids(client, owner_headers, onegin_project["id"])

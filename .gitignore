@@ -228,7 +228,6 @@ dist/
 Thumbs.db
 
 # Scraper state
-jobs/review-scraper/processed_ids.json
 
 # Playwright
 .playwright-mcp/

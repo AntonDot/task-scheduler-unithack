@@ -28,6 +28,12 @@ def _get_columns(client, project_id, headers):
     return resp.json()
 
 
+def _my_id(client, headers):
+    resp = client.get(f"{CORE_API_URL}/api/v1/me", headers=headers)
+    resp.raise_for_status()
+    return resp.json()["id"]
+
+
 @pytest.mark.e2e
 class TestAutomationFixes:
     def test_task_updated_triggers_notification_when_column_matches(
@@ -54,8 +60,13 @@ class TestAutomationFixes:
                 "conditions": [
                     {"type": "column_equals", "params": {"column_id": col_id}}
                 ],
+                # The bell shows an automation notification only to its resolved recipient
+                # (params.user_id or the task assignee); these tasks have no assignee
                 "actions": [
-                    {"type": "send_notification", "params": {"message": notif_message}}
+                    {
+                        "type": "send_notification",
+                        "params": {"message": notif_message, "user_id": _my_id(client, owner_headers)},
+                    }
                 ],
             },
         }
@@ -111,7 +122,7 @@ class TestAutomationFixes:
     ):
         """
         Scenario: Action send_notification on a task with NO assignee.
-        It should still produce an AuditLog entry and show up in the project owner's bell.
+        With an explicit recipient (params.user_id) it shows up in that user's bell.
         """
         pid = onegin_project["id"]
         columns = _get_columns(client, pid, owner_headers)
@@ -126,8 +137,13 @@ class TestAutomationFixes:
             "config": {
                 "trigger": {"type": "task_created", "filters": {}},
                 "conditions": [],
+                # The bell shows an automation notification only to its resolved recipient
+                # (params.user_id or the task assignee); these tasks have no assignee
                 "actions": [
-                    {"type": "send_notification", "params": {"message": notif_message}}
+                    {
+                        "type": "send_notification",
+                        "params": {"message": notif_message, "user_id": _my_id(client, owner_headers)},
+                    }
                 ],
             },
         }

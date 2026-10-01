@@ -5,7 +5,6 @@ from httpx import ASGITransport, AsyncClient
 
 from app.config import settings
 from app.main import app
-from app.services.incident_service import _processed_events
 
 API_KEY = "dev-webhook-key"
 
@@ -19,8 +18,11 @@ def _set_api_key():
 
 
 @pytest.fixture(autouse=True)
-def _clear_processed():
-    _processed_events.clear()
+def _event_processed():
+    # Dedupe state lives in core-api; by default no event has been processed yet
+    with patch("app.services.incident_service.core_api.event_processed", new_callable=AsyncMock) as mock:
+        mock.return_value = False
+        yield mock
 
 
 @pytest.fixture
@@ -99,16 +101,34 @@ class TestIncidentWebhook:
             call_args = mock_create.call_args[0]
             assert call_args[1]["status"] == "AI_DRAFT"
 
-    async def test_idempotency_duplicate_event(self, client):
+    async def test_idempotency_duplicate_event(self, client, _event_processed):
         with patch("app.services.incident_service.core_api.create_task", new_callable=AsyncMock) as mock_create:
             mock_create.return_value = {"id": 1}
             payload = {"event_id": "dup-1", "source": "test", "text": "test", "project_slug": "slug"}
 
+            _event_processed.side_effect = [False, True]
             await client.post("/webhook/incident", json=payload, headers=_headers())
             resp = await client.post("/webhook/incident", json=payload, headers=_headers())
 
             assert resp.json()["status"] == "duplicate"
             assert mock_create.call_count == 1
+            assert mock_create.call_args.kwargs["idempotency_key"] == "dup-1"
+
+    async def test_concurrent_duplicate_rejected_by_core_api(self, client):
+        from app.clients.core_api import DuplicateEventError
+
+        with patch("app.services.incident_service.core_api.create_task", new_callable=AsyncMock) as mock_create:
+            mock_create.side_effect = DuplicateEventError("race-1")
+            payload = {"event_id": "race-1", "source": "test", "text": "test", "project_slug": "slug"}
+            resp = await client.post("/webhook/incident", json=payload, headers=_headers())
+            assert resp.status_code == 200
+            assert resp.json()["status"] == "duplicate"
+
+    async def test_core_api_unavailable_on_dedupe_check_returns_502(self, client, _event_processed):
+        _event_processed.side_effect = RuntimeError("core api down")
+        payload = {"event_id": "down-1", "source": "test", "text": "test", "project_slug": "slug"}
+        resp = await client.post("/webhook/incident", json=payload, headers=_headers())
+        assert resp.status_code == 502
 
     async def test_invalid_payload_422(self, client):
         resp = await client.post(

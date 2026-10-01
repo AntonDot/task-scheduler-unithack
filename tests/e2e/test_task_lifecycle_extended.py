@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 
-from .conftest import CORE_API_URL
+from .conftest import CORE_API_URL, column_ids, move_task
 
 
 @pytest.mark.e2e
@@ -78,6 +78,7 @@ class TestTaskLifecycleExtended:
         self, client, owner_headers, assignee_onegin_headers, onegin_project
     ):
         pid = onegin_project["id"]
+        cols = column_ids(client, owner_headers, pid)
         marker = f"Full lifecycle {uuid.uuid4().hex[:8]}"
 
         members = client.get(
@@ -102,11 +103,7 @@ class TestTaskLifecycleExtended:
         )
         assert resp.status_code == 201
 
-        resp = client.patch(
-            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status",
-            json={"status": "IN_PROGRESS"},
-            headers=assignee_onegin_headers,
-        )
+        resp = move_task(client, assignee_onegin_headers, task_id, cols["IN_PROGRESS"])
         assert resp.status_code == 200
         assert resp.json()["status"] == "IN_PROGRESS"
 
@@ -117,19 +114,11 @@ class TestTaskLifecycleExtended:
         )
         assert resp.status_code == 201
 
-        resp = client.patch(
-            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status",
-            json={"status": "REVIEW"},
-            headers=assignee_onegin_headers,
-        )
+        resp = move_task(client, assignee_onegin_headers, task_id, cols["REVIEW"])
         assert resp.status_code == 200
         assert resp.json()["status"] == "REVIEW"
 
-        resp = client.patch(
-            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status",
-            json={"status": "DONE"},
-            headers=owner_headers,
-        )
+        resp = move_task(client, owner_headers, task_id, cols["DONE"])
         assert resp.status_code == 200
         assert resp.json()["status"] == "DONE"
 

@@ -197,6 +197,8 @@ class TestColumnTransitions:
         )
         assert resp.status_code == 200
         assert resp.json()["column_id"] == review_col_id
+        # status is derived from the new column (order 1), not the one loaded before the move
+        assert resp.json()["status"] == "IN_PROGRESS"
 
     async def test_assignee_cannot_move_unassigned_task(self, client, seed_data, get_token):
         pid = seed_data["project"].id

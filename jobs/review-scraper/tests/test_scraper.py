@@ -2,15 +2,12 @@ import json
 from unittest.mock import patch
 
 import httpx
-import pytest
 import respx
 
 from scraper import (
     BUSINESS_SLUG_MAP,
     ML_WORKER_URL,
     REVIEW_BOARD_URL,
-    load_processed_ids,
-    save_processed_ids,
     scrape_and_send,
 )
 
@@ -34,31 +31,9 @@ MOCK_HTML = """
 """
 
 
-@pytest.fixture(autouse=True)
-def _clean_state(tmp_path):
-    state_file = tmp_path / "processed_ids.json"
-    with patch("scraper.STATE_FILE", state_file):
-        yield state_file
-
-
-class TestStateFile:
-    def test_load_empty(self, _clean_state):
-        assert load_processed_ids() == set()
-
-    def test_save_and_load(self, _clean_state):
-        save_processed_ids({"rev-001", "rev-002"})
-        loaded = load_processed_ids()
-        assert loaded == {"rev-001", "rev-002"}
-
-    def test_save_overwrites(self, _clean_state):
-        save_processed_ids({"rev-001"})
-        save_processed_ids({"rev-002", "rev-003"})
-        assert load_processed_ids() == {"rev-002", "rev-003"}
-
-
 class TestScrapeAndSend:
     @respx.mock
-    async def test_sends_only_negative_reviews(self, _clean_state):
+    async def test_sends_only_negative_reviews(self):
         respx.get(f"{REVIEW_BOARD_URL}/reviews").mock(return_value=httpx.Response(200, text=MOCK_HTML))
         webhook_route = respx.post(f"{ML_WORKER_URL}/webhook/incident").mock(
             return_value=httpx.Response(200, json={"status": "created", "task_id": 1})
@@ -70,7 +45,7 @@ class TestScrapeAndSend:
         assert webhook_route.call_count == 2
 
     @respx.mock
-    async def test_payload_matches_ml_worker_contract(self, _clean_state):
+    async def test_payload_matches_ml_worker_contract(self):
         respx.get(f"{REVIEW_BOARD_URL}/reviews").mock(return_value=httpx.Response(200, text=MOCK_HTML))
         webhook_route = respx.post(f"{ML_WORKER_URL}/webhook/incident").mock(
             return_value=httpx.Response(200, json={"status": "created", "task_id": 1})
@@ -89,7 +64,7 @@ class TestScrapeAndSend:
             assert payload["source"] == "mock-review-board"
 
     @respx.mock
-    async def test_correct_project_slug_mapping(self, _clean_state):
+    async def test_correct_project_slug_mapping(self):
         respx.get(f"{REVIEW_BOARD_URL}/reviews").mock(return_value=httpx.Response(200, text=MOCK_HTML))
         webhook_route = respx.post(f"{ML_WORKER_URL}/webhook/incident").mock(
             return_value=httpx.Response(200, json={"status": "created", "task_id": 1})
@@ -102,10 +77,16 @@ class TestScrapeAndSend:
         assert slugs == {"onegin-park", "zhk-bereg"}
 
     @respx.mock
-    async def test_no_duplicates_on_repeated_runs(self, _clean_state):
+    async def test_repeated_runs_rely_on_server_side_dedupe(self):
+        """The scraper is stateless: it resends reviews and ml-worker answers `duplicate`."""
         respx.get(f"{REVIEW_BOARD_URL}/reviews").mock(return_value=httpx.Response(200, text=MOCK_HTML))
         webhook_route = respx.post(f"{ML_WORKER_URL}/webhook/incident").mock(
-            return_value=httpx.Response(200, json={"status": "created", "task_id": 1})
+            side_effect=[
+                httpx.Response(200, json={"status": "created", "task_id": 1}),
+                httpx.Response(200, json={"status": "created", "task_id": 2}),
+                httpx.Response(200, json={"status": "duplicate"}),
+                httpx.Response(200, json={"status": "duplicate"}),
+            ]
         )
 
         sent1 = await scrape_and_send()
@@ -113,10 +94,10 @@ class TestScrapeAndSend:
 
         assert sent1 == 2
         assert sent2 == 0
-        assert webhook_route.call_count == 2
+        assert webhook_route.call_count == 4
 
     @respx.mock
-    async def test_api_key_header_sent(self, _clean_state):
+    async def test_api_key_header_sent(self):
         respx.get(f"{REVIEW_BOARD_URL}/reviews").mock(return_value=httpx.Response(200, text=MOCK_HTML))
         webhook_route = respx.post(f"{ML_WORKER_URL}/webhook/incident").mock(
             return_value=httpx.Response(200, json={"status": "created", "task_id": 1})
@@ -128,17 +109,16 @@ class TestScrapeAndSend:
             assert "X-API-Key" in call.request.headers
 
     @respx.mock
-    async def test_failed_send_does_not_mark_processed(self, _clean_state):
+    async def test_failed_send_is_not_counted(self):
         respx.get(f"{REVIEW_BOARD_URL}/reviews").mock(return_value=httpx.Response(200, text=MOCK_HTML))
         respx.post(f"{ML_WORKER_URL}/webhook/incident").mock(return_value=httpx.Response(500))
 
         sent = await scrape_and_send()
 
         assert sent == 0
-        assert load_processed_ids() == set()
 
     @respx.mock
-    async def test_error_status_in_200_response_not_marked_processed(self, _clean_state):
+    async def test_error_status_in_200_response_is_not_counted(self):
         respx.get(f"{REVIEW_BOARD_URL}/reviews").mock(return_value=httpx.Response(200, text=MOCK_HTML))
         respx.post(f"{ML_WORKER_URL}/webhook/incident").mock(
             return_value=httpx.Response(200, json={"status": "error", "message": "upstream failed"})
@@ -147,10 +127,9 @@ class TestScrapeAndSend:
         sent = await scrape_and_send()
 
         assert sent == 0
-        assert load_processed_ids() == set()
 
     @respx.mock
-    async def test_all_positive_reviews_sends_nothing(self, _clean_state):
+    async def test_all_positive_reviews_sends_nothing(self):
         positive_html = """
         <div class="review" data-review-id="r1" data-rating="5">
             <p>Great!</p><span class="business">Test</span>
@@ -167,7 +146,7 @@ class TestScrapeAndSend:
 
 class TestUrgencyMapping:
     @respx.mock
-    async def test_urgency_based_on_rating(self, _clean_state):
+    async def test_urgency_based_on_rating(self):
         """Rating 1 and 2 → URGENT; rating 3 → HIGH (when included via max_rating=3)."""
         html = """
         <div class="review" data-review-id="r1" data-rating="1">
@@ -205,7 +184,7 @@ class TestBusinessSlugMapping:
         assert BUSINESS_SLUG_MAP.get("Несуществующий Бизнес", "unknown") == "unknown"
 
     @respx.mock
-    async def test_unknown_business_slug_in_payload(self, _clean_state):
+    async def test_unknown_business_slug_in_payload(self):
         """Review with unknown business sends project_slug='unknown'."""
         html = """
         <div class="review" data-review-id="r1" data-rating="1">
@@ -223,40 +202,9 @@ class TestBusinessSlugMapping:
         assert payload["project_slug"] == "unknown"
 
 
-class TestStateFileCreation:
-    def test_state_file_creates_parent_dirs(self, tmp_path):
-        """save_processed_ids should create parent directories if they don't exist."""
-        nested_state = tmp_path / "deep" / "nested" / "processed_ids.json"
-        with patch("scraper.STATE_FILE", nested_state):
-            save_processed_ids({"rev-001"})
-            assert nested_state.exists()
-            assert load_processed_ids() == {"rev-001"}
+class TestStatelessness:
+    def test_no_local_state_file(self):
+        """Nothing is written next to the process: no processed_ids.json, no STATE_FILE setting."""
+        import scraper
 
-
-class TestDuplicateDetection:
-    @respx.mock
-    async def test_duplicate_detection_skips_previously_sent(self, _clean_state):
-        """Reviews already in processed_ids should NOT trigger a webhook call."""
-        # Pre-populate processed IDs with rev-002
-        save_processed_ids({"rev-002"})
-
-        html = """
-        <div class="review" data-review-id="rev-001" data-rating="1">
-            <p>Bad!</p><span class="business">Онегин Парк</span>
-        </div>
-        <div class="review" data-review-id="rev-002" data-rating="2">
-            <p>Terrible!</p><span class="business">ЖК Берег</span>
-        </div>
-        """
-        respx.get(f"{REVIEW_BOARD_URL}/reviews").mock(return_value=httpx.Response(200, text=html))
-        webhook_route = respx.post(f"{ML_WORKER_URL}/webhook/incident").mock(
-            return_value=httpx.Response(200, json={"status": "created", "task_id": 1})
-        )
-
-        sent = await scrape_and_send()
-
-        # Only rev-001 should be sent; rev-002 was already processed
-        assert sent == 1
-        assert webhook_route.call_count == 1
-        payload = json.loads(webhook_route.calls[0].request.content)
-        assert payload["event_id"] == "review-rev-001"
+        assert not hasattr(scraper, "STATE_FILE")

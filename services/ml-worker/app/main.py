@@ -3,9 +3,13 @@ from fastapi import status as http_status
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.clients import llm_client
+from app.config import settings
 from app.dependencies import verify_webhook_key
+from app.logging_config import configure_logging
 from app.schemas.webhook import DraftTextPayload, ImproveRequest, ImproveResponse, IncidentPayload, WebhookResponse
 from app.services import incident_service
+
+configure_logging(settings.log_level)
 
 app = FastAPI(title="ML & Events Worker", version="0.1.0")
 

@@ -13,32 +13,34 @@ jobs:
         service:
           - { name: core-api, path: services/core-api }
           - { name: ml-worker, path: services/ml-worker }
+          - { name: automation-worker, path: services/automation-worker }
           - { name: mock-review-board, path: services/mock-review-board }
           - { name: review-scraper, path: jobs/review-scraper }
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
-          cache: pip
-          cache-dependency-path: ${{ matrix.service.path }}/pyproject.toml
+          enable-cache: true
+          cache-dependency-glob: ${{ matrix.service.path }}/uv.lock
 
+      # Same lockfile as the Docker image: no unpinned installs in CI
       - name: Install dependencies
-        run: pip install -e ".[${{ matrix.service.name == 'core-api' && 'dev' || 'dev' }}]"
+        run: uv sync --frozen --extra dev
         working-directory: ${{ matrix.service.path }}
 
       - name: Ruff lint
-        run: ruff check .
+        run: uv run ruff check .
         working-directory: ${{ matrix.service.path }}
 
       - name: Ruff format check
-        run: ruff format --check .
+        run: uv run ruff format --check .
         working-directory: ${{ matrix.service.path }}
 
       - name: Run tests
-        run: python -m pytest tests/ -v
+        run: uv run python -m pytest tests/ -v
         working-directory: ${{ matrix.service.path }}
 
   frontend-quality:
@@ -80,7 +82,7 @@ jobs:
         run: cp .env.example .env
 
       - name: Start services
-        run: docker compose up -d --build --wait
+        run: docker compose --profile full up -d --build --wait
         timeout-minutes: 5
 
       - name: Wait for services
@@ -110,8 +112,8 @@ jobs:
 
       - name: Collect logs on failure
         if: failure()
-        run: docker compose logs --tail=100
+        run: docker compose --profile full logs --tail=100
 
       - name: Tear down
         if: always()
-        run: docker compose down -v
+        run: docker compose --profile full down -v

@@ -2,7 +2,7 @@ import uuid
 
 import pytest
 
-from .conftest import CORE_API_URL
+from .conftest import CORE_API_URL, column_ids, move_task
 
 
 def skip_if_not_implemented(client, url, headers):
@@ -128,6 +128,7 @@ class TestComments:
 class TestAuditLog:
     def test_audit_log_records_actions(self, client, owner_headers, onegin_project):
         pid = onegin_project["id"]
+        cols = column_ids(client, owner_headers, pid)
 
         resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{pid}/tasks",
@@ -140,11 +141,7 @@ class TestAuditLog:
         audit_url = f"{CORE_API_URL}/api/v1/tasks/{task_id}/audit"
         skip_if_not_implemented(client, audit_url, owner_headers)
 
-        client.patch(
-            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status",
-            json={"status": "IN_PROGRESS"},
-            headers=owner_headers,
-        )
+        move_task(client, owner_headers, task_id, cols["IN_PROGRESS"])
 
         resp = client.get(audit_url, headers=owner_headers)
         assert resp.status_code == 200
@@ -152,7 +149,7 @@ class TestAuditLog:
         assert len(entries) >= 2
         actions = [e["action"] for e in entries]
         assert "created" in actions
-        assert "status_changed" in actions
+        assert "column_changed" in actions
 
     def test_audit_log_requires_project_access(
         self, client, owner_headers, assignee_bereg_headers, onegin_project

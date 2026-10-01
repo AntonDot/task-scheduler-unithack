@@ -1,6 +1,6 @@
 import pytest
 
-from .conftest import CORE_API_URL
+from .conftest import CORE_API_URL, move_task
 
 
 @pytest.mark.e2e
@@ -35,8 +35,8 @@ class TestAuth:
 
 @pytest.mark.e2e
 class TestManualTaskLifecycle:
-    def test_create_and_move_through_all_statuses(
-        self, client, owner_headers, onegin_project
+    def test_create_and_move_through_all_columns(
+        self, client, owner_headers, onegin_project, onegin_columns
     ):
         pid = onegin_project["id"]
 
@@ -53,32 +53,15 @@ class TestManualTaskLifecycle:
         task = resp.json()
         task_id = task["id"]
         assert task["status"] == "TODO"
+        assert task["column_id"] == onegin_columns["TODO"]
 
-        resp = client.patch(
-            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status",
-            json={"status": "IN_PROGRESS"},
-            headers=owner_headers,
-        )
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "IN_PROGRESS"
+        for status in ["IN_PROGRESS", "REVIEW", "DONE"]:
+            resp = move_task(client, owner_headers, task_id, onegin_columns[status])
+            assert resp.status_code == 200
+            assert resp.json()["column_id"] == onegin_columns[status]
+            assert resp.json()["status"] == status
 
-        resp = client.patch(
-            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status",
-            json={"status": "REVIEW"},
-            headers=owner_headers,
-        )
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "REVIEW"
-
-        resp = client.patch(
-            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status",
-            json={"status": "DONE"},
-            headers=owner_headers,
-        )
-        assert resp.status_code == 200
-        assert resp.json()["status"] == "DONE"
-
-    def test_reopen_done_task(self, client, owner_headers, onegin_project):
+    def test_reopen_done_task(self, client, owner_headers, onegin_project, onegin_columns):
         pid = onegin_project["id"]
         resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{pid}/tasks",
@@ -88,41 +71,33 @@ class TestManualTaskLifecycle:
         task_id = resp.json()["id"]
 
         for status in ["IN_PROGRESS", "REVIEW", "DONE"]:
-            client.patch(
-                f"{CORE_API_URL}/api/v1/tasks/{task_id}/status",
-                json={"status": status},
-                headers=owner_headers,
-            )
+            move_task(client, owner_headers, task_id, onegin_columns[status])
 
-        resp = client.patch(
-            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status",
-            json={"status": "TODO"},
-            headers=owner_headers,
-        )
+        resp = move_task(client, owner_headers, task_id, onegin_columns["TODO"])
         assert resp.status_code == 200
         assert resp.json()["status"] == "TODO"
 
-    def test_invalid_transition_rejected(self, client, owner_headers, onegin_project):
+    def test_board_allows_moving_across_columns(self, client, owner_headers, onegin_project, onegin_columns):
+        """Kanban board has no transition rules: a card can jump straight to Done."""
         pid = onegin_project["id"]
         resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{pid}/tasks",
-            json={"title": "E2E invalid transition", "urgency": "LOW"},
+            json={"title": "E2E direct move", "urgency": "LOW"},
             headers=owner_headers,
         )
         task_id = resp.json()["id"]
 
-        resp = client.patch(
-            f"{CORE_API_URL}/api/v1/tasks/{task_id}/status",
-            json={"status": "DONE"},
-            headers=owner_headers,
-        )
-        assert resp.status_code == 422
+        resp = move_task(client, owner_headers, task_id, onegin_columns["DONE"])
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "DONE"
 
 
 @pytest.mark.e2e
-class TestAIDraftFlow:
-    def test_owner_creates_and_approves_draft(
-        self, client, owner_headers, onegin_project
+class TestDraftFlow:
+    """AI drafts land in the first column (Backlog); there is no separate approve step."""
+
+    def test_draft_status_lands_in_first_column(
+        self, client, owner_headers, onegin_project, onegin_columns
     ):
         pid = onegin_project["id"]
         resp = client.post(
@@ -131,13 +106,7 @@ class TestAIDraftFlow:
             headers=owner_headers,
         )
         assert resp.status_code == 201
-        task_id = resp.json()["id"]
-        assert resp.json()["status"] == "AI_DRAFT"
-
-        resp = client.post(
-            f"{CORE_API_URL}/api/v1/tasks/{task_id}/approve", headers=owner_headers
-        )
-        assert resp.status_code == 200
+        assert resp.json()["column_id"] == onegin_columns["TODO"]
         assert resp.json()["status"] == "TODO"
 
     def test_owner_discards_draft(self, client, owner_headers, onegin_project):
@@ -158,20 +127,6 @@ class TestAIDraftFlow:
             f"{CORE_API_URL}/api/v1/tasks/{task_id}", headers=owner_headers
         )
         assert resp.status_code == 404
-
-    def test_cannot_approve_non_draft(self, client, owner_headers, onegin_project):
-        pid = onegin_project["id"]
-        resp = client.post(
-            f"{CORE_API_URL}/api/v1/projects/{pid}/tasks",
-            json={"title": "E2E not a draft", "status": "TODO", "urgency": "LOW"},
-            headers=owner_headers,
-        )
-        task_id = resp.json()["id"]
-
-        resp = client.post(
-            f"{CORE_API_URL}/api/v1/tasks/{task_id}/approve", headers=owner_headers
-        )
-        assert resp.status_code == 422
 
     def test_owner_can_delete_non_draft(self, client, owner_headers, onegin_project):
         pid = onegin_project["id"]

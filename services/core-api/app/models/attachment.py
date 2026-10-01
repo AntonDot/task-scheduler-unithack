@@ -20,7 +20,7 @@ class Attachment(Base):
     task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
     user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
     filename: Mapped[str] = mapped_column(String(500))
-    stored_path: Mapped[str] = mapped_column(String(1000))
+    storage_key: Mapped[str] = mapped_column(String(1000))
     content_type: Mapped[str] = mapped_column(String(100))
     size_bytes: Mapped[int] = mapped_column(Integer)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

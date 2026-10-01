@@ -73,10 +73,16 @@ describe("LoginPage — dev mode", () => {
 
     resolve!();
     await waitFor(() => {
-      const btns = screen.getAllByRole("button");
-      btns.forEach((btn) => {
-        expect(btn).not.toBeDisabled();
-      });
+      // Everything is unlocked again except the email form submit, which stays
+      // disabled while the email field is empty
+      const submit = screen.getByRole("button", { name: "Войти" });
+      expect(submit).toBeDisabled();
+      screen
+        .getAllByRole("button")
+        .filter((btn) => btn !== submit)
+        .forEach((btn) => {
+          expect(btn).not.toBeDisabled();
+        });
     });
   });
 });

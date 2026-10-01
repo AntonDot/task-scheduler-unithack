@@ -1,49 +1,53 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Non-interactive deploy script for CloudVPS via SSH
-# Usage: DEPLOY_HOST=user@server ./scripts/deploy.sh
-# Env vars: DEPLOY_HOST (required), DEPLOY_DIR (default: /opt/task-scheduler), DEPLOY_BRANCH (default: main)
+# Release + run stages of 12-factor V. Nothing is built on the server: it pulls the
+# images that CI built for APP_VERSION and starts them with the server's own .env.
+#
+# Usage: DEPLOY_HOST=user@server APP_VERSION=<git sha | v-tag> ./scripts/deploy.sh
+#        (sha is 7 chars, as tagged by CI: git rev-parse --short=7 HEAD)
+# Rollback: the same command with the previous APP_VERSION — while the database schema
+# is still compatible with it (Alembic migrations are not rolled back automatically).
+#
+# GHCR packages are private by default: run `docker login ghcr.io` once on the server
+# (a token with read:packages) or make the packages public.
+#
+# Env vars:
+#   DEPLOY_HOST   (required) ssh target
+#   APP_VERSION   (required) image tag built by .github/workflows/release.yml
+#   DEPLOY_DIR    (default: /opt/task-scheduler) holds docker-compose.yml and .env
+#   REGISTRY      (default: ghcr.io/antondot/task-scheduler)
+#   COMPOSE_PROFILES (default: full)
 
 DEPLOY_HOST="${DEPLOY_HOST:?DEPLOY_HOST env var is required (e.g. user@server)}"
+APP_VERSION="${APP_VERSION:?APP_VERSION env var is required (image tag, e.g. git sha)}"
 DEPLOY_DIR="${DEPLOY_DIR:-/opt/task-scheduler}"
-DEPLOY_BRANCH="${DEPLOY_BRANCH:-main}"
+REGISTRY="${REGISTRY:-ghcr.io/antondot/task-scheduler}"
+COMPOSE_PROFILES="${COMPOSE_PROFILES:-full}"
 
-echo "=== Deploying to $DEPLOY_HOST ==="
-echo "  Directory: $DEPLOY_DIR"
-echo "  Branch: $DEPLOY_BRANCH"
+echo "=== Deploying ${APP_VERSION} to ${DEPLOY_HOST}:${DEPLOY_DIR} ==="
 
-ssh -o StrictHostKeyChecking=accept-new "$DEPLOY_HOST" bash -s <<REMOTE
+# The compose file is part of the release; .env (config + secrets) already lives on the server
+ssh -o StrictHostKeyChecking=accept-new "$DEPLOY_HOST" "mkdir -p '$DEPLOY_DIR'"
+scp docker-compose.yml "$DEPLOY_HOST:$DEPLOY_DIR/docker-compose.yml"
+
+ssh "$DEPLOY_HOST" bash -s <<REMOTE
   set -euo pipefail
-
-  if [ ! -d "$DEPLOY_DIR" ]; then
-    echo "First deploy — cloning repository..."
-    git clone --branch "$DEPLOY_BRANCH" "\${REPO_URL:-https://github.com/FblRKUS/task-scheduler-unithack.git}" "$DEPLOY_DIR"
-  fi
-
   cd "$DEPLOY_DIR"
-  echo "Pulling latest changes..."
-  git fetch origin
-  git checkout "$DEPLOY_BRANCH"
-  git pull origin "$DEPLOY_BRANCH"
+  test -f .env || { echo ".env is missing in $DEPLOY_DIR — create it from .env.example"; exit 1; }
 
-  echo "Building and starting services..."
-  docker compose pull 2>/dev/null || true
-  docker compose build
-  docker compose up -d
-
-  echo "Waiting for health checks..."
-  for i in \$(seq 1 30); do
-    if curl -sf http://localhost:8000/health > /dev/null 2>&1; then
-      echo "  core-api is healthy"
-      break
-    fi
-    sleep 2
+  export APP_VERSION="$APP_VERSION" REGISTRY="$REGISTRY" COMPOSE_PROFILES="$COMPOSE_PROFILES"
+  echo "Pulling images \$REGISTRY/*:\$APP_VERSION..."
+  docker compose pull --quiet
+  # compose only warns when a pull of a buildable image fails — check explicitly
+  for image in \$(docker compose config --images | sort -u); do
+    docker image inspect "\$image" >/dev/null 2>&1 || { echo "Image \$image is missing (docker login ghcr.io?)"; exit 1; }
   done
 
-  echo "Running migrations..."
-  docker compose exec -T core-api alembic upgrade head 2>/dev/null || echo "  (migrations skipped or not needed)"
+  # migrate (one-off admin process) runs first; core-api waits for it to exit 0
+  echo "Starting release..."
+  docker compose up -d --no-build --wait
 
-  echo "=== Deploy complete ==="
+  echo "=== Deploy of \$APP_VERSION complete ==="
   docker compose ps
 REMOTE

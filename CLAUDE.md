@@ -18,18 +18,26 @@ tests/
   e2e/               httpx + pytest против живых сервисов
 ```
 
-**Инфраструктура:** PostgreSQL 16, RabbitMQ 3, Docker Compose, GitHub Actions.
+**Инфраструктура:** PostgreSQL 16, S3 (RustFS в compose), RabbitMQ 3, Docker Compose, GitHub Actions.
+
+Приложение держится методологии «12 факторов» (разбор — `Отчёт.md`). Не ломай это:
+- конфиг — только из окружения (`.env` → `env_file`), у адресов бэкинг-сервисов и секретов в `Settings` нет дефолтов;
+- процессы без состояния: файлы — в S3 (`app/storage.py`), дедупликация внешних событий — таблица `external_events`, события WebSocket между репликами — PostgreSQL `LISTEN/NOTIFY` (`app/websocket_manager.py`). Ничего не храни в памяти процесса и на локальном диске;
+- миграции, бакет и seed — только в разовом процессе `migrate` (`services/core-api/scripts/migrate.sh`), не в старте веб-процесса;
+- логи — JSON-строкой в stdout, без файлов;
+- зависимости — строго по `uv.lock` / `package-lock.json` (`uv sync --frozen`, `npm ci`).
 
 ## Быстрый старт
 
 ```bash
 cp .env.example .env
-docker compose up -d --build
+docker compose up -d --build                  # postgres, s3, migrate, core-api, web
+docker compose --profile full up -d --build   # + rabbitmq, automation-worker, ml-worker, отзовик, скрейпер
 # фронт: http://localhost:3000
 # swagger: http://localhost:8000/docs
 ```
 
-Демо-пользователи и проекты создаются автоматически при первом запуске (seed в `services/core-api/scripts/`).
+Демо-пользователи и проекты создаёт разовый процесс `migrate` при `CORE_SEED_DEMO=true` (seed в `services/core-api/scripts/`).
 
 ## Демо-пользователи
 
@@ -59,7 +67,7 @@ docker compose up -d --build
 | ml-worker | `ML_` | `ML_LLM_API_KEY`, `ML_USE_MOCK_LLM` |
 | review-scraper | `SCRAPER_` | `SCRAPER_REVIEW_BOARD_URL` |
 
-Дефолтный service-token для межсервисного общения: `dev-service-token` (заголовок `X-Service-Token`).
+Все переменные с примерами — в `.env.example`. Service-token для межсервисного общения (заголовок `X-Service-Token` или `Authorization: Bearer`) в `.env.example` — `dev-service-token`; в коде дефолта нет.
 
 ## RBAC
 
@@ -141,9 +149,9 @@ POST /api/v1/tasks/internal/automation-event — WS-broadcast + AuditLog
 ## Миграции
 
 ```bash
+docker compose run --rm migrate                 # применить (тот же образ и конфиг, что у core-api)
 cd services/core-api
-alembic upgrade head           # применить
-alembic revision --autogenerate -m "описание"  # создать
+uv run alembic revision --autogenerate -m "описание"  # создать
 ```
 
 Файлы: `alembic/versions/NNNN_*.py`.
@@ -152,9 +160,9 @@ alembic revision --autogenerate -m "описание"  # создать
 
 ```bash
 # Backend (каждый сервис в своём venv)
-cd services/core-api  && python -m pytest tests/ -v   # ~28 тестов
-cd services/ml-worker && python -m pytest tests/ -v   # ~11 тестов
-cd jobs/review-scraper && python -m pytest tests/ -v  # ~22 теста
+cd services/core-api  && uv sync --frozen --extra dev && uv run pytest   # ~120 тестов
+cd services/ml-worker && uv sync --frozen --extra dev && uv run pytest   # ~28 тестов
+cd jobs/review-scraper && uv sync --frozen --extra dev && uv run pytest  # ~27 тестов
 
 # Frontend
 cd apps/web && npx vitest run   # ~26 тестов
@@ -177,9 +185,11 @@ Polling-паттерн для асинхронных событий — см. `_
 ## CI
 
 GitHub Actions (`.github/workflows/main.yml`), запускается на PR в `main`:
-1. `backend-quality` — Ruff + Pytest (матрица по сервисам)
+1. `backend-quality` — `uv sync --frozen` + Ruff + Pytest (матрица по сервисам)
 2. `frontend-quality` — tsc + Vitest + Vite build
-3. `integration-smoke` — `docker compose up` → smoke + e2e тесты
+3. `integration-smoke` — `docker compose --profile full up` → smoke + e2e тесты
+
+`.github/workflows/release.yml` на push в `main` и теги `v*` собирает образы и пушит в GHCR с тегом коммита; `scripts/deploy.sh` разворачивает выбранный тег без сборки на сервере.
 
 ## Важные gotchas
 
@@ -187,4 +197,7 @@ GitHub Actions (`.github/workflows/main.yml`), запускается на PR в
 - Web-push (VAPID) по умолчанию отключён (`CORE_VAPID_PRIVATE_KEY` не задан). `send_push_to_user` молча пропускает отправку — это нормально.
 - Колонки задачи — это `BoardColumn` (id: int), а не статус-строки. `task_created` публикует `column_id`, drag-n-drop использует `PATCH /tasks/{id}/column` → событие `column_changed`.
 - `system@victory.local` — служебный пользователь, создаётся лениво при первом вызове `internal_automation_event`. Его AuditLog-записи попадают в колокольчик (`automation_triggered` разрешён даже от самого себя).
+- Вложения лежат в S3 по ключу `attachments.storage_key` (`tasks/{task_id}/{uuid}`), не на диске. В тестах хранилище подменяется через `app.dependency_overrides[get_storage]`.
+- `POST /api/v1/projects/by-slug/{slug}/tasks` принимает `Idempotency-Key`: повтор → 409. ml-worker перед вызовом LLM проверяет `GET /api/v1/internal/external-events/{event_id}`; скрейпер состояния не хранит.
+- Payload `NOTIFY` ограничен 8000 байтами: большие события WebSocket обрезаются до `id/title/...` — фронт всё равно перезапрашивает доску.
 - Поле `description` у задач — rich-text (JSON BlockEditor), не plain text. Поиск @mentions работает через `ilike` по строковому представлению.

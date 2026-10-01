@@ -1,12 +1,13 @@
-import sys
 import os
+import sys
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
-from unittest.mock import patch, AsyncMock, MagicMock
 
 # Ensure the worker package root is importable when running `pytest tests/`
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
 
-from main import _render, _get_field, evaluate_condition, execute_action
+from main import _get_field, _render, evaluate_condition, execute_action
 
 
 def test_render_basic():
@@ -90,18 +91,8 @@ async def test_numeric_compare_gte_gt_eq():
 @pytest.mark.asyncio
 async def test_contains_case_insensitive():
     ctx = {"event_type": "x", "payload": {"text": "Hello World"}}
-    assert (
-        await evaluate_condition(
-            {"type": "contains", "params": {"field": "text", "value": "hello"}}, ctx
-        )
-        is True
-    )
-    assert (
-        await evaluate_condition(
-            {"type": "contains", "params": {"field": "text", "value": "missing"}}, ctx
-        )
-        is False
-    )
+    assert await evaluate_condition({"type": "contains", "params": {"field": "text", "value": "hello"}}, ctx) is True
+    assert await evaluate_condition({"type": "contains", "params": {"field": "text", "value": "missing"}}, ctx) is False
 
 
 @pytest.mark.asyncio

@@ -4,6 +4,7 @@ from app.models.automation import Automation, AutomationLog
 from app.models.base import Base
 from app.models.board_column import BoardColumn
 from app.models.comment import Comment
+from app.models.external_event import ExternalEvent
 from app.models.project import Project
 from app.models.push_subscription import PushSubscription
 from app.models.tag import Tag
@@ -22,6 +23,7 @@ __all__ = [
     "Base",
     "BoardColumn",
     "Comment",
+    "ExternalEvent",
     "Project",
     "PushSubscription",
     "Tag",

@@ -47,7 +47,14 @@ async def _set_co_assignees(db: AsyncSession, task: Task, ids: list[int]) -> Non
 
 
 async def _reload_task(db: AsyncSession, task_id: int) -> Task:
-    result = await db.execute(select(Task).where(Task.id == task_id, Task.is_deleted.is_(False)).options(*_TASK_OPTS))
+    # populate_existing: the task is already in the session, and without it relationships
+    # loaded earlier (e.g. `column`, which `status` is derived from) keep their stale values
+    result = await db.execute(
+        select(Task)
+        .where(Task.id == task_id, Task.is_deleted.is_(False))
+        .options(*_TASK_OPTS)
+        .execution_options(populate_existing=True)
+    )
     task = result.scalar_one_or_none()
     if task is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")

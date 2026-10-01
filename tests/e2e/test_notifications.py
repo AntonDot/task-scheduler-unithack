@@ -376,7 +376,7 @@ class TestAutomationNotifications:
                 lambda items: any(
                     n.get("type") == "task_assigned"
                     and n.get("task_id") == task_id
-                    and "automation" in n.get("title", "").lower()
+                    and n.get("action_key") == "automation_triggered"
                     for n in items
                 ),
                 timeout=10,
@@ -492,7 +492,7 @@ class TestAutomationNotifications:
                 n
                 for n in after_resp.json()
                 if n.get("task_id") == task_id
-                and "automation" in n.get("title", "").lower()
+                and n.get("action_key") == "automation_triggered"
             ]
             assert len(automation_notifs) == 0, (
                 "Inactive automation must not fire notifications"
@@ -535,12 +535,13 @@ class TestAutomationNotifications:
         actions = [e["action"] for e in audit_resp.json()]
         assert "automation_triggered" in actions
 
-    def test_internal_automation_event_rejects_bad_token(self, client, onegin_project):
+    def test_internal_automation_event_rejects_bad_token(self, client, owner_headers, onegin_project):
         pid = onegin_project["id"]
+        # Regular task creation needs a user JWT; the service token is only for internal endpoints
         task_resp = client.post(
             f"{CORE_API_URL}/api/v1/projects/{pid}/tasks",
             json={"title": "Token check", "urgency": "LOW"},
-            headers={"Authorization": f"Bearer {SERVICE_TOKEN}"},
+            headers=owner_headers,
         )
         task_id = task_resp.json()["id"]
 

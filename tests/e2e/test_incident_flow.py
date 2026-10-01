@@ -75,7 +75,8 @@ class TestIncidentWebhookE2E:
 
         task = _wait_for_task(client, bereg_project["id"], marker, owner_headers)
         assert task is not None, "Non-critical incident task not created"
-        assert task["status"] == "AI_DRAFT"
+        # Drafts have no separate status any more: they land in the first column (Backlog)
+        assert task["status"] == "TODO"
 
     def test_idempotency_prevents_duplicate(self, client, live_services):
         if not live_services.get("ml"):
@@ -139,7 +140,7 @@ class TestDraftTextWebhookE2E:
 
         task = _wait_for_task(client, onegin_project["id"], marker, owner_headers)
         assert task is not None, "Draft text task not created"
-        assert task["status"] == "AI_DRAFT"
+        assert task["status"] == "TODO"
 
 
 @pytest.mark.e2e

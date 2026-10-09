@@ -1,0 +1,52 @@
+# mock-review-board: emulator of an external review site for the demo. Gets no app
+# config — to the app it is a third-party service reachable by URL.
+apiVersion: v1
+kind: Service
+metadata:
+  name: mock-review-board
+  namespace: task-scheduler
+  labels:
+    app: mock-review-board
+spec:
+  selector:
+    app: mock-review-board
+  ports:
+    - name: http
+      port: 8002
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mock-review-board
+  namespace: task-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mock-review-board
+  template:
+    metadata:
+      labels:
+        app: mock-review-board
+    spec:
+      containers:
+        - name: mock-review-board
+          image: task-scheduler/mock-review-board:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8002
+          env:
+            - name: PORT
+              value: "8002"
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 20m, memory: 64Mi }
+            limits: { memory: 192Mi }

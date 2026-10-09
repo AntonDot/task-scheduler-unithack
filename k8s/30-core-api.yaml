@@ -1,0 +1,76 @@
+# core-api: the main backend (REST, RBAC, WebSocket, notifications). Stateless:
+# files go to S3, WebSocket events between replicas go through PostgreSQL LISTEN/NOTIFY,
+# so it scales with `kubectl scale deployment/core-api --replicas=N`.
+apiVersion: v1
+kind: Service
+metadata:
+  name: core-api
+  namespace: task-scheduler
+  labels:
+    app: core-api
+spec:
+  selector:
+    app: core-api
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-api
+  namespace: task-scheduler
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: core-api
+  strategy:
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app: core-api
+    spec:
+      terminationGracePeriodSeconds: 30
+      initContainers:
+        # Do not take traffic on an old schema: wait until the migrate Job brought the
+        # database to the Alembic head of this image
+        - name: wait-for-migrations
+          image: task-scheduler/core-api:dev
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - until alembic current 2>/dev/null | grep -q '(head)'; do echo "waiting for migrations"; sleep 3; done
+          envFrom:
+            - configMapRef: { name: app-config }
+            - secretRef: { name: app-secrets }
+      containers:
+        - name: core-api
+          image: task-scheduler/core-api:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+          env:
+            - name: PORT
+              value: "8000"
+          envFrom:
+            - configMapRef: { name: app-config }
+            - secretRef: { name: app-secrets }
+          # Readiness checks the database: a replica that lost it leaves the Service
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { memory: 512Mi }

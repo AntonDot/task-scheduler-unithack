@@ -1,0 +1,55 @@
+# ml-worker: LLM parsing of reviews and the incident webhook. Called by core-api
+# (AI drafts), by review-scraper and automation-worker; creates tasks via core-api.
+apiVersion: v1
+kind: Service
+metadata:
+  name: ml-worker
+  namespace: task-scheduler
+  labels:
+    app: ml-worker
+spec:
+  selector:
+    app: ml-worker
+  ports:
+    - name: http
+      port: 8001
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ml-worker
+  namespace: task-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ml-worker
+  template:
+    metadata:
+      labels:
+        app: ml-worker
+    spec:
+      containers:
+        - name: ml-worker
+          image: task-scheduler/ml-worker:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8001
+          env:
+            - name: PORT
+              value: "8001"
+          envFrom:
+            - configMapRef: { name: app-config }
+            - secretRef: { name: app-secrets }
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }

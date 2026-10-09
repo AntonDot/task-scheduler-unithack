@@ -1,0 +1,8 @@
+# Everything the app needs lives in one namespace: `kubectl delete ns task-scheduler`
+# removes the whole installation, data volumes included.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: task-scheduler
+  labels:
+    app.kubernetes.io/part-of: task-scheduler

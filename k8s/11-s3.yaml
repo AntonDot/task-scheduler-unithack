@@ -1,0 +1,74 @@
+# S3-compatible object storage for attachments (RustFS, a drop-in MinIO replacement).
+# core-api talks plain S3 API, so on a real cluster this StatefulSet is replaced by
+# a managed bucket and the CORE_S3_* variables.
+apiVersion: v1
+kind: Service
+metadata:
+  name: s3
+  namespace: task-scheduler
+  labels:
+    app: s3
+spec:
+  clusterIP: None
+  selector:
+    app: s3
+  ports:
+    - name: api
+      port: 9000
+    - name: console
+      port: 9001
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: s3
+  namespace: task-scheduler
+spec:
+  serviceName: s3
+  replicas: 1
+  selector:
+    matchLabels:
+      app: s3
+  template:
+    metadata:
+      labels:
+        app: s3
+    spec:
+      securityContext:
+        fsGroup: 10001 # the image runs as uid/gid 10001 and must own /data
+      containers:
+        - name: rustfs
+          image: rustfs/rustfs:1.0.0
+          ports:
+            - name: api
+              containerPort: 9000
+            - name: console
+              containerPort: 9001
+          env:
+            - name: RUSTFS_ACCESS_KEY
+              valueFrom: { secretKeyRef: { name: app-secrets, key: S3_ROOT_USER } }
+            - name: RUSTFS_SECRET_KEY
+              valueFrom: { secretKeyRef: { name: app-secrets, key: S3_ROOT_PASSWORD } }
+            - name: RUSTFS_CONSOLE_ENABLE
+              value: "true"
+          readinessProbe:
+            httpGet: { path: /health, port: api }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: api }
+            initialDelaySeconds: 20
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 512Mi }
+          volumeMounts:
+            - name: data
+              mountPath: /data
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 1Gi

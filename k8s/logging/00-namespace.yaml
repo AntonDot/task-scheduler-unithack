@@ -1,0 +1,8 @@
+# Logging stack lives apart from the app: its lifecycle (and retention) is not tied to
+# releases of task-scheduler, and `kubectl delete ns task-scheduler` keeps the logs.
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: logging
+  labels:
+    app.kubernetes.io/part-of: logging

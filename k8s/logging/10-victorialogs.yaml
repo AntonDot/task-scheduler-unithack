@@ -1,0 +1,68 @@
+# VictoriaLogs single-node: log storage + LogsQL + built-in web UI (vmui).
+# One binary, one port: ingestion (/insert/...), queries (/select/logsql/...) and UI
+# (/select/vmui/) all go through 9428.
+#   kubectl -n logging port-forward svc/victorialogs 9428:9428
+#   open http://localhost:9428/select/vmui/
+apiVersion: v1
+kind: Service
+metadata:
+  name: victorialogs
+  namespace: logging
+  labels:
+    app: victorialogs
+spec:
+  selector:
+    app: victorialogs
+  ports:
+    - name: http
+      port: 9428
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: victorialogs
+  namespace: logging
+spec:
+  serviceName: victorialogs
+  replicas: 1
+  selector:
+    matchLabels:
+      app: victorialogs
+  template:
+    metadata:
+      labels:
+        app: victorialogs
+    spec:
+      containers:
+        - name: victorialogs
+          image: victoriametrics/victoria-logs:v1.53.0
+          args:
+            - -storageDataPath=/storage
+            - -retentionPeriod=7d
+            - -httpListenAddr=:9428
+            - -loggerFormat=json
+          ports:
+            - name: http
+              containerPort: 9428
+          readinessProbe:
+            httpGet: { path: /health, port: http }
+            periodSeconds: 5
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 512Mi }
+          volumeMounts:
+            - name: storage
+              mountPath: /storage
+  volumeClaimTemplates:
+    - metadata:
+        name: storage
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 2Gi

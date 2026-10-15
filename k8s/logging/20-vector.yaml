@@ -1,0 +1,167 @@
+# Vector as a DaemonSet: one agent per node tails the container log files the kubelet
+# writes to /var/log/pods, enriches every line with pod metadata from the Kubernetes API
+# and ships batches to VictoriaLogs through its Elasticsearch-compatible bulk endpoint.
+# The app knows nothing about it: it keeps writing JSON to stdout.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: vector
+  namespace: logging
+---
+# kubernetes_logs source watches pods/namespaces/nodes to attach metadata to log lines
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vector
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "namespaces", "nodes"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: vector
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: vector
+subjects:
+  - kind: ServiceAccount
+    name: vector
+    namespace: logging
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vector
+  namespace: logging
+data:
+  vector.yaml: |
+    # Read positions survive agent restarts (hostPath), so lines are neither lost nor resent
+    data_dir: /vector-data-dir
+
+    sources:
+      k8s:
+        type: kubernetes_logs
+        # Only the application; the logging stack's own logs stay out of the loop
+        extra_field_selector: metadata.namespace=task-scheduler
+        # Look for new pods' log files every 5s instead of the default 60s, so a fresh
+        # pod (a scaled replica, a CronJob run) shows up in VictoriaLogs right away
+        glob_minimum_cooldown_ms: 5000
+
+    transforms:
+      app:
+        type: remap
+        inputs: [k8s]
+        source: |
+          raw = string!(.message)
+          k8s = .kubernetes
+          stream = .stream
+          collected_at = .timestamp
+
+          parsed, err = parse_json(raw)
+          if err == null && is_object(parsed) {
+            # The app's own JSON line becomes the event: timestamp, level, message, service.name, ...
+            . = object!(parsed)
+          } else {
+            # Plain-text lines (nginx/RabbitMQ "[warn]", PostgreSQL "ERROR:"): keep the text,
+            # take the level from its tag; no tag -> INFO
+            tag = parse_regex(raw, r'(?i)\[(?P<lvl>emerg|alert|crit|critical|error|warn|warning|notice|info|debug)\]') ??
+              parse_regex(raw, r'\b(?P<lvl>PANIC|FATAL|ERROR|WARNING|LOG|INFO|DEBUG\d?):\s') ?? {}
+            lvl = downcase(string(tag.lvl) ?? "info")
+            level = if includes(["emerg", "alert", "crit", "critical", "error", "fatal", "panic"], lvl) {
+              "ERROR"
+            } else if lvl == "warn" || lvl == "warning" {
+              "WARNING"
+            } else if starts_with(lvl, "debug") {
+              "DEBUG"
+            } else {
+              "INFO"
+            }
+            . = {"message": raw, "level": level}
+          }
+
+          if !exists(.timestamp) { .timestamp = collected_at }
+          if !exists(."service.name") { ."service.name" = k8s.container_name }
+          ."k8s.namespace" = k8s.pod_namespace
+          ."k8s.pod" = k8s.pod_name
+          ."k8s.container" = k8s.container_name
+          ."k8s.node" = k8s.pod_node_name
+          .stream = stream
+
+    sinks:
+      victorialogs:
+        type: elasticsearch
+        inputs: [app]
+        endpoints: [http://victorialogs.logging.svc.cluster.local:9428/insert/elasticsearch/]
+        mode: bulk
+        api_version: v8
+        compression: gzip
+        healthcheck:
+          enabled: false
+        # How VictoriaLogs maps the fields: message -> _msg, timestamp -> _time;
+        # a log stream = one container of one pod of one service
+        query:
+          _msg_field: message
+          _time_field: timestamp
+          _stream_fields: k8s.namespace,service.name,k8s.pod
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: vector
+  namespace: logging
+spec:
+  selector:
+    matchLabels:
+      app: vector
+  template:
+    metadata:
+      labels:
+        app: vector
+    spec:
+      serviceAccountName: vector
+      containers:
+        - name: vector
+          image: timberio/vector:0.58.0-alpine
+          args: ["--config", "/etc/vector/vector.yaml"]
+          env:
+            # kubernetes_logs reads only the pods of its own node
+            - name: VECTOR_SELF_NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }
+            - name: VECTOR_SELF_POD_NAME
+              valueFrom: { fieldRef: { fieldPath: metadata.name } }
+            - name: VECTOR_SELF_POD_NAMESPACE
+              valueFrom: { fieldRef: { fieldPath: metadata.namespace } }
+          resources:
+            requests: { cpu: 50m, memory: 64Mi }
+            limits: { memory: 256Mi }
+          volumeMounts:
+            - name: config
+              mountPath: /etc/vector
+              readOnly: true
+            - name: data
+              mountPath: /vector-data-dir
+            # /var/log/pods/*/*.log are symlinks into the Docker runtime's directory,
+            # both have to be visible inside the container
+            - name: var-log
+              mountPath: /var/log
+              readOnly: true
+            - name: docker-containers
+              mountPath: /var/lib/docker/containers
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: vector
+        - name: data
+          hostPath:
+            path: /var/lib/vector
+            type: DirectoryOrCreate
+        - name: var-log
+          hostPath:
+            path: /var/log
+        - name: docker-containers
+          hostPath:
+            path: /var/lib/docker/containers

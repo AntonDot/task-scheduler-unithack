@@ -11,6 +11,7 @@ import asyncio
 import contextlib
 import json
 import logging
+import os
 import signal
 import sys
 from datetime import UTC, datetime
@@ -31,19 +32,26 @@ class Settings(BaseSettings):
     model_config = {"env_prefix": "SCRAPER_", "extra": "ignore"}
 
 
+# Release id baked into the image (Dockerfile ARG/ENV APP_VERSION)
+APP_VERSION = os.environ.get("APP_VERSION", "dev")
+
+
 class JsonFormatter(logging.Formatter):
     """One JSON object per line to stdout — the environment collects the stream."""
 
     def format(self, record: logging.LogRecord) -> str:
+        # Field names follow the common log schema (timestamp, level, message, service.name),
+        # flat dotted keys so a log store indexes them as is
         entry = {
-            "ts": datetime.fromtimestamp(record.created, UTC).isoformat(timespec="milliseconds"),
+            "timestamp": datetime.fromtimestamp(record.created, UTC).isoformat(timespec="milliseconds"),
             "level": record.levelname,
-            "service": "review-scraper",
-            "logger": record.name,
             "message": record.getMessage(),
+            "service.name": "review-scraper",
+            "service.version": APP_VERSION,
+            "logger": record.name,
         }
         if record.exc_info:
-            entry["exc_info"] = self.formatException(record.exc_info)
+            entry["error.stack_trace"] = self.formatException(record.exc_info)
         return json.dumps(entry, ensure_ascii=False)
 
 

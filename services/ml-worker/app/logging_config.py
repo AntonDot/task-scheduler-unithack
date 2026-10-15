@@ -7,21 +7,34 @@ collector can parse it without regexps.
 
 import json
 import logging
+import os
 import sys
 from datetime import UTC, datetime
+
+# Release id baked into the image (Dockerfile ARG/ENV APP_VERSION)
+APP_VERSION = os.environ.get("APP_VERSION", "dev")
 
 
 class JsonFormatter(logging.Formatter):
     def format(self, record: logging.LogRecord) -> str:
+        # Field names follow the common log schema (timestamp, level, message, service.name),
+        # flat dotted keys so a log store indexes them as is
         entry = {
-            "ts": datetime.fromtimestamp(record.created, UTC).isoformat(timespec="milliseconds"),
+            "timestamp": datetime.fromtimestamp(record.created, UTC).isoformat(timespec="milliseconds"),
             "level": record.levelname,
-            "service": "ml-worker",
-            "logger": record.name,
             "message": record.getMessage(),
+            "service.name": "ml-worker",
+            "service.version": APP_VERSION,
+            "logger": record.name,
         }
+        # uvicorn access records carry the request as args: (client, method, path, http_version, status)
+        if record.name == "uvicorn.access" and isinstance(record.args, tuple) and len(record.args) == 5:
+            client, method, path, _, status = record.args
+            entry.update(
+                {"http.method": method, "url.path": path, "http.status_code": status, "client.address": client}
+            )
         if record.exc_info:
-            entry["exc_info"] = self.formatException(record.exc_info)
+            entry["error.stack_trace"] = self.formatException(record.exc_info)
         return json.dumps(entry, ensure_ascii=False)
 
 

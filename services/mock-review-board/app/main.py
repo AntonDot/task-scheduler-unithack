@@ -1,3 +1,4 @@
+import os
 import random
 import uuid
 from datetime import UTC, datetime
@@ -6,6 +7,11 @@ from pathlib import Path
 from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
+
+from app.logging_config import configure_logging
+
+# An emulator of a third-party site still logs like the rest of the stack: JSON to stdout
+configure_logging(os.environ.get("LOG_LEVEL", "INFO"))
 
 app = FastAPI(title="Mock Review Board", version="0.1.0")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))

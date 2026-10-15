@@ -1,7 +1,27 @@
-# Rendered by the nginx image at container start (envsubst): PORT, CORE_API_URL and
-# NGINX_RESOLVER come from the environment, nginx's own variables stay as is.
+# Rendered by the nginx image at container start (envsubst): PORT, CORE_API_URL,
+# NGINX_RESOLVER and APP_VERSION come from the environment, nginx's own variables stay as is.
+
+# Access log as one JSON object per line in the same schema as the Python services
+# (timestamp, level, message, service.name). Level follows the status code;
+# http.request_time is in seconds, numeric — a log store can take quantiles of it.
+map $status $log_level {
+    ~^5     ERROR;
+    ~^4     WARNING;
+    default INFO;
+}
+
+log_format json escape=json
+    '{"timestamp":"$time_iso8601","level":"$log_level",'
+    '"message":"$request_method $request_uri $status",'
+    '"service.name":"web","service.version":"${APP_VERSION}","logger":"nginx.access",'
+    '"http.method":"$request_method","url.path":"$request_uri","http.status_code":$status,'
+    '"http.request_time":$request_time,"http.upstream_time":"$upstream_response_time",'
+    '"http.response_bytes":$body_bytes_sent,"client.address":"$remote_addr",'
+    '"user_agent":"$http_user_agent"}';
+
 server {
     listen ${PORT};
+    access_log /dev/stdout json;
 
     # Resolve the backend name per request (TTL 10s), not once at start: a recreated or
     # scaled core-api gets new addresses and nginx must follow them.

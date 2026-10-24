@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     use_mock_llm: bool = True
     webhook_api_key: str
     log_level: str = "INFO"
+    # Port of the separate /metrics listener (pulled by vmagent); 0 turns it off, e.g. in tests
+    metrics_port: int = 0
 
     model_config = {"env_prefix": "ML_", "extra": "ignore"}
 

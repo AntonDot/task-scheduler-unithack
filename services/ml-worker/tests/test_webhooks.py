@@ -306,3 +306,22 @@ class TestMockLLM:
         assert result.title
         assert result.description
         assert result.urgency in ("LOW", "MEDIUM", "HIGH", "URGENT")
+
+
+class TestIncidentMetrics:
+    async def test_incident_outcomes_are_counted(self, client, _event_processed):
+        from prometheus_client import REGISTRY
+
+        def value(result: str) -> float:
+            return REGISTRY.get_sample_value("taskscheduler_incidents_total", {"result": result}) or 0.0
+
+        created, duplicate = value("created"), value("duplicate")
+        payload = {"event_id": "m1", "source": "test", "text": "не работает оплата", "project_slug": "slug"}
+        with patch("app.services.incident_service.core_api.create_task", new_callable=AsyncMock) as mock_create:
+            mock_create.return_value = {"id": 1}
+            await client.post("/webhook/incident", json=payload, headers=_headers())
+        _event_processed.return_value = True
+        await client.post("/webhook/incident", json=payload, headers=_headers())
+
+        assert value("created") == created + 1
+        assert value("duplicate") == duplicate + 1

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Puts realistic traffic through the app so there is something to query in VictoriaLogs:
-#   1. normal work: logins, board reads, task creation, column moves (INFO, 2xx)
+#   1. normal work: logins, board reads, task creation, column moves, comments (INFO, 2xx)
 #   2. client mistakes: unknown e-mail, bad token, missing task (WARNING, 4xx)
 #   3. an incident: ml-worker scaled to 0 for ~2 minutes — review-scraper runs fail
 #      and log ERROR, then ml-worker comes back
@@ -40,6 +40,8 @@ for round in $(seq 1 15); do
   curl -s -o /dev/null -X PATCH -H "Authorization: Bearer $OWNER" -H 'content-type: application/json' \
     -d "{\"column_id\":$column}" "$API/tasks/$task_id/column"
   curl -s -o /dev/null -H "Authorization: Bearer $OWNER" "$API/tasks/$task_id/audit"
+  curl -s -o /dev/null -H "Authorization: Bearer $ASSIGNEE" -H 'content-type: application/json' \
+    -d "{\"text\":\"Комментарий к задаче $round\"}" "$API/tasks/$task_id/comments"
 done
 
 echo "== client errors (4xx)"

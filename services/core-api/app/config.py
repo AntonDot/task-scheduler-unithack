@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     # PostgreSQL LISTEN/NOTIFY channel that fans WebSocket events out to every core-api replica
     ws_channel: str = "ws_events"
     log_level: str = "INFO"
+    # Port of the separate /metrics listener (pulled by vmagent); 0 turns it off, e.g. in tests
+    metrics_port: int = 0
     # VAPID keys for Web Push — generate with:
     # python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.public_key, v.private_key)"
     vapid_private_key: str = ""

@@ -1,0 +1,22 @@
+# Helm values for victoria-metrics-single (release `vm-single`, namespace `monitoring`):
+# the time series database. It stores what vmagent writes and answers PromQL/MetricsQL
+# queries on :8428 (service vm-single-victoria-metrics-single-server).
+server:
+  # Same image as on Docker Hub, pulled from quay.io: Docker Hub's CDN was unreachable here
+  image:
+    registry: quay.io
+  retentionPeriod: 14d
+  # Scraping is vmagent's job (vm-agent-values.yaml); VictoriaMetrics only stores
+  scrape:
+    enabled: false
+  # ...and is itself scraped by vmagent through the same pod annotations as the app
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8428"
+    prometheus.io/path: "/metrics"
+  persistentVolume:
+    enabled: true
+    size: 4Gi
+  resources:
+    requests: { cpu: 50m, memory: 128Mi }
+    limits: { memory: 512Mi }

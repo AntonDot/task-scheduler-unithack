@@ -30,6 +30,11 @@ spec:
     metadata:
       labels:
         app: postgres
+      annotations:
+        # Scraped is the exporter sidecar: containers of a pod share its network namespace
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9187"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: postgres
@@ -62,6 +67,26 @@ spec:
           volumeMounts:
             - name: data
               mountPath: /var/lib/postgresql/data
+        # postgres-exporter: a ready-made exporter that connects to PostgreSQL over localhost
+        # and turns pg_stat_* views into metrics (connections, transactions, locks, db size)
+        - name: postgres-exporter
+          image: quay.io/prometheuscommunity/postgres-exporter:v0.20.1
+          ports:
+            - name: metrics
+              containerPort: 9187
+          env:
+            - name: DATA_SOURCE_URI
+              value: localhost:5432/taskscheduler?sslmode=disable
+            - name: DATA_SOURCE_USER
+              valueFrom: { secretKeyRef: { name: app-secrets, key: POSTGRES_USER } }
+            - name: DATA_SOURCE_PASS
+              valueFrom: { secretKeyRef: { name: app-secrets, key: POSTGRES_PASSWORD } }
+          readinessProbe:
+            httpGet: { path: /metrics, port: metrics }
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 10m, memory: 32Mi }
+            limits: { memory: 64Mi }
   volumeClaimTemplates:
     - metadata:
         name: data

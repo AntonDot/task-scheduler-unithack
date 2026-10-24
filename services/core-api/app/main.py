@@ -3,6 +3,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from prometheus_fastapi_instrumentator import Instrumentator
 from sqlalchemy import text
 
 from app.api.v1.ai import router as ai_router
@@ -20,6 +21,7 @@ from app.api.v1.webhooks import router as webhooks_router
 from app.config import settings
 from app.database import engine
 from app.logging_config import configure_logging
+from app.metrics import WEBSOCKET_CONNECTIONS, start_metrics_server
 from app.rabbitmq import rabbitmq_manager
 from app.websocket_manager import ws_manager
 
@@ -30,6 +32,8 @@ configure_logging(settings.log_level)
 async def lifespan(app: FastAPI):
     # Startup is cheap: migrations and seeding are one-off admin processes (`migrate` service),
     # here we only open connections to backing services.
+    if settings.metrics_port:
+        start_metrics_server(settings.metrics_port)
     await ws_manager.start(settings.database_url, settings.ws_channel)
     await rabbitmq_manager.start()
     yield
@@ -42,6 +46,10 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Victory Group Task Scheduler", version="0.1.0", lifespan=lifespan)
+
+# Framework metrics: request count and latency per route template (/api/v1/tasks/{task_id}),
+# served with the rest of the registry on the metrics port. Probes are not user traffic.
+Instrumentator(excluded_handlers=["/health", "/ready"]).instrument(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -85,8 +93,11 @@ async def ready():
 @app.websocket("/ws/{project_id}")
 async def websocket_endpoint(websocket: WebSocket, project_id: int):
     await ws_manager.connect(project_id, websocket)
+    WEBSOCKET_CONNECTIONS.inc()
     try:
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
         ws_manager.disconnect(project_id, websocket)
+    finally:
+        WEBSOCKET_CONNECTIONS.dec()

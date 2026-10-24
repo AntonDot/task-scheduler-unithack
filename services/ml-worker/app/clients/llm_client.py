@@ -6,6 +6,7 @@ import anthropic
 import httpx
 
 from app.config import settings
+from app.metrics import LLM_REQUEST_DURATION
 from app.schemas.webhook import ParsedTask
 
 logger = logging.getLogger(__name__)
@@ -124,6 +125,11 @@ async def _call_anthropic(text: str) -> str:
 
 
 async def parse_task(text: str) -> ParsedTask:
+    with LLM_REQUEST_DURATION.labels(mode="mock" if settings.use_mock_llm else "llm").time():
+        return await _parse_task(text)
+
+
+async def _parse_task(text: str) -> ParsedTask:
     if settings.use_mock_llm:
         logger.info("Using mock LLM — returning structured stub ParsedTask")
         words = text.split()

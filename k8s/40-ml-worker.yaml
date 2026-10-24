@@ -29,6 +29,11 @@ spec:
     metadata:
       labels:
         app: ml-worker
+      annotations:
+        # vmagent finds the pod through Kubernetes service discovery by these annotations
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: ml-worker
@@ -37,6 +42,8 @@ spec:
           ports:
             - name: http
               containerPort: 8001
+            - name: metrics
+              containerPort: 9100
           env:
             - name: PORT
               value: "8001"

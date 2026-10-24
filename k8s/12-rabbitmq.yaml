@@ -33,6 +33,11 @@ spec:
     metadata:
       labels:
         app: rabbitmq
+      annotations:
+        # Built-in exporter: the rabbitmq_prometheus plugin serves /metrics on 15692
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "15692"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: rabbitmq
@@ -42,6 +47,8 @@ spec:
               containerPort: 5672
             - name: management
               containerPort: 15672
+            - name: metrics
+              containerPort: 15692
           env:
             - name: RABBITMQ_DEFAULT_USER
               valueFrom: { secretKeyRef: { name: app-secrets, key: RABBITMQ_USER } }

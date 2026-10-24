@@ -10,6 +10,7 @@ from datetime import UTC, datetime
 
 import aio_pika
 import httpx
+from prometheus_client import Counter, Histogram, start_http_server
 from pydantic_settings import BaseSettings
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -55,6 +56,8 @@ class Settings(BaseSettings):
     ml_worker_url: str = ""
     service_token: str
     log_level: str = "INFO"
+    # Port of the /metrics listener (pulled by vmagent); 0 turns it off, e.g. in tests
+    metrics_port: int = 0
 
     model_config = {"env_prefix": "AUTOMATION_", "extra": "ignore"}
 
@@ -89,6 +92,28 @@ logging.basicConfig(level=settings.log_level.upper(), handlers=[_handler])
 logger = logging.getLogger(__name__)
 
 engine = create_async_engine(settings.database_url)
+
+# Metrics: runtime ones (process_*, python_gc_*) come with prometheus_client; business ones below.
+# A worker has no HTTP API, so /metrics is also the only way to see from outside that it is alive.
+AUTOMATION_EVENTS = Counter(
+    "taskscheduler_automation_events",
+    "Task events consumed from RabbitMQ by event type and outcome: processed, failed",
+    ["event_type", "result"],
+)
+AUTOMATIONS_TRIGGERED = Counter(
+    "taskscheduler_automations_triggered",
+    "Automations whose trigger and conditions matched and whose actions ran",
+    ["trigger"],
+)
+# Known event types and outcomes start at 0, so the series exist before the first event
+for _event_type in ("task_created", "task_updated", "column_changed"):
+    for _result in ("processed", "failed"):
+        AUTOMATION_EVENTS.labels(event_type=_event_type, result=_result)
+    AUTOMATIONS_TRIGGERED.labels(trigger=_event_type)
+AUTOMATION_EVENT_DURATION = Histogram(
+    "taskscheduler_automation_event_duration_seconds",
+    "Time to process one task event: load automations, check conditions, run actions",
+)
 SessionLocal = async_sessionmaker(bind=engine, expire_on_commit=False)
 
 
@@ -576,6 +601,7 @@ async def process_event(event: dict):
                     {"aid": auto_id},
                 )
                 await db.commit()
+                AUTOMATIONS_TRIGGERED.labels(trigger=event_type).inc()
 
 
 async def consume():
@@ -591,6 +617,9 @@ async def consume():
     for sig in (signal.SIGTERM, signal.SIGINT):
         loop.add_signal_handler(sig, stop.set)
 
+    if settings.metrics_port:
+        start_http_server(settings.metrics_port)
+
     in_flight: set[asyncio.Task] = set()
     # aio-pika runs each callback as its own task; events of one task must still be
     # applied in queue order, so processing is serialized within a worker process.
@@ -602,10 +631,15 @@ async def consume():
         in_flight.add(task)
         try:
             async with serial, message.process():
+                event_type = "unknown"
                 try:
                     event = json.loads(message.body.decode("utf-8"))
-                    await process_event(event)
+                    event_type = event.get("type") or "unknown"
+                    with AUTOMATION_EVENT_DURATION.time():
+                        await process_event(event)
+                    AUTOMATION_EVENTS.labels(event_type=event_type, result="processed").inc()
                 except Exception as e:
+                    AUTOMATION_EVENTS.labels(event_type=event_type, result="failed").inc()
                     logger.error("Error processing event: %s", e)
         finally:
             in_flight.discard(task)

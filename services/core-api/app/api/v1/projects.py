@@ -13,6 +13,7 @@ from sqlalchemy.orm import selectinload
 from app.database import get_db
 from app.dependencies import get_current_user, require_project_access, verify_service_token
 from app.domain import ProjectRole
+from app.metrics import EXTERNAL_EVENTS, TASKS_CREATED
 from app.models import BoardColumn, ExternalEvent, Project, Tag, Task, User, UserProject
 from app.schemas import ProjectMemberRead, ProjectWithRole, TagCreate, TagRead, TaskCreate, TaskRead, UserRead
 from app.schemas.analytics import AssigneeLoad, ProjectAnalytics
@@ -82,6 +83,7 @@ async def create_task_by_project_slug(
 ):
     # Dedupe of external events lives in the database, not in the memory of the caller
     if idempotency_key and await db.get(ExternalEvent, idempotency_key) is not None:
+        EXTERNAL_EVENTS.labels(result="duplicate").inc()
         raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="Event already processed")
 
     project_result = await db.execute(select(Project).where(Project.slug == project_slug))
@@ -111,6 +113,7 @@ async def create_task_by_project_slug(
             await db.flush()
         except IntegrityError as exc:
             await db.rollback()
+            EXTERNAL_EVENTS.labels(result="duplicate").inc()
             raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail="Event already processed") from exc
 
     task = await task_service.create_task(db, project.id, owner_link.user_id, body)
@@ -118,6 +121,9 @@ async def create_task_by_project_slug(
         event.task_id = task.id
     data = TaskRead.model_validate(task).model_dump(mode="json")
     await db.commit()
+    TASKS_CREATED.labels(source="external").inc()
+    if event is not None:
+        EXTERNAL_EVENTS.labels(result="accepted").inc()
     await ws_manager.broadcast(project.id, "task_created", data)
     return data
 

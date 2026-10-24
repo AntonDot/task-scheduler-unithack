@@ -6,6 +6,7 @@ from sqlalchemy.orm import joinedload, selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.metrics import COMMENTS_CREATED
 from app.models import Comment, Task, User, UserProject
 from app.schemas.comment import CommentCreate, CommentRead
 from app.services.audit_service import log_action
@@ -76,6 +77,7 @@ async def add_comment(
     await log_action(db, task_id, current_user.id, "comment_added")
     data = CommentRead.model_validate(comment).model_dump(mode="json")
     await db.commit()
+    COMMENTS_CREATED.inc()
     await ws_manager.broadcast(task.project_id, "comment_added", data)
 
     # --- Push notifications ---

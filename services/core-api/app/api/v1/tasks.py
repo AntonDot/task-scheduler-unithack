@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user, require_project_access
-from app.models import Task, User, UserProject
+from app.metrics import TASK_MOVES, TASKS_COMPLETED, TASKS_CREATED
+from app.models import BoardColumn, Task, User, UserProject
 from app.schemas import ColumnUpdate, TaskCreate, TaskRead, TaskUpdate
 from app.services import task_service
 from app.websocket_manager import ws_manager
@@ -71,6 +72,7 @@ async def create_task(
     task = await task_service.create_task(db, project_id, current_user.id, body)
     data = TaskRead.model_validate(task).model_dump(mode="json")
     await db.commit()
+    TASKS_CREATED.labels(source="user").inc()
     await ws_manager.broadcast(project_id, "task_created", data)
     return data
 
@@ -100,7 +102,17 @@ async def change_column(
     _, access = await _get_task_access(task_id, current_user, db)
     task = await task_service.change_column(db, task_id, body.column_id, access)
     data = TaskRead.model_validate(task).model_dump(mode="json")
+    # "Done" is the last column of the board, whatever the project named it
+    last_column_id = await db.scalar(
+        select(BoardColumn.id)
+        .where(BoardColumn.project_id == task.project_id)
+        .order_by(BoardColumn.order.desc(), BoardColumn.id.desc())
+        .limit(1)
+    )
     await db.commit()
+    TASK_MOVES.labels(project_id=str(task.project_id)).inc()
+    if task.column_id == last_column_id:
+        TASKS_COMPLETED.labels(project_id=str(task.project_id)).inc()
     await ws_manager.broadcast(task.project_id, "task_column_changed", data)
     return data
 
@@ -249,6 +261,7 @@ async def internal_create_task_from_automation(
 
     task = await task_service.create_task(db, body.project_id, creator_id, task_in)
     await db.commit()
+    TASKS_CREATED.labels(source="automation").inc()
     await ws_manager.broadcast(body.project_id, "task_created", {"task_id": task.id})
     return task
 

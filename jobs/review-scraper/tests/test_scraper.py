@@ -208,3 +208,41 @@ class TestStatelessness:
         import scraper
 
         assert not hasattr(scraper, "STATE_FILE")
+
+
+class TestPushMetrics:
+    @respx.mock
+    async def test_run_pushes_last_run_gauges_to_vmagent(self):
+        import scraper
+
+        push_url = "http://vmagent.test/api/v1/import/prometheus"
+        respx.get(f"{REVIEW_BOARD_URL}/reviews").mock(return_value=httpx.Response(200, text=MOCK_HTML))
+        respx.post(f"{ML_WORKER_URL}/webhook/incident").mock(
+            side_effect=[httpx.Response(200, json={"status": "created"}), httpx.Response(502)]
+        )
+        push_route = respx.post(push_url).mock(return_value=httpx.Response(204))
+
+        with patch.object(scraper.settings, "metrics_push_url", push_url):
+            await scraper.scrape_cycle()
+
+        request = push_route.calls.last.request
+        body = request.content.decode()
+        assert request.url.params["extra_label"] == "job=review-scraper"
+        assert "taskscheduler_review_scraper_last_run_negative_reviews 2.0" in body
+        assert "taskscheduler_review_scraper_last_run_created_tasks 1.0" in body
+        assert "taskscheduler_review_scraper_last_run_failures 1.0" in body
+        assert "taskscheduler_review_scraper_last_run_success 0.0" in body
+
+    @respx.mock
+    async def test_failed_push_does_not_fail_the_run(self):
+        import scraper
+
+        push_url = "http://vmagent.test/api/v1/import/prometheus"
+        respx.get(f"{REVIEW_BOARD_URL}/reviews").mock(return_value=httpx.Response(200, text=MOCK_HTML))
+        respx.post(f"{ML_WORKER_URL}/webhook/incident").mock(
+            return_value=httpx.Response(200, json={"status": "created"})
+        )
+        respx.post(push_url).mock(return_value=httpx.Response(503))
+
+        with patch.object(scraper.settings, "metrics_push_url", push_url):
+            assert await scraper.scrape_cycle() == 2

@@ -10,6 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.database import get_db
 from app.dependencies import get_current_user
+from app.metrics import LOGINS
 from app.models import User
 from app.schemas.user import UserRead
 
@@ -52,12 +53,15 @@ async def create_token(body: TokenRequest, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.email == body.email))
     user = result.scalar_one_or_none()
     if user is None:
+        LOGINS.labels(result="unknown_user").inc()
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     if not settings.dev_login:
         if not body.password:
+            LOGINS.labels(result="bad_password").inc()
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Password required")
         if not user.password_hash or not pwd_context.verify(body.password, user.password_hash):
+            LOGINS.labels(result="bad_password").inc()
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid password")
 
     payload = {
@@ -66,6 +70,7 @@ async def create_token(body: TokenRequest, db: AsyncSession = Depends(get_db)):
         "exp": datetime.now(tz=UTC) + timedelta(minutes=settings.jwt_expire_minutes),
     }
     token = jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    LOGINS.labels(result="success").inc()
     return TokenResponse(access_token=token)
 
 

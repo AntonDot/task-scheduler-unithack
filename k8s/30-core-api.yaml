@@ -34,6 +34,11 @@ spec:
     metadata:
       labels:
         app: core-api
+      annotations:
+        # vmagent finds the pod through Kubernetes service discovery by these annotations
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+        prometheus.io/path: "/metrics"
     spec:
       terminationGracePeriodSeconds: 30
       initContainers:
@@ -56,6 +61,8 @@ spec:
           ports:
             - name: http
               containerPort: 8000
+            - name: metrics
+              containerPort: 9100
           env:
             - name: PORT
               value: "8000"

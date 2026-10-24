@@ -18,22 +18,28 @@ data:
   CORE_S3_BUCKET: attachments
   CORE_ML_WORKER_URL: http://ml-worker:8001
   CORE_LOG_LEVEL: INFO
+  # /metrics on a separate port: no auth, so it is left out of the Service and of nginx
+  CORE_METRICS_PORT: "9100"
   CORE_VAPID_PUBLIC_KEY: ""
   CORE_VAPID_CLAIMS_EMAIL: admin@example.com
 
   # === Automation Worker ===
   AUTOMATION_CORE_API_URL: http://core-api:8000
   AUTOMATION_ML_WORKER_URL: http://ml-worker:8001
+  AUTOMATION_METRICS_PORT: "9100"
 
   # === ML Worker ===
   ML_CORE_API_URL: http://core-api:8000
   ML_USE_MOCK_LLM: "true"
   ML_LLM_MODEL: claude-sonnet-4-20250514
   ML_LLM_BASE_URL: ""
+  ML_METRICS_PORT: "9100"
 
   # === Review Scraper ===
   SCRAPER_REVIEW_BOARD_URL: http://mock-review-board:8002
   SCRAPER_ML_WORKER_URL: http://ml-worker:8001
+  # CronJob pods are too short-lived to be scraped: push to vmagent after each run
+  SCRAPER_METRICS_PUSH_URL: http://vm-single-victoria-metrics-agent.monitoring.svc.cluster.local:8429/api/v1/import/prometheus
 ---
 # Dev values from .env.example. On a real cluster create the Secret out of band
 # (kubectl create secret generic app-secrets --from-env-file=...) instead of committing it.

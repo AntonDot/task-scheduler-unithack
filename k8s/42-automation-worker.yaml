@@ -1,5 +1,5 @@
 # automation-worker: consumes the RabbitMQ queue and runs automations, calling core-api
-# internal endpoints. No port and no Service — it only makes outgoing connections.
+# internal endpoints. No Service — the only port is /metrics, scraped from inside the cluster.
 # Replicas share the queue as competing consumers, so scaling it is safe.
 apiVersion: apps/v1
 kind: Deployment
@@ -15,6 +15,11 @@ spec:
     metadata:
       labels:
         app: automation-worker
+      annotations:
+        # vmagent finds the pod through Kubernetes service discovery by these annotations
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+        prometheus.io/path: "/metrics"
     spec:
       # On SIGTERM the worker stops consuming and lets in-flight events finish
       terminationGracePeriodSeconds: 30
@@ -30,6 +35,9 @@ spec:
         - name: automation-worker
           image: task-scheduler/automation-worker:dev
           imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9100
           envFrom:
             - configMapRef: { name: app-config }
             - secretRef: { name: app-secrets }

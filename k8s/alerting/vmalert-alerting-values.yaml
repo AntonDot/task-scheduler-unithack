@@ -1,0 +1,50 @@
+# Helm values layered over k8s/slo/vmalert-values.yaml (release `vmalert`, chart
+# victoria-metrics-alert 0.50.0): turns on Alertmanager in the same release and loads
+# the alert rules of homework #6 next to the SLO rules.
+#   helm upgrade vmalert ... -f k8s/slo/vmalert-values.yaml -f k8s/alerting/vmalert-alerting-values.yaml
+server:
+  extraArgs:
+    # Homework #5 had no Alertmanager; now alerts go to it (the chart sets -notifier.url)
+    notifier.blackhole: false
+    # Rules: SLO rules of the chart's ConfigMap + this homework's alerts.yaml
+    rule:
+      - /config/alert-rules.yaml
+      - /alerting-rules/*.yaml
+    # Re-read rule files when the ConfigMap changes, without a restart
+    configCheckInterval: 30s
+    # Link from the Telegram message / Alertmanager UI back to the alert in vmalert
+    external.url: http://localhost:8880
+
+  extraVolumes:
+    - name: alerting-rules
+      configMap:
+        name: vmalert-alerting-rules
+  extraVolumeMounts:
+    - name: alerting-rules
+      mountPath: /alerting-rules
+
+alertmanager:
+  enabled: true
+  # Same image as on Docker Hub (prom/alertmanager), pulled from quay.io
+  image:
+    registry: quay.io
+    repository: prometheus/alertmanager
+  # alertmanager.yaml + telegram.tmpl, created by install.sh (chat id substituted there)
+  configMap: alertmanager-config
+  baseURL: http://localhost:9093
+  extraVolumes:
+    - name: telegram
+      secret:
+        secretName: alertmanager-telegram
+  extraVolumeMounts:
+    - name: telegram
+      mountPath: /etc/alertmanager/telegram
+      readOnly: true
+  # Alertmanager's own metrics (alertmanager_notifications_total, ...), found by vmagent
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "9093"
+    prometheus.io/path: "/metrics"
+  resources:
+    requests: { cpu: 10m, memory: 32Mi }
+    limits: { memory: 128Mi }

@@ -235,3 +235,5 @@ Thumbs.db
 .claude/
 
 docs/
+# Telegram bot token for Alertmanager (k8s/alerting/telegram-secret.sh)
+k8s/alerting/telegram.env

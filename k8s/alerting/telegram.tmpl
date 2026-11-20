@@ -1,0 +1,26 @@
+{{/* Telegram message for one alert group (alertmanager.yaml → receivers.telegram), HTML.
+     A FIRING message lists only the alerts still firing; ones already resolved in the same
+     group are counted in one line (they get their own RESOLVED message). */}}
+{{ define "telegram.alert" -}}
+{{ if eq .Status "firing" }}▪️{{ else }}▫️{{ end }} {{ .Annotations.summary }}
+{{- with .Annotations.description }}
+{{ . }}{{ end }}
+{{- with .Labels.pod }}
+pod: <code>{{ . }}</code>{{ end }}
+since {{ .StartsAt.Format "15:04:05 MST" }}{{ if eq .Status "resolved" }}, resolved {{ .EndsAt.Format "15:04:05 MST" }}{{ end }}
+{{ end }}
+
+{{ define "telegram.message" -}}
+{{ if eq .Status "firing" }}🔥 <b>FIRING</b>{{ else }}✅ <b>RESOLVED</b>{{ end }} · <b>{{ .CommonLabels.alertname }}</b>
+{{- with .CommonLabels.severity }} · {{ . }}{{ end }}
+{{- with .CommonLabels.layer }} · {{ . }}{{ end }}
+{{ if eq .Status "firing" }}
+{{- range .Alerts.Firing }}
+{{ template "telegram.alert" . }}{{ end }}
+{{- with .Alerts.Resolved }}
+✅ уже восстановлено: {{ len . }}{{ end }}
+{{- else }}
+{{- range .Alerts.Resolved }}
+{{ template "telegram.alert" . }}{{ end }}
+{{- end }}
+{{- end }}

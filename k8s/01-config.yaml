@@ -20,9 +20,10 @@ data:
   CORE_LOG_LEVEL: INFO
   # /metrics on a separate port: no auth, so it is left out of the Service and of nginx
   CORE_METRICS_PORT: "9100"
-  # Fault injection for SLO drills, off. k8s/slo/fault.sh turns it on with `kubectl set env`
+  # Fault injection for SLO and alerting drills, off. k8s/slo/fault.sh turns it on with `kubectl set env`
   CORE_FAULT_ERROR_RATE: "0"
   CORE_FAULT_LATENCY_MS: "0"
+  CORE_FAULT_MEMORY_MB: "0"
   CORE_VAPID_PUBLIC_KEY: ""
   CORE_VAPID_CLAIMS_EMAIL: admin@example.com
 

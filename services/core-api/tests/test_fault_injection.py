@@ -3,6 +3,7 @@ import time
 import pytest
 from prometheus_client import REGISTRY
 
+from app import fault_injection
 from app.config import settings
 
 
@@ -54,3 +55,16 @@ class TestFaultInjection:
         )
         assert resp.status_code == 200
         assert time.monotonic() - started >= 0.2
+
+
+class TestMemoryBallast:
+    def test_off_by_default(self, monkeypatch):
+        monkeypatch.setattr(fault_injection, "_ballast", [])
+        fault_injection.allocate_memory_ballast()
+        assert fault_injection._ballast == []
+
+    def test_holds_requested_memory(self, monkeypatch):
+        monkeypatch.setattr(fault_injection, "_ballast", [])
+        monkeypatch.setattr(settings, "fault_memory_mb", 2)
+        fault_injection.allocate_memory_ballast()
+        assert sum(len(chunk) for chunk in fault_injection._ballast) == 2 * 1024 * 1024

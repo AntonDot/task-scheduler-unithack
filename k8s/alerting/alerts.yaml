@@ -1,0 +1,126 @@
+# vmalert rules for homework #6 (alerting). Loaded next to the SLO rules of homework #5
+# (k8s/slo/vmalert-values.yaml) from the ConfigMap `vmalert-alerting-rules` (install.sh).
+#
+# Labels: severity = critical (someone must act now) | warning (look within working hours);
+# layer = service | framework | runtime — which metrics the alert is built on.
+# Annotations go into the Telegram message (telegram.tmpl): HTML, so no angle brackets in text.
+groups:
+  # ── Service: business metrics of the app (taskscheduler_*) and its queue ──────────────
+  - name: service
+    interval: 30s
+    rules:
+      # Someone is guessing passwords: failed logins (unknown user or wrong password) arrive
+      # faster than people mistype. 0.2/s = 12 a minute over 5 minutes; a person who forgot
+      # the password makes a few attempts, not dozens.
+      - alert: LoginFailuresSpike
+        expr: sum(rate(taskscheduler_logins_total{result!="success"}[5m])) > 0.2
+        for: 2m
+        labels: { severity: warning, layer: service }
+        annotations:
+          summary: "Неудачных входов {{ $value | printf \"%.1f\" }} в секунду"
+          description: "Похоже на подбор пароля: неудачных попыток входа больше 12 в минуту уже 2 минуты. Проверьте логи core-api (taskscheduler_logins_total по result)."
+
+      # Automations stopped working: automation-worker takes events from RabbitMQ and fails
+      # to process them. Any failure is worth a look: rules are user-defined and rare.
+      - alert: AutomationEventsFailing
+        expr: sum(increase(taskscheduler_automation_events_total{result="failed"}[10m])) > 0
+        labels: { severity: warning, layer: service }
+        annotations:
+          summary: "Ошибок автоматизаций за 10 минут: {{ $value | printf \"%.0f\" }}"
+          description: "automation-worker не смог обработать события задач. Пользовательские правила не срабатывают."
+
+      # Events pile up in RabbitMQ: automation-worker is down or slower than the event flow.
+      # A few messages are normal; 50 ready for 5 minutes means automations lag behind.
+      - alert: AutomationQueueBacklog
+        expr: sum(rabbitmq_queue_messages_ready{namespace="task-scheduler"}) > 50
+        for: 5m
+        labels: { severity: warning, layer: service }
+        annotations:
+          summary: "В очереди RabbitMQ {{ $value | printf \"%.0f\" }} необработанных событий"
+          description: "automation-worker не успевает или не работает: автоматизации выполняются с задержкой."
+
+      # Incidents from negative reviews are lost: ml-worker answered the webhook with an error.
+      - alert: IncidentWebhookErrors
+        expr: sum(increase(taskscheduler_incidents_total{result="error"}[10m])) > 0
+        labels: { severity: warning, layer: service }
+        annotations:
+          summary: "Ошибок создания инцидентов за 10 минут: {{ $value | printf \"%.0f\" }}"
+          description: "Вебхуки с негативными отзывами завершаются ошибкой: задачи-инциденты не появляются на доске."
+
+  # ── Framework: FastAPI metrics from prometheus-fastapi-instrumentator ─────────────────
+  - name: framework
+    interval: 30s
+    rules:
+      # Share of 5xx per FastAPI service (core-api and ml-worker). 5 % for 2 minutes:
+      # single failures do not wake anyone, a broken dependency does within minutes.
+      # (core-api also has the SLO burn-rate alert of homework #5 — that one is about the
+      # error budget, this one covers every FastAPI app with a plain threshold.)
+      - alert: ApiHighErrorRate
+        expr: |
+          sum by (app) (rate(http_requests_total{namespace="task-scheduler", status="5xx"}[2m]))
+            / sum by (app) (rate(http_requests_total{namespace="task-scheduler"}[2m]))
+          > 0.05
+        for: 2m
+        labels: { severity: critical, layer: framework }
+        annotations:
+          summary: "{{ $labels.app }}: {{ $value | humanizePercentage }} ответов 5xx"
+          description: "Больше 5 % запросов к {{ $labels.app }} завершаются ошибкой сервера уже 2 минуты."
+
+      # Slow requests: more than 10 % of successful requests take longer than 0.5 s
+      # (a bucket boundary of http_request_duration_seconds) for 5 minutes.
+      - alert: ApiSlowRequests
+        expr: |
+          1 - (
+            sum by (app) (rate(http_request_duration_seconds_bucket{namespace="task-scheduler", status!="5xx", le="0.5"}[5m]))
+              / sum by (app) (rate(http_request_duration_seconds_count{namespace="task-scheduler", status!="5xx"}[5m]))
+          ) > 0.1
+        for: 5m
+        labels: { severity: warning, layer: framework }
+        annotations:
+          summary: "{{ $labels.app }}: {{ $value | humanizePercentage }} запросов дольше 0,5 с"
+          description: "Больше 10 % успешных запросов к {{ $labels.app }} медленнее 0,5 с уже 5 минут."
+
+  # ── Runtime: Python process metrics from prometheus-client (process_*, up) ────────────
+  - name: runtime
+    interval: 30s
+    rules:
+      # The process holds more than 75 % of its container memory limit (k8s/*.yaml):
+      # next comes OOMKilled. Fires early enough to look for a leak before the restart.
+      - alert: PythonProcessMemoryHigh
+        expr: |
+          process_resident_memory_bytes{namespace="task-scheduler", app="core-api"} > 0.75 * 512 * 1024 * 1024
+            or process_resident_memory_bytes{namespace="task-scheduler", app="ml-worker"} > 0.75 * 384 * 1024 * 1024
+            or process_resident_memory_bytes{namespace="task-scheduler", app="automation-worker"} > 0.75 * 256 * 1024 * 1024
+        for: 2m
+        labels: { severity: warning, layer: runtime }
+        annotations:
+          summary: "{{ $labels.app }}: процесс занимает {{ $value | humanize1024 }}B памяти"
+          description: "Под {{ $labels.pod }} использует больше 75 % лимита памяти контейнера. Возможна утечка, дальше OOMKilled."
+
+      # The process keeps restarting (crash loop): its start time changed twice in 15 minutes.
+      # The pod name stays the same across container restarts, so the series continues.
+      - alert: PythonProcessRestarting
+        expr: changes(process_start_time_seconds{namespace="task-scheduler"}[15m]) >= 2
+        labels: { severity: critical, layer: runtime }
+        annotations:
+          summary: "{{ $labels.app }}: процесс перезапускался {{ $value | printf \"%.0f\" }} раз за 15 минут"
+          description: "Под {{ $labels.pod }} падает и перезапускается (crash loop). Смотрите логи предыдущего запуска: kubectl logs --previous."
+
+      # The metrics endpoint does not answer: the process hangs or the pod is broken,
+      # while Kubernetes still keeps it Running. 2 minutes = 8 failed scrapes.
+      - alert: MetricsTargetDown
+        expr: up{namespace="task-scheduler"} == 0
+        for: 2m
+        labels: { severity: critical, layer: runtime }
+        annotations:
+          summary: "{{ $labels.app }}: /metrics не отвечает"
+          description: "vmagent не может опросить {{ $labels.pod }} ({{ $labels.instance }}) уже 2 минуты: процесс завис или упал."
+
+      # File descriptors run out: sockets or files leak, soon "Too many open files".
+      - alert: PythonProcessFdsExhausted
+        expr: process_open_fds{namespace="task-scheduler"} / process_max_fds{namespace="task-scheduler"} > 0.8
+        for: 5m
+        labels: { severity: warning, layer: runtime }
+        annotations:
+          summary: "{{ $labels.app }}: занято {{ $value | humanizePercentage }} файловых дескрипторов"
+          description: "Под {{ $labels.pod }} близок к лимиту открытых файлов и сокетов: вероятна утечка соединений."

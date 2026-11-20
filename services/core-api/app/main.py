@@ -20,7 +20,7 @@ from app.api.v1.tasks import router as tasks_router
 from app.api.v1.webhooks import router as webhooks_router
 from app.config import settings
 from app.database import engine
-from app.fault_injection import FaultInjectionMiddleware
+from app.fault_injection import FaultInjectionMiddleware, allocate_memory_ballast
 from app.logging_config import configure_logging
 from app.metrics import WEBSOCKET_CONNECTIONS, start_metrics_server
 from app.rabbitmq import rabbitmq_manager
@@ -35,6 +35,7 @@ async def lifespan(app: FastAPI):
     # here we only open connections to backing services.
     if settings.metrics_port:
         start_metrics_server(settings.metrics_port)
+    allocate_memory_ballast()
     await ws_manager.start(settings.database_url, settings.ws_channel)
     await rabbitmq_manager.start()
     yield

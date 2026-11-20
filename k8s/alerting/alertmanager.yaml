@@ -1,0 +1,41 @@
+# Alertmanager config (homework #6). install.sh puts it into the ConfigMap `alertmanager-config`
+# together with telegram.tmpl and substitutes __TELEGRAM_CHAT_ID__ from the Secret
+# `alertmanager-telegram` (telegram-secret.sh). The bot token never leaves the Secret:
+# Alertmanager reads it from a mounted file.
+global:
+  resolve_timeout: 5m
+
+templates:
+  - /config/*.tmpl
+
+route:
+  receiver: telegram
+  # One message per alert name; repeated firings of the same alert are merged into it
+  group_by: [alertname]
+  group_wait: 30s       # wait for the rest of the group before the first message
+  group_interval: 2m    # then send changes (new alerts in the group, resolved) at most every 2 min
+  repeat_interval: 4h   # remind about a still firing warning
+  routes:
+    # Pages: critical alerts of this homework and `page` alerts of the SLO homework (#5)
+    - matchers: ['severity=~"critical|page"']
+      receiver: telegram
+      repeat_interval: 1h
+
+inhibit_rules:
+  # The pod does not answer at all: its warnings (memory, slow requests, ...) add nothing
+  - source_matchers: ['alertname="MetricsTargetDown"']
+    target_matchers: ['severity="warning"']
+    equal: [pod]
+  # 5xx on a FastAPI app already pages; its slow-request warning is a consequence
+  - source_matchers: ['alertname="ApiHighErrorRate"']
+    target_matchers: ['alertname="ApiSlowRequests"']
+    equal: [app]
+
+receivers:
+  - name: telegram
+    telegram_configs:
+      - bot_token_file: /etc/alertmanager/telegram/bot-token
+        chat_id: __TELEGRAM_CHAT_ID__
+        parse_mode: HTML
+        message: '{{ template "telegram.message" . }}'
+        send_resolved: true

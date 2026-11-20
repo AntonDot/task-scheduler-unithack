@@ -1,0 +1,36 @@
+# prober: a synthetic user. Every 10 s it opens the page, logs in and opens the board through
+# the web Service, like a browser would, and exports the result as metrics. The time-based
+# availability SLI (k8s/slo/) is built on them. No Service — only /metrics, scraped in-cluster.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prober
+  namespace: task-scheduler
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prober
+  template:
+    metadata:
+      labels:
+        app: prober
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 15
+      containers:
+        - name: prober
+          image: task-scheduler/prober:dev
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: metrics
+              containerPort: 9100
+          envFrom:
+            - configMapRef: { name: app-config }
+            - secretRef: { name: app-secrets }
+          resources:
+            requests: { cpu: 20m, memory: 48Mi }
+            limits: { memory: 128Mi }

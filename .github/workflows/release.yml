@@ -25,6 +25,7 @@ jobs:
           - { name: automation-worker, context: services/automation-worker }
           - { name: mock-review-board, context: services/mock-review-board }
           - { name: review-scraper, context: jobs/review-scraper }
+          - { name: prober, context: services/prober }
 
     steps:
       - uses: actions/checkout@v4

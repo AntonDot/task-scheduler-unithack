@@ -1,0 +1,15 @@
+# Added on top of k8s/monitoring/vm-single-values.yaml: vmui shows the dashboards from the
+# vmui-dashboards ConfigMap (built from dashboards/*.json by install.sh) on its Dashboards tab.
+# vmui re-reads them on every page load, so an updated ConfigMap needs no restart.
+server:
+  extraArgs:
+    vmui.customDashboardsPath: /dashboards
+  extraVolumes:
+    - name: vmui-dashboards
+      configMap:
+        name: vmui-dashboards
+        optional: true
+  extraVolumeMounts:
+    - name: vmui-dashboards
+      mountPath: /dashboards
+      readOnly: true

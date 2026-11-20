@@ -20,6 +20,7 @@ from app.api.v1.tasks import router as tasks_router
 from app.api.v1.webhooks import router as webhooks_router
 from app.config import settings
 from app.database import engine
+from app.fault_injection import FaultInjectionMiddleware
 from app.logging_config import configure_logging
 from app.metrics import WEBSOCKET_CONNECTIONS, start_metrics_server
 from app.rabbitmq import rabbitmq_manager
@@ -46,6 +47,9 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Victory Group Task Scheduler", version="0.1.0", lifespan=lifespan)
+
+# Added before the instrumentator, so it runs inside it and injected faults are measured
+app.add_middleware(FaultInjectionMiddleware)
 
 # Framework metrics: request count and latency per route template (/api/v1/tasks/{task_id}),
 # served with the rest of the registry on the metrics port. Probes are not user traffic.

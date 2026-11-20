@@ -16,6 +16,7 @@ jobs:
           - { name: automation-worker, path: services/automation-worker }
           - { name: mock-review-board, path: services/mock-review-board }
           - { name: review-scraper, path: jobs/review-scraper }
+          - { name: prober, path: services/prober }
 
     steps:
       - uses: actions/checkout@v4

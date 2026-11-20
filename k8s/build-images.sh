@@ -24,6 +24,7 @@ automation-worker:services/automation-worker
 ml-worker:services/ml-worker
 mock-review-board:services/mock-review-board
 review-scraper:jobs/review-scraper
+prober:services/prober
 web:apps/web"
 
 for entry in $IMAGES; do

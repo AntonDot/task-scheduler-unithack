@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     # Port of the separate /metrics listener (pulled by vmagent); 0 turns it off, e.g. in tests
     metrics_port: int = 0
+    # Fault injection for SLO drills (app/fault_injection.py): share of /api/ requests answered
+    # with 503 and a delay added to each of them. Both off by default.
+    fault_error_rate: float = 0.0
+    fault_latency_ms: int = 0
     # VAPID keys for Web Push — generate with:
     # python -c "from py_vapid import Vapid; v=Vapid(); v.generate_keys(); print(v.public_key, v.private_key)"
     vapid_private_key: str = ""

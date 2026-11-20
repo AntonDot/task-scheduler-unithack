@@ -5,7 +5,7 @@
 #
 # Default stack — the task manager itself: postgres, s3, migrate (one-off), core-api, web.
 # `--profile full` adds automations and AI: rabbitmq, automation-worker, ml-worker,
-# mock-review-board, review-scraper.
+# mock-review-board, review-scraper, prober.
 #
 # All config lives in .env (copy .env.example); this file only wires processes together.
 # Backing services publish their ports on BIND_ADDR (127.0.0.1 by default), so a server
@@ -194,6 +194,18 @@ services:
         condition: service_started
       ml-worker:
         condition: service_healthy
+
+  # ── prober: a synthetic user walking through web every PROBER_INTERVAL_SECONDS ──
+  prober:
+    <<: *app
+    profiles: [full]
+    image: ${REGISTRY:-task-scheduler}/prober:${APP_VERSION:-dev}
+    build:
+      context: ./services/prober
+      args: *build-args
+    depends_on:
+      web:
+        condition: service_started
 
 volumes:
   pgdata:

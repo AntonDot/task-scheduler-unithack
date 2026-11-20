@@ -1,0 +1,289 @@
+{
+  "title": "Task Scheduler — SLI / SLO / SLA",
+  "rows": [
+    {
+      "title": "SLA: хорошие минуты всего сервиса (цель 99 %)",
+      "panels": [
+        {
+          "title": "SLA: доля хороших минут за 1 ч",
+          "width": 6,
+          "expr": [
+            "sla:service:ratio_1h",
+            "0.99"
+          ],
+          "alias": [
+            "факт",
+            "SLA 99 %"
+          ],
+          "description": "Минута хорошая, если пробер прошёл без ошибок быстрее 1 с, а за минуту ≥ 99 % запросов core-api без 5xx и ≥ 95 % быстрее 0,5 с"
+        },
+        {
+          "title": "SLA: хорошая минута (1/0)",
+          "width": 3,
+          "expr": [
+            "sla:service:good_minute"
+          ],
+          "alias": [
+            "хорошая минута"
+          ]
+        },
+        {
+          "title": "SLA: остаток бюджета ошибок за 1 ч",
+          "width": 3,
+          "expr": [
+            "sla:service:error_budget_remaining_1h",
+            "0"
+          ],
+          "alias": [
+            "остаток бюджета",
+            "бюджет исчерпан"
+          ],
+          "description": "1 = бюджет не тронут, 0 = исчерпан, < 0 = SLA нарушен"
+        }
+      ]
+    },
+    {
+      "title": "SLI 1. Доступность core-api (request-based, SLO 99,5 %)",
+      "panels": [
+        {
+          "title": "SLI: доля запросов без 5xx",
+          "width": 4,
+          "expr": [
+            "sli:availability:ratio_rate1m",
+            "sli:availability:ratio_rate5m",
+            "0.995"
+          ],
+          "alias": [
+            "SLI за 1 мин",
+            "SLI за 5 мин",
+            "SLO 99,5 %"
+          ]
+        },
+        {
+          "title": "SLO: доля запросов без 5xx за 1 ч",
+          "width": 3,
+          "expr": [
+            "slo:availability:ratio_1h",
+            "0.995"
+          ],
+          "alias": [
+            "факт за 1 ч",
+            "SLO 99,5 %"
+          ]
+        },
+        {
+          "title": "Остаток бюджета ошибок за 1 ч",
+          "width": 3,
+          "expr": [
+            "slo:availability:error_budget_remaining_1h",
+            "0"
+          ],
+          "alias": [
+            "остаток",
+            "исчерпан"
+          ]
+        },
+        {
+          "title": "Burn rate (5 мин)",
+          "width": 2,
+          "expr": [
+            "slo:availability:burn_rate_5m",
+            "14.4",
+            "1"
+          ],
+          "alias": [
+            "burn rate",
+            "порог алерта 14,4×",
+            "ровно по бюджету"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "SLI 2. Латентность core-api (request-based, SLO 99 % быстрее 0,5 с)",
+      "panels": [
+        {
+          "title": "SLI: доля успешных запросов быстрее 0,5 с",
+          "width": 4,
+          "expr": [
+            "sli:latency:ratio_rate1m",
+            "sli:latency:ratio_rate5m",
+            "0.99"
+          ],
+          "alias": [
+            "SLI за 1 мин",
+            "SLI за 5 мин",
+            "SLO 99 %"
+          ]
+        },
+        {
+          "title": "SLO: доля быстрых запросов за 1 ч",
+          "width": 3,
+          "expr": [
+            "slo:latency:ratio_1h",
+            "0.99"
+          ],
+          "alias": [
+            "факт за 1 ч",
+            "SLO 99 %"
+          ]
+        },
+        {
+          "title": "Остаток бюджета ошибок за 1 ч",
+          "width": 3,
+          "expr": [
+            "slo:latency:error_budget_remaining_1h",
+            "0"
+          ],
+          "alias": [
+            "остаток",
+            "исчерпан"
+          ]
+        },
+        {
+          "title": "Burn rate (5 мин)",
+          "width": 2,
+          "expr": [
+            "slo:latency:burn_rate_5m",
+            "14.4",
+            "1"
+          ],
+          "alias": [
+            "burn rate",
+            "порог алерта 14,4×",
+            "ровно по бюджету"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "SLI 3. Пробер — синтетический пользователь (time-based, SLO 99,5 % хороших минут)",
+      "panels": [
+        {
+          "title": "SLI: хорошая минута пробера (1/0)",
+          "width": 3,
+          "expr": [
+            "sli:probe:good_minute"
+          ],
+          "alias": [
+            "хорошая минута"
+          ]
+        },
+        {
+          "title": "SLO: доля хороших минут за 1 ч",
+          "width": 3,
+          "expr": [
+            "slo:probe:ratio_1h",
+            "0.995"
+          ],
+          "alias": [
+            "факт за 1 ч",
+            "SLO 99,5 %"
+          ]
+        },
+        {
+          "title": "Остаток бюджета ошибок за 1 ч",
+          "width": 3,
+          "expr": [
+            "slo:probe:error_budget_remaining_1h",
+            "0"
+          ],
+          "alias": [
+            "остаток",
+            "исчерпан"
+          ]
+        },
+        {
+          "title": "Длительность сценария, p50 / p95",
+          "width": 3,
+          "expr": [
+            "histogram_quantile(0.5, sum(rate(taskscheduler_probe_duration_seconds_bucket[2m])) by (le))",
+            "histogram_quantile(0.95, sum(rate(taskscheduler_probe_duration_seconds_bucket[2m])) by (le))",
+            "1"
+          ],
+          "alias": [
+            "p50",
+            "p95",
+            "порог 1 с"
+          ],
+          "unit": "s"
+        }
+      ]
+    },
+    {
+      "title": "SLI 4. Отзывы → задачи-инциденты (time-based, SLO 95 % хороших минут)",
+      "panels": [
+        {
+          "title": "SLI: хорошая минута пайплайна (1/0)",
+          "width": 4,
+          "expr": [
+            "sli:review_pipeline:good_minute"
+          ],
+          "alias": [
+            "хорошая минута"
+          ],
+          "description": "Последний прогон CronJob review-scraper успешен и завершился меньше 150 с назад"
+        },
+        {
+          "title": "SLO: доля хороших минут за 1 ч",
+          "width": 4,
+          "expr": [
+            "slo:review_pipeline:ratio_1h",
+            "0.95"
+          ],
+          "alias": [
+            "факт за 1 ч",
+            "SLO 95 %"
+          ]
+        },
+        {
+          "title": "Остаток бюджета ошибок за 1 ч",
+          "width": 4,
+          "expr": [
+            "slo:review_pipeline:error_budget_remaining_1h",
+            "0"
+          ],
+          "alias": [
+            "остаток",
+            "исчерпан"
+          ]
+        }
+      ]
+    },
+    {
+      "title": "Исходные метрики",
+      "panels": [
+        {
+          "title": "Запросы core-api по коду ответа, rps",
+          "width": 4,
+          "expr": [
+            "sum(rate(http_requests_total{app=\"core-api\"}[1m])) by (status)"
+          ],
+          "alias": [
+            "{{status}}"
+          ]
+        },
+        {
+          "title": "Проверки пробера, в минуту",
+          "width": 4,
+          "expr": [
+            "sum(increase(taskscheduler_probes_total[1m])) by (result)"
+          ],
+          "alias": [
+            "{{result}}"
+          ]
+        },
+        {
+          "title": "Падения пробера по шагу сценария, в минуту",
+          "width": 4,
+          "expr": [
+            "sum(increase(taskscheduler_probe_step_failures_total[1m])) by (step)"
+          ],
+          "alias": [
+            "{{step}}"
+          ]
+        }
+      ]
+    }
+  ]
+}

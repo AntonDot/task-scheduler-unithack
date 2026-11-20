@@ -1,0 +1,177 @@
+# Helm values for victoria-metrics-alert (release `vmalert`, namespace `monitoring`).
+# vmalert evaluates the rules below against VictoriaMetrics every 30 s and writes the results
+# back as new series (recording rules): SLIs, SLO compliance, error budget, burn rate.
+# The dashboard (dashboards/slo.json) and the alerts read those series.
+#
+# Naming: sli:<what>:<how> — indicator; slo:<what>:<how> — compliance with the objective;
+# sla:<what>:<how> — the external agreement. Targets:
+#   availability 99.5 %, latency 99 % < 0.5 s, prober 99.5 % good minutes,
+#   review pipeline 95 % good minutes, SLA 99 % good minutes of the whole service.
+# Compliance is taken over a 1 h window so a drill moves it within minutes;
+# in production the same expressions run over the SLO period of 28 days.
+server:
+  # Same image as on Docker Hub, pulled from quay.io: Docker Hub's CDN was unreachable here
+  image:
+    registry: quay.io
+
+  datasource:
+    url: http://vm-single-victoria-metrics-single-server.monitoring.svc.cluster.local:8428
+  # Recording rule results go back into VictoriaMetrics
+  remoteWrite:
+    url: http://vm-single-victoria-metrics-single-server.monitoring.svc.cluster.local:8428
+  # Restores alert state after a restart
+  remoteRead:
+    url: http://vm-single-victoria-metrics-single-server.monitoring.svc.cluster.local:8428
+
+  extraArgs:
+    # No Alertmanager in this setup: alerts are visible in the vmalert UI (:8880)
+    notifier.blackhole: true
+
+  # vmalert's own metrics, found by vmagent like every other pod
+  podAnnotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "8880"
+    prometheus.io/path: "/metrics"
+
+  resources:
+    requests: { cpu: 20m, memory: 48Mi }
+    limits: { memory: 192Mi }
+
+  config:
+    alerts:
+      groups:
+        # ── SLI: share of good events / good minutes ─────────────────────────────
+        - name: sli
+          interval: 30s
+          rules:
+            # 1. Availability (request-based): core-api requests answered without 5xx.
+            #    4xx are the client's mistakes (bad token, missing task), not unavailability.
+            - record: sli:availability:ratio_rate1m
+              expr: |
+                sum(rate(http_requests_total{app="core-api", status!="5xx"}[1m]))
+                  / sum(rate(http_requests_total{app="core-api"}[1m]))
+            - record: sli:availability:ratio_rate5m
+              expr: |
+                sum(rate(http_requests_total{app="core-api", status!="5xx"}[5m]))
+                  / sum(rate(http_requests_total{app="core-api"}[5m]))
+
+            # 2. Latency (request-based): successful core-api requests served within 0.5 s
+            #    (0.5 is a bucket boundary of http_request_duration_seconds)
+            - record: sli:latency:ratio_rate1m
+              expr: |
+                sum(rate(http_request_duration_seconds_bucket{app="core-api", status!="5xx", le="0.5"}[1m]))
+                  / sum(rate(http_request_duration_seconds_count{app="core-api", status!="5xx"}[1m]))
+            - record: sli:latency:ratio_rate5m
+              expr: |
+                sum(rate(http_request_duration_seconds_bucket{app="core-api", status!="5xx", le="0.5"}[5m]))
+                  / sum(rate(http_request_duration_seconds_count{app="core-api", status!="5xx"}[5m]))
+
+            # 3. Prober (time-based): the minute is good if the synthetic user got through
+            #    at least once, never failed and never took longer than 1 s.
+            #    No probes at all (prober down) is a bad minute, not a gap.
+            - record: sli:probe:good_minute
+              expr: |
+                (
+                  (sum(increase(taskscheduler_probes_total{result="success"}[1m])) > bool 0)
+                  * (sum(increase(taskscheduler_probes_total{result="failure"}[1m])) == bool 0)
+                  * (
+                      sum(increase(taskscheduler_probe_duration_seconds_count[1m]))
+                        - sum(increase(taskscheduler_probe_duration_seconds_bucket{le="1.0"}[1m]))
+                      == bool 0
+                    )
+                ) or vector(0)
+
+            # 4. Review pipeline (time-based): reviews → ml-worker → incident tasks.
+            #    Good minute: the last CronJob run succeeded and finished less than 150 s ago
+            #    (runs every minute). The scraper pushes these gauges after each run.
+            - record: sli:review_pipeline:good_minute
+              expr: |
+                (
+                  (min(last_over_time(taskscheduler_review_scraper_last_run_success[2m])) == bool 1)
+                  * (time() - max(last_over_time(taskscheduler_review_scraper_last_run_timestamp_seconds[5m])) < bool 150)
+                ) or vector(0)
+
+            # SLA: one good minute for the whole service — the user got through (prober)
+            # and real traffic in that minute was mostly fine (≥ 99 % without 5xx, ≥ 95 % fast).
+            # A minute without traffic has no ratio (NaN) and counts as bad.
+            - record: sla:service:good_minute
+              expr: |
+                (
+                  sli:probe:good_minute
+                  * on() (sli:availability:ratio_rate1m >= bool 0.99)
+                  * on() (sli:latency:ratio_rate1m >= bool 0.95)
+                ) or vector(0)
+
+        # ── SLO: compliance over the window, error budget, burn rate ─────────────
+        # error budget remaining = 1 - (1 - compliance) / (1 - target): 1 = untouched,
+        # 0 = spent, < 0 = overspent. Burn rate = how many times faster than allowed
+        # the budget is being spent right now (1 = exactly on budget for the period).
+        - name: slo
+          interval: 30s
+          rules:
+            - record: slo:availability:ratio_1h
+              expr: |
+                sum(increase(http_requests_total{app="core-api", status!="5xx"}[1h]))
+                  / sum(increase(http_requests_total{app="core-api"}[1h]))
+            - record: slo:availability:error_budget_remaining_1h
+              expr: 1 - (1 - slo:availability:ratio_1h) / (1 - 0.995)
+            - record: slo:availability:burn_rate_5m
+              expr: (1 - sli:availability:ratio_rate5m) / (1 - 0.995)
+
+            - record: slo:latency:ratio_1h
+              expr: |
+                sum(increase(http_request_duration_seconds_bucket{app="core-api", status!="5xx", le="0.5"}[1h]))
+                  / sum(increase(http_request_duration_seconds_count{app="core-api", status!="5xx"}[1h]))
+            - record: slo:latency:error_budget_remaining_1h
+              expr: 1 - (1 - slo:latency:ratio_1h) / (1 - 0.99)
+            - record: slo:latency:burn_rate_5m
+              expr: (1 - sli:latency:ratio_rate5m) / (1 - 0.99)
+
+            - record: slo:probe:ratio_1h
+              expr: avg_over_time(sli:probe:good_minute[1h])
+            - record: slo:probe:error_budget_remaining_1h
+              expr: 1 - (1 - slo:probe:ratio_1h) / (1 - 0.995)
+
+            - record: slo:review_pipeline:ratio_1h
+              expr: avg_over_time(sli:review_pipeline:good_minute[1h])
+            - record: slo:review_pipeline:error_budget_remaining_1h
+              expr: 1 - (1 - slo:review_pipeline:ratio_1h) / (1 - 0.95)
+
+            - record: sla:service:ratio_1h
+              expr: avg_over_time(sla:service:good_minute[1h])
+            - record: sla:service:error_budget_remaining_1h
+              expr: 1 - (1 - sla:service:ratio_1h) / (1 - 0.99)
+
+        # ── Alerts: page when the budget burns too fast ──────────────────────────
+        # 14.4× burn spends 2 % of a 30-day budget in an hour (Google SRE workbook).
+        # Both the short and the long window must burn, so a single spike does not page.
+        - name: slo-alerts
+          interval: 30s
+          rules:
+            - alert: AvailabilityBudgetFastBurn
+              expr: slo:availability:burn_rate_5m > 14.4 and (1 - sli:availability:ratio_rate1m) / (1 - 0.995) > 14.4
+              for: 1m
+              labels: { severity: page, slo: availability }
+              annotations:
+                summary: "core-api burns the availability budget {{ $value | printf \"%.1f\" }}× faster than allowed"
+            - alert: LatencyBudgetFastBurn
+              expr: slo:latency:burn_rate_5m > 14.4 and (1 - sli:latency:ratio_rate1m) / (1 - 0.99) > 14.4
+              for: 1m
+              labels: { severity: page, slo: latency }
+              annotations:
+                summary: "core-api burns the latency budget {{ $value | printf \"%.1f\" }}× faster than allowed"
+            - alert: ProberFailing
+              expr: max_over_time(sli:probe:good_minute[3m]) == 0
+              labels: { severity: page, slo: probe }
+              annotations:
+                summary: "The synthetic user has not got through for 3 minutes"
+            - alert: ReviewPipelineStalled
+              expr: max_over_time(sli:review_pipeline:good_minute[5m]) == 0
+              labels: { severity: ticket, slo: review_pipeline }
+              annotations:
+                summary: "Review scraper runs fail or stopped for 5 minutes"
+            - alert: SLAAtRisk
+              expr: sla:service:ratio_1h < 0.99
+              labels: { severity: ticket, slo: sla }
+              annotations:
+                summary: "Good minutes of the service over 1 h: {{ $value | humanizePercentage }} (SLA 99 %)"

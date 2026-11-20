@@ -20,6 +20,9 @@ data:
   CORE_LOG_LEVEL: INFO
   # /metrics on a separate port: no auth, so it is left out of the Service and of nginx
   CORE_METRICS_PORT: "9100"
+  # Fault injection for SLO drills, off. k8s/slo/fault.sh turns it on with `kubectl set env`
+  CORE_FAULT_ERROR_RATE: "0"
+  CORE_FAULT_LATENCY_MS: "0"
   CORE_VAPID_PUBLIC_KEY: ""
   CORE_VAPID_CLAIMS_EMAIL: admin@example.com
 
@@ -40,6 +43,14 @@ data:
   SCRAPER_ML_WORKER_URL: http://ml-worker:8001
   # CronJob pods are too short-lived to be scraped: push to vmagent after each run
   SCRAPER_METRICS_PUSH_URL: http://vm-single-victoria-metrics-agent.monitoring.svc.cluster.local:8429/api/v1/import/prometheus
+
+  # === Prober ===
+  # Comes in the way users do — through the web Service (nginx), not straight to core-api
+  PROBER_TARGET_URL: http://web:80
+  PROBER_EMAIL: a.kozlova@victorygroup.ru
+  PROBER_PROJECT_SLUG: onegin-park
+  PROBER_INTERVAL_SECONDS: "10"
+  PROBER_METRICS_PORT: "9100"
 ---
 # Dev values from .env.example. On a real cluster create the Secret out of band
 # (kubectl create secret generic app-secrets --from-env-file=...) instead of committing it.
@@ -81,3 +92,6 @@ stringData:
 
   # === Review Scraper ===
   SCRAPER_WEBHOOK_API_KEY: dev-webhook-key
+
+  # === Prober ===
+  PROBER_PASSWORD: assignee123

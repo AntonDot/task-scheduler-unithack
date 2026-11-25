@@ -237,3 +237,6 @@ Thumbs.db
 docs/
 # Telegram bot token for Alertmanager (k8s/alerting/telegram-secret.sh)
 k8s/alerting/telegram.env
+
+# Logs of the deployment strategy runs (homework #8) are a deliverable, not local noise
+!k8s/deploy-strategies/logs/*.log

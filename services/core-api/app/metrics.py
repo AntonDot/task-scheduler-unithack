@@ -13,6 +13,17 @@ Counters are per process; sum them over replicas in queries.
 
 from prometheus_client import Counter, Gauge, start_http_server
 
+from app.version import APP_VERSION
+
+# Always 1; the label tells which release this replica runs. Joined by pod with other series
+# (… * on (pod) group_left (version) taskscheduler_build_info) to split traffic by version.
+BUILD_INFO = Gauge(
+    "taskscheduler_build_info",
+    "Release of this core-api replica (image APP_VERSION)",
+    ["version"],
+)
+BUILD_INFO.labels(version=APP_VERSION).set(1)
+
 TASKS_CREATED = Counter(
     "taskscheduler_tasks_created",
     "Tasks created, by where they came from: user (board), external (ml-worker: reviews, AI drafts), automation",

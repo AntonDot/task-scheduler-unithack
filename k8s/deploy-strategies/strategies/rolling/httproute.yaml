@@ -1,0 +1,19 @@
+# ROLLING: the Gateway does not split anything, all /api and /ws go to the main Service core-api.
+# Versions behind it change inside the Deployment core-api (maxSurge 1, maxUnavailable 0,
+# k8s/30-core-api.yaml): demo.sh rolling sets the image v1.0.0 → v2.0.0 and Kubernetes replaces
+# the pods one at a time, each new one gets traffic only after its readiness probe passes.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: core-api
+  namespace: task-scheduler
+spec:
+  parentRefs:
+    - name: eg
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: /api }
+        - path: { type: PathPrefix, value: /ws }
+      backendRefs:
+        - name: core-api
+          port: 8000

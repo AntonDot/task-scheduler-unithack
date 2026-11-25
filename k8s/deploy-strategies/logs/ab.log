@@ -1,0 +1,205 @@
+
+===== Стратегия: ab  (25.11.2026, kubectl context minikube)  [22:29:59]
+
+===== Сброс: только основной Deployment core-api, маршрут /api → Service core-api  [22:29:59]
+$ k apply -f strategies/rolling/httproute.yaml
+httproute.gateway.networking.k8s.io/core-api configured
+$ k delete deployment,service -l 'app in (core-api-v1,core-api-v2)' --ignore-not-found
+deployment.apps "core-api-v1" deleted from task-scheduler namespace
+deployment.apps "core-api-v2" deleted from task-scheduler namespace
+service "core-api-v1" deleted from task-scheduler namespace
+service "core-api-v2" deleted from task-scheduler namespace
+$ k apply -f ../30-core-api.yaml
+service/core-api unchanged
+deployment.apps/core-api configured
+$ k rollout status deployment/core-api --timeout=180s
+deployment "core-api" successfully rolled out
+
+===== Подготовка: core-api v1.0.0 и v2.0.0 рядом, по 2 реплики, общие PostgreSQL / S3 / RabbitMQ  [22:29:59]
+$ k apply -f app/core-api-v1.yaml -f app/core-api-v2.yaml
+service/core-api-v1 created
+deployment.apps/core-api-v1 created
+service/core-api-v2 created
+deployment.apps/core-api-v2 created
+$ k rollout status deployment/core-api-v1 --timeout=180s
+Waiting for deployment "core-api-v1" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "core-api-v1" rollout to finish: 1 of 2 updated replicas are available...
+deployment "core-api-v1" successfully rolled out
+$ k rollout status deployment/core-api-v2 --timeout=180s
+deployment "core-api-v2" successfully rolled out
+NAME                           READY   STATUS    RESTARTS   AGE   VERSION
+core-api-v1-85cbf8bdcb-lplgf   1/1     Running   0          5s    v1.0.0
+core-api-v1-85cbf8bdcb-mvjzp   1/1     Running   0          5s    v1.0.0
+core-api-v2-6fdb67d6b-fbq2q    1/1     Running   0          5s    v2.0.0
+core-api-v2-6fdb67d6b-kfjsd    1/1     Running   0          5s    v2.0.0
+$ k apply -f strategies/ab/httproute-ab.yaml
+httproute.gateway.networking.k8s.io/core-api configured
+
+===== A/B: два потока — обычные пользователи и группа beta (заголовок x-user-group: beta)  [22:30:05]
+22:30:05 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:05 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:05 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:05 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:05 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:05 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:05 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:05 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:06 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:06 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:06 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:06 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:06 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:06 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:06 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:06 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:07 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:07 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:07 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:07 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:07 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:07 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:08 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:08 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:08 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:08 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:08 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:08 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:08 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:08 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:09 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:09 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:09 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:09 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:09 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:09 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:09 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:09 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:10 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:10 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:10 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:10 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:10 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:10 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:10 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:10 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:11 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:11 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:11 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:11 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:11 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:11 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:12 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:12 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:12 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:12 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:12 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:12 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:12 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:12 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:13 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:13 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:13 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:13 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:13 | beta    | HTTP 503
+22:30:13 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:13 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:13 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:14 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:14 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:14 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:14 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:14 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:14 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:14 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:14 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:15 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:15 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:15 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:15 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:15 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:15 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:16 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:16 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:16 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:16 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:16 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:16 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:16 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:16 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:17 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:17 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:17 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:17 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:17 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:17 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:17 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:17 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:18 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:18 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:18 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:18 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:18 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:18 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:18 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:18 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:19 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:19 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:19 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:19 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:19 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:19 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:20 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:20 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:20 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:20 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:20 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:20 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:20 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:20 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:21 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:21 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:21 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:21 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:21 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:21 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:21 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:21 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:22 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:22 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:22 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:22 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:22 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:22 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:22 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:22 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:23 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:23 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:23 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:23 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:23 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:23 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:24 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:24 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:24 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:24 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-kfjsd
+22:30:24 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-lplgf
+22:30:24 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:24 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+22:30:24 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+----- ответы за шаг (20 с): 
+  beta          1 запросов  100,0 %
+  beta   → v2.0.0       74 запросов  100,0 %
+  все    → v1.0.0       75 запросов  100,0 %
+  последние 20: все    → v1.0.0 ×10  beta   → v2.0.0 ×10  
+
+===== Проверка вручную  [22:30:25]
+$ curl -s http://localhost:8888/api/v1/version
+{"service":"core-api","version":"v1.0.0","pod":"core-api-v1-85cbf8bdcb-mvjzp"}
+$ curl -s -H 'x-user-group: beta' http://localhost:8888/api/v1/version
+22:30:25 | все     | v1.0.0 | core-api-v1-85cbf8bdcb-mvjzp
+22:30:25 | beta    | v2.0.0 | core-api-v2-6fdb67d6b-fbq2q
+{"service":"core-api","version":"v2.0.0","pod":"core-api-v2-6fdb67d6b-kfjsd"}
+$ curl -s -H 'x-user-group: alpha' http://localhost:8888/api/v1/version
+{"service":"core-api","version":"v1.0.0","pod":"core-api-v1-85cbf8bdcb-lplgf"}
+
+===== Готово. Лог: k8s/deploy-strategies/logs/ab.log  [22:30:25]

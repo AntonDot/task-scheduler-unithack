@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from prometheus_fastapi_instrumentator import Instrumentator
@@ -24,6 +24,7 @@ from app.fault_injection import FaultInjectionMiddleware, allocate_memory_ballas
 from app.logging_config import configure_logging
 from app.metrics import WEBSOCKET_CONNECTIONS, start_metrics_server
 from app.rabbitmq import rabbitmq_manager
+from app.version import APP_VERSION, POD_NAME
 from app.websocket_manager import ws_manager
 
 configure_logging(settings.log_level)
@@ -64,6 +65,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+
+@app.middleware("http")
+async def version_header(request: Request, call_next):
+    """Every response says which release produced it: several versions serve at once
+    during a rollout, canary or blue/green switch."""
+    response = await call_next(request)
+    response.headers["X-App-Version"] = APP_VERSION
+    return response
+
+
 app.include_router(ai_router)
 app.include_router(notifications_router)
 app.include_router(attachments_router)
@@ -81,7 +92,13 @@ app.include_router(webhooks_router)
 @app.get("/health")
 async def health():
     """Liveness: the process is up and serving HTTP."""
-    return {"status": "ok", "service": "core-api"}
+    return {"status": "ok", "service": "core-api", "version": APP_VERSION}
+
+
+@app.get("/api/v1/version")
+async def version():
+    """Release and replica that answered; public, for deploy checks and traffic generators."""
+    return {"service": "core-api", "version": APP_VERSION, "pod": POD_NAME}
 
 
 @app.get("/ready")

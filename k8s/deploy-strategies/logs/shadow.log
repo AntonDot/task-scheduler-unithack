@@ -1,0 +1,137 @@
+
+===== Стратегия: shadow  (25.11.2026, kubectl context minikube)  [22:31:43]
+
+===== Сброс: только основной Deployment core-api, маршрут /api → Service core-api  [22:31:43]
+$ k apply -f strategies/rolling/httproute.yaml
+httproute.gateway.networking.k8s.io/core-api configured
+$ k delete deployment,service -l 'app in (core-api-v1,core-api-v2)' --ignore-not-found
+deployment.apps "core-api-v1" deleted from task-scheduler namespace
+deployment.apps "core-api-v2" deleted from task-scheduler namespace
+service "core-api-v1" deleted from task-scheduler namespace
+service "core-api-v2" deleted from task-scheduler namespace
+$ k apply -f ../30-core-api.yaml
+service/core-api unchanged
+deployment.apps/core-api configured
+$ k rollout status deployment/core-api --timeout=180s
+deployment "core-api" successfully rolled out
+
+===== Подготовка: core-api v1.0.0 и v2.0.0 рядом, по 2 реплики, общие PostgreSQL / S3 / RabbitMQ  [22:31:44]
+$ k apply -f app/core-api-v1.yaml -f app/core-api-v2.yaml
+service/core-api-v1 created
+deployment.apps/core-api-v1 created
+service/core-api-v2 created
+deployment.apps/core-api-v2 created
+$ k rollout status deployment/core-api-v1 --timeout=180s
+Waiting for deployment "core-api-v1" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "core-api-v1" rollout to finish: 1 of 2 updated replicas are available...
+deployment "core-api-v1" successfully rolled out
+$ k rollout status deployment/core-api-v2 --timeout=180s
+deployment "core-api-v2" successfully rolled out
+NAME                           READY   STATUS    RESTARTS   AGE   VERSION
+core-api-v1-85cbf8bdcb-26gtv   1/1     Running   0          3s    v1.0.0
+core-api-v1-85cbf8bdcb-95zqw   1/1     Running   0          3s    v1.0.0
+core-api-v2-6fdb67d6b-h5wbz    1/1     Running   0          3s    v2.0.0
+core-api-v2-6fdb67d6b-pm98q    1/1     Running   0          3s    v2.0.0
+$ k apply -f strategies/shadow/httproute-shadow.yaml
+httproute.gateway.networking.k8s.io/core-api configured
+
+===== Shadow: пользователю отвечает только v1.0.0, копии GET уходят на v2.0.0  [22:31:48]
+22:31:48 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:48 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:48 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:49 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:49 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:49 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:49 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:50 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:50 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:50 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:51 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:51 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:51 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:51 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:52 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:52 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:52 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:52 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:53 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:53 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:53 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:54 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:54 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:54 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:54 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:55 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:55 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:55 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:55 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:56 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:56 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:56 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:56 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:57 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:57 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:57 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:58 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:58 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:58 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:58 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:59 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:31:59 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:59 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:31:59 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:00 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:00 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:00 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:00 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:01 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:01 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:01 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:02 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:02 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:02 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:02 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:03 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:03 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:03 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:03 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:04 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:04 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:04 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:05 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:05 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:05 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:05 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:06 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:06 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:06 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:06 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:07 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:07 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:07 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:07 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:08 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+----- ответы за шаг (20 с): 
+  v1.0.0       75 запросов  100,0 %
+  последние 20: v1.0.0 ×20  
+
+===== Доказательство по access-логам: сколько раз каждая версия обработала GET /api/v1/version  [22:32:08]
+  core-api-v1: 75
+22:32:08 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+  core-api-v2: 76
+
+===== Запись не зеркалируется: POST /api/v1/auth/token попадает только в v1  [22:32:08]
+$ curl -s -o /dev/null -w '%{http_code}\n' -X POST -H 'Content-Type: application/json' -d '{"email":"d.morozov@victorygroup.ru"}' http://localhost:8888/api/v1/auth/token
+200
+22:32:08 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:08 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:09 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:09 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:09 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:10 | v1.0.0 | core-api-v1-85cbf8bdcb-95zqw
+22:32:10 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+22:32:10 | v1.0.0 | core-api-v1-85cbf8bdcb-26gtv
+  core-api-v1: POST /api/v1/auth/token — 1
+  core-api-v2: POST /api/v1/auth/token — 0
+
+===== Готово. Лог: k8s/deploy-strategies/logs/shadow.log  [22:32:10]

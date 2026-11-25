@@ -7,12 +7,10 @@ collector can parse it without regexps.
 
 import json
 import logging
-import os
 import sys
 from datetime import UTC, datetime
 
-# Release id baked into the image (Dockerfile ARG/ENV APP_VERSION)
-APP_VERSION = os.environ.get("APP_VERSION", "dev")
+from app.version import APP_VERSION
 
 
 class JsonFormatter(logging.Formatter):

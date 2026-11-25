@@ -1,0 +1,41 @@
+# Gateway API on Envoy Gateway (install.sh installs the controller and the CRDs).
+# GatewayClass `eg` is served by the Envoy Gateway controller; Gateway `eg` makes it start an
+# Envoy proxy in envoy-gateway-system. That proxy is the entry point to the whole app:
+#   /           → web (SPA)                         — HTTPRoute `web` below
+#   /api, /ws   → core-api, split by the strategy   — HTTPRoute `core-api` (strategies/*)
+# On minikube the LoadBalancer stays Pending, so traffic.sh reaches the proxy by port-forward.
+apiVersion: gateway.networking.k8s.io/v1
+kind: GatewayClass
+metadata:
+  name: eg
+spec:
+  controllerName: gateway.envoyproxy.io/gatewayclass-controller
+---
+apiVersion: gateway.networking.k8s.io/v1
+kind: Gateway
+metadata:
+  name: eg
+  namespace: task-scheduler
+spec:
+  gatewayClassName: eg
+  listeners:
+    - name: http
+      protocol: HTTP
+      port: 80
+---
+# The frontend is not part of the experiments: always the same web Service. Gateway API picks
+# the longest matching prefix, so /api and /ws go to the `core-api` route.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: web
+  namespace: task-scheduler
+spec:
+  parentRefs:
+    - name: eg
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: / }
+      backendRefs:
+        - name: web
+          port: 80

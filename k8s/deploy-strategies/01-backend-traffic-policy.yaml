@@ -1,0 +1,18 @@
+# Envoy keeps upstream connections to the pods for 1 h of idle time by default, uvicorn closes an
+# idle keep-alive connection after 5 s. When Envoy sends a request into a connection uvicorn is
+# closing at that moment, the request fails with 503 UC (upstream_reset_before_response_started
+# {connection_termination}) — seen once in ~3800 requests of the A/B run. Rule: the proxy must
+# drop idle connections before the backend does, so Envoy closes them after 4 s.
+apiVersion: gateway.envoyproxy.io/v1alpha1
+kind: BackendTrafficPolicy
+metadata:
+  name: upstream-keepalive
+  namespace: task-scheduler
+spec:
+  targetRefs:
+    - group: gateway.networking.k8s.io
+      kind: Gateway
+      name: eg
+  timeout:
+    http:
+      connectionIdleTimeout: 4s

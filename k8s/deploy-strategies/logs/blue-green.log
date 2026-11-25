@@ -1,0 +1,288 @@
+
+===== Стратегия: blue-green  (25.11.2026, kubectl context minikube)  [22:25:09]
+
+===== Сброс: только основной Deployment core-api, маршрут /api → Service core-api  [22:25:09]
+$ k apply -f strategies/rolling/httproute.yaml
+httproute.gateway.networking.k8s.io/core-api configured
+$ k delete deployment,service -l 'app in (core-api-v1,core-api-v2)' --ignore-not-found
+deployment.apps "core-api-v1" deleted from task-scheduler namespace
+deployment.apps "core-api-v2" deleted from task-scheduler namespace
+service "core-api-v1" deleted from task-scheduler namespace
+service "core-api-v2" deleted from task-scheduler namespace
+$ k apply -f ../30-core-api.yaml
+service/core-api unchanged
+deployment.apps/core-api configured
+$ k rollout status deployment/core-api --timeout=180s
+deployment "core-api" successfully rolled out
+
+===== Подготовка: core-api v1.0.0 и v2.0.0 рядом, по 2 реплики, общие PostgreSQL / S3 / RabbitMQ  [22:25:09]
+$ k apply -f app/core-api-v1.yaml -f app/core-api-v2.yaml
+service/core-api-v1 created
+deployment.apps/core-api-v1 created
+service/core-api-v2 created
+deployment.apps/core-api-v2 created
+$ k rollout status deployment/core-api-v1 --timeout=180s
+Waiting for deployment "core-api-v1" rollout to finish: 0 of 2 updated replicas are available...
+Waiting for deployment "core-api-v1" rollout to finish: 1 of 2 updated replicas are available...
+deployment "core-api-v1" successfully rolled out
+$ k rollout status deployment/core-api-v2 --timeout=180s
+deployment "core-api-v2" successfully rolled out
+NAME                           READY   STATUS    RESTARTS   AGE   VERSION
+core-api-v1-85cbf8bdcb-9t5ff   1/1     Running   0          3s    v1.0.0
+core-api-v1-85cbf8bdcb-kmbl8   1/1     Running   0          3s    v1.0.0
+core-api-v2-6fdb67d6b-6ct96    1/1     Running   0          3s    v2.0.0
+core-api-v2-6fdb67d6b-lrwrb    1/1     Running   0          3s    v2.0.0
+$ k apply -f strategies/blue-green/httproute-green.yaml
+httproute.gateway.networking.k8s.io/core-api configured
+
+===== Весь трафик на green (v1.0.0), blue (v2.0.0) поднят и прогрет, но без трафика  [22:25:13]
+22:25:13 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:14 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:14 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:14 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:14 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:15 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:15 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:15 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:15 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:16 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:16 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:16 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:16 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:17 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:17 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:17 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:18 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:18 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:18 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:18 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:19 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:19 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:19 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:19 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:20 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:20 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:20 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:20 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:21 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:21 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:21 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:21 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:22 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:22 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:22 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:23 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:23 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:23 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:23 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:24 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:24 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:24 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:24 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:25 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:25 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:25 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:25 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:26 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:26 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:26 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:26 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:27 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:27 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:27 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:27 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:28 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:28 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:28 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:28 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:29 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:29 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:29 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:29 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:30 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:30 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:30 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:30 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:31 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:31 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:31 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:31 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:32 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:32 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:32 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:32 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:33 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:33 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+----- ответы за шаг (20 с): 
+  v1.0.0       77 запросов  100,0 %
+  последние 20: v1.0.0 ×20  
+
+===== Переключение на blue: одна правка HTTPRoute  [22:25:33]
+$ k apply -f strategies/blue-green/httproute-blue.yaml
+22:25:33 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+httproute.gateway.networking.k8s.io/core-api configured
+22:25:34 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:34 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:34 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:34 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:35 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:35 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:35 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:35 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:36 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:36 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:36 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:37 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:37 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:37 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:37 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:38 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:38 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:38 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:38 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:39 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:39 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:39 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:39 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:40 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:40 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:40 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:41 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:41 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:41 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:41 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:42 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:42 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:42 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:42 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:43 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:43 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:43 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:43 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:44 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:44 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:44 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:44 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:45 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:45 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:45 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:46 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:46 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:46 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:46 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:47 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:47 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:47 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:47 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:48 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:48 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:48 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:49 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:49 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:49 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:49 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:50 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:50 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:50 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:50 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:51 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:51 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:51 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:51 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:52 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:52 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:52 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:53 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:53 | v2.0.0 | core-api-v2-6fdb67d6b-6ct96
+22:25:53 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+22:25:53 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+----- ответы за шаг (20 с): 
+  v1.0.0        1 запросов    1,3 %
+  v2.0.0       75 запросов   98,7 %
+  последние 20: v2.0.0 ×20  
+
+===== Мгновенный откат на green: green всё это время работал  [22:25:54]
+$ k apply -f strategies/blue-green/httproute-green.yaml
+22:25:54 | v2.0.0 | core-api-v2-6fdb67d6b-lrwrb
+httproute.gateway.networking.k8s.io/core-api configured
+22:25:54 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:54 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:54 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:55 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:55 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:55 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:55 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:56 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:56 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:56 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:56 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:57 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:57 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:57 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:58 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:58 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:58 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:25:58 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:59 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:59 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:59 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:25:59 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:00 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:00 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:00 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:01 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:01 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:01 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:01 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:02 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:02 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:02 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:02 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:03 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:03 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:03 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:03 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:04 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:04 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:04 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:05 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:05 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:05 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:05 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:06 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:06 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:06 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:06 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:07 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:07 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:07 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:07 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:08 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:08 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:08 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:09 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:09 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:09 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:09 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:10 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:10 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:10 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:10 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:11 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:11 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:11 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:11 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:12 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:12 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:12 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:13 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:13 | v1.0.0 | core-api-v1-85cbf8bdcb-9t5ff
+22:26:13 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:13 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+22:26:14 | v1.0.0 | core-api-v1-85cbf8bdcb-kmbl8
+----- ответы за шаг (20 с): 
+  v1.0.0       75 запросов   98,7 %
+  v2.0.0        1 запросов    1,3 %
+  последние 20: v1.0.0 ×20  
+
+===== Готово. Лог: k8s/deploy-strategies/logs/blue-green.log  [22:26:14]

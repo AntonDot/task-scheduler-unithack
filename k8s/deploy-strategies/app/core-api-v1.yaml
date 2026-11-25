@@ -1,0 +1,86 @@
+# core-api v1.0.0 as a separate Deployment + Service (stable: green in blue/green, the main track in canary, A/B and shadow).
+# Same code, config and backing services as k8s/30-core-api.yaml — only the image differs:
+# task-scheduler/core-api:v1.0.0, built with APP_VERSION=v1.0.0 (install.sh). Both versions share
+# PostgreSQL, S3 and RabbitMQ: no state in the pods, so traffic can move between them freely.
+# Pod label app=core-api-v1 (not core-api): the main Service core-api, which web and the workers
+# call inside the cluster, keeps pointing at the main Deployment only; the strategy decides
+# where the traffic coming through the Gateway goes.
+apiVersion: v1
+kind: Service
+metadata:
+  name: core-api-v1
+  namespace: task-scheduler
+  labels:
+    app: core-api-v1
+    version: v1.0.0
+spec:
+  selector:
+    app: core-api-v1
+    version: v1.0.0
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: core-api-v1
+  namespace: task-scheduler
+  labels:
+    app: core-api-v1
+    version: v1.0.0
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: core-api-v1
+      version: v1.0.0
+  template:
+    metadata:
+      labels:
+        app: core-api-v1
+        version: v1.0.0
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9100"
+        prometheus.io/path: "/metrics"
+    spec:
+      terminationGracePeriodSeconds: 30
+      initContainers:
+        - name: wait-for-migrations
+          image: task-scheduler/core-api:v1.0.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - sh
+            - -c
+            - until alembic current 2>/dev/null | grep -q '(head)'; do echo "waiting for migrations"; sleep 3; done
+          envFrom:
+            - configMapRef: { name: app-config }
+            - secretRef: { name: app-secrets }
+      containers:
+        - name: core-api
+          image: task-scheduler/core-api:v1.0.0
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8000
+            - name: metrics
+              containerPort: 9100
+          env:
+            - name: PORT
+              value: "8000"
+          envFrom:
+            - configMapRef: { name: app-config }
+            - secretRef: { name: app-secrets }
+          readinessProbe:
+            httpGet: { path: /ready, port: http }
+            periodSeconds: 5
+            failureThreshold: 3
+          livenessProbe:
+            httpGet: { path: /health, port: http }
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          resources:
+            requests: { cpu: 100m, memory: 192Mi }
+            limits: { memory: 512Mi }

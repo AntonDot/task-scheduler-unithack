@@ -5,7 +5,8 @@
 #
 # 1. Imports the "PostgreSQL Database" dashboard for postgres_exporter from grafana.com (9628)
 #    and fits its variables to the labels vmagent puts on our series (see below).
-# 2. ConfigMap `grafana-dashboards` with it and the app dashboard (dashboards/task-scheduler.json).
+# 2. ConfigMap `grafana-dashboards` with it and every dashboard from dashboards/ (the app,
+#    the deploy strategies of homework #8).
 # 3. Grafana from the grafana-community chart with the VictoriaMetrics data source.
 set -euo pipefail
 
@@ -45,7 +46,7 @@ jq '
 ' "$TMP/postgresql-raw.json" > "$TMP/postgresql.json"
 
 $K create configmap grafana-dashboards \
-  --from-file=task-scheduler.json=dashboards/task-scheduler.json \
+  --from-file=dashboards/ \
   --from-file=postgresql.json="$TMP/postgresql.json" \
   --dry-run=client -o yaml | $K apply -f -
 

@@ -1,0 +1,28 @@
+# A/B: not a random share but a chosen audience. Requests with the header `x-user-group: beta`
+# go to v2.0.0, everybody else to v1.0.0. The first rule is more specific (path + header),
+# so Gateway API checks it first. The same way one can match a query parameter, method or cookie.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: core-api
+  namespace: task-scheduler
+spec:
+  parentRefs:
+    - name: eg
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: /api }
+          headers:
+            - { type: Exact, name: x-user-group, value: beta }
+        - path: { type: PathPrefix, value: /ws }
+          headers:
+            - { type: Exact, name: x-user-group, value: beta }
+      backendRefs:
+        - name: core-api-v2
+          port: 8000
+    - matches:
+        - path: { type: PathPrefix, value: /api }
+        - path: { type: PathPrefix, value: /ws }
+      backendRefs:
+        - name: core-api-v1
+          port: 8000

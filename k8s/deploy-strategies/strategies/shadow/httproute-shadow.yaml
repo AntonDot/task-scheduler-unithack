@@ -1,0 +1,31 @@
+# SHADOW: users get answers from v1.0.0; Envoy sends a copy of each GET to v2.0.0 and drops its
+# answer (RequestMirror). v2 is tried on real traffic without affecting anyone.
+# Only GET is mirrored: both versions share one PostgreSQL, so a mirrored POST/PATCH/DELETE would
+# be executed twice — a duplicate task, a second move. Writes go to v1 only (second rule).
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: core-api
+  namespace: task-scheduler
+spec:
+  parentRefs:
+    - name: eg
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: /api }
+          method: GET
+      backendRefs:
+        - name: core-api-v1   # answers the user
+          port: 8000
+      filters:
+        - type: RequestMirror
+          requestMirror:
+            backendRef:
+              name: core-api-v2   # gets a copy, its answer is dropped
+              port: 8000
+    - matches:
+        - path: { type: PathPrefix, value: /api }
+        - path: { type: PathPrefix, value: /ws }
+      backendRefs:
+        - name: core-api-v1
+          port: 8000

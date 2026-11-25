@@ -1,0 +1,22 @@
+# CANARY: 50 % of requests to the stable v1.0.0, 50 % to the new v2.0.0. Weights of the backendRefs
+# of one rule: Envoy picks a backend per request. Steps 90/10 → 50/50 → 0/100; rolling back at
+# any step is applying a file with a smaller weight of v2.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: core-api
+  namespace: task-scheduler
+spec:
+  parentRefs:
+    - name: eg
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: /api }
+        - path: { type: PathPrefix, value: /ws }
+      backendRefs:
+        - name: core-api-v1
+          port: 8000
+          weight: 50
+        - name: core-api-v2
+          port: 8000
+          weight: 50

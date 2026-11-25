@@ -1,0 +1,17 @@
+# BLUE/GREEN: both versions are up and ready, all traffic goes to green (v1.0.0).
+# Switching is one change of backendRef (httproute-blue.yaml), rollback is applying this file again.
+apiVersion: gateway.networking.k8s.io/v1
+kind: HTTPRoute
+metadata:
+  name: core-api
+  namespace: task-scheduler
+spec:
+  parentRefs:
+    - name: eg
+  rules:
+    - matches:
+        - path: { type: PathPrefix, value: /api }
+        - path: { type: PathPrefix, value: /ws }
+      backendRefs:
+        - name: core-api-v1   # green, v1.0.0
+          port: 8000
